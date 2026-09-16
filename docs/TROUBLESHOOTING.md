@@ -231,7 +231,8 @@ docker compose start backend
   ```
 
 - `failed` with an OpenAI error: check `OPENAI_API_KEY` and that
-  `PLANNING_MODEL` is available to your key.
+  `PLANNING_MODEL` is available to your key and is not a Realtime model (see
+  [Choosing models](CONFIGURATION.md#choosing-models)).
 - Completed but nothing scheduled: the plan in `plan_json` lists each rejected
   proposal with its reason (for example, outside working hours), and
   `calendar_error` if Google Calendar could not be read.
@@ -288,6 +289,11 @@ Recreate backend after changing environment variables:
 ```bash
 docker compose up -d --force-recreate backend
 ```
+
+If voice fails right after changing `OPENAI_REALTIME_MODEL`, check the backend
+logs for a model error: the voice model must be a Realtime model
+(`gpt-realtime-*`). General models such as `gpt-5.6-terra` only work as
+`PLANNING_MODEL` (see [Choosing models](CONFIGURATION.md#choosing-models)).
 
 ## Compose validation
 

@@ -4,8 +4,8 @@
   "files": [
     {
       "path": ".env.example",
-      "bytes": 6157,
-      "sha256": "20dee640db6ec8ca64ec742394c0534ac376e36b43aa048bb294f8cb03f59243"
+      "bytes": 6423,
+      "sha256": "ff59418deff6108141dd3024051b48026f29e27a4db8b29c5521713c2c24b275"
     },
     {
       "path": ".gitignore",
@@ -364,8 +364,8 @@
     },
     {
       "path": "docs/CONFIGURATION.md",
-      "bytes": 8891,
-      "sha256": "c94f123125ad0e0c327c16ef91e452325a74fb5e2d9b348b5269909e50e3e3e9"
+      "bytes": 10543,
+      "sha256": "7587b9fce394fd73a3086479e90fab49f28aa0ea46747ad07321d76cd12a8f5d"
     },
     {
       "path": "docs/GOOGLE_OAUTH.md",
@@ -394,8 +394,8 @@
     },
     {
       "path": "docs/TROUBLESHOOTING.md",
-      "bytes": 7500,
-      "sha256": "a9475017e9c27cd9b36f8ed54eaaee63dd0ef1389fa4b19558277e681b42d273"
+      "bytes": 7881,
+      "sha256": "87f489d291f53344cb2a50a16c1bf327cb24be60a69da16a49e8b6403a09a3d8"
     },
     {
       "path": "docs/USAGE.md",

@@ -42,6 +42,33 @@ the PipeWire/PulseAudio socket; `setup.sh` still sets it.
 
 ## OpenAI
 
+### Choosing models
+
+Gary uses two OpenAI models:
+
+| Setting | Used for | Must be |
+|---|---|---|
+| `OPENAI_REALTIME_MODEL` | Voice conversations | A Realtime model (`gpt-realtime-*`) |
+| `PLANNING_MODEL` | Planning cycles: scheduled morning, midday, and evening runs, "replan", "close out the day", and replans after missed work | A Responses API model with structured outputs, such as `gpt-5.4-mini` or `gpt-5.6-terra` |
+
+A general model such as `gpt-5.6-terra` cannot be the voice model, and a
+Realtime model cannot be the planning model.
+
+To see which models your API key can use:
+
+```bash
+docker compose exec backend python -c "import os, json, urllib.request; r = urllib.request.Request('https://api.openai.com/v1/models', headers={'Authorization': 'Bearer ' + os.environ['OPENAI_API_KEY']}); print('\n'.join(sorted(m['id'] for m in json.load(urllib.request.urlopen(r))['data'])))"
+```
+
+To change a model, set it in `.env` and recreate the backend:
+
+```bash
+docker compose up -d backend
+```
+
+A larger planning model may plan better but costs more per run. Runs happen up
+to three times a day, plus any you request and replans after missed work.
+
 ### `OPENAI_REALTIME_MODEL`
 
 Default:
@@ -49,6 +76,11 @@ Default:
 ```text
 gpt-realtime-2.1
 ```
+
+The voice conversation model. `gpt-realtime-2.1-mini` is cheaper and less
+capable. Each voice response resends Gary's prompt and tool schemas, so your
+OpenAI account's Realtime tokens-per-minute limit applies (see
+[Troubleshooting](TROUBLESHOOTING.md#gary-goes-quiet-partway-through-setting-up-work)).
 
 ### Voice (Piper TTS)
 
@@ -279,8 +311,17 @@ may place calendar blocks.
 
 ### `PLANNING_MODEL`
 
-Default: `gpt-5.4-mini`. OpenAI model for the planning request (Responses API
-with structured output).
+Default: `gpt-5.4-mini`.
+
+The model for planning cycles, called once per run through the Responses API
+with a strict JSON schema. Any model that supports structured outputs works,
+for example:
+
+```text
+PLANNING_MODEL=gpt-5.6-terra
+```
+
+Not a Realtime model (see [Choosing models](#choosing-models)).
 
 ### `PLANNING_MAX_ACTIONS`
 
