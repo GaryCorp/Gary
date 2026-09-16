@@ -286,13 +286,37 @@ with structured output).
 
 Default: `5`, capped at 10. Most calendar proposals accepted from one run.
 
+### `PROTECTED_TIMES`
+
+Default: `12:00-13:00`.
+
+Local times kept free on working days, comma separated, for example
+`12:00-13:00,15:00-15:15`. Planning never schedules into them, free work blocks
+skip them, and Gary refuses to schedule or move work into them in conversation
+unless you explicitly ask for that time. Leave empty for none. Working days and
+hours come from `PLANNING_WEEKDAYS` and `WORK_HOURS`.
+
+### `PLANNING_EMAIL`
+
+Default: `snippets`.
+
+What planning cycles may see of unread Primary inbox email (up to 10, no-reply
+senders skipped): `snippets` (sender, subject, and Gmail's short preview),
+`subjects` (sender and subject), or `off`. Email bodies are never included.
+
+### `PRINCIPAL_NAME`
+
+Default: `Alex`. The name Gary uses for you in conversation and planning.
+
 ### Planning notes
 
 To give Gary context for a project, create a note in **Gary › Planning** in
 Joplin titled exactly like the project, for example `Chief of Staff video`.
-Scheduled runs read those notes and Gary's previous daily summary; no other
-notes are read. Summaries are written to **Gary › Daily Summaries**, one note
-per day.
+Notes titled **Preferences** there are always read. Planning (scheduled runs,
+and `planning_get_context` in conversation) reads those notes and Gary's
+previous daily summary; no other notes are read. Gary creates the Planning
+notebook when he first writes to it. Summaries are written to
+**Gary › Daily Summaries**, one note per day.
 
 ## Joplin
 

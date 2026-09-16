@@ -1,7 +1,12 @@
 from gary.db import Database
 from gary.db.repositories import Repositories
 from gary.models.common import provided_fields
-from gary.models.project import CreateProjectRequest, UpdateProjectRequest
+from gary.models.project import (
+    CreateProjectRequest,
+    CreateProjectWithTasksRequest,
+    UpdateProjectRequest,
+)
+from gary.models.task import CreateTaskRequest
 from gary.policy import GARY_ACTOR
 from gary.services.common import (
     Clock,
@@ -11,6 +16,7 @@ from gary.services.common import (
     metadata_json,
 )
 from gary.services.readiness import task_readiness
+from gary.services.task_service import add_dependency_in, create_task_in
 
 
 class ProjectService:
@@ -41,6 +47,73 @@ class ProjectService:
                 now=now,
             )
         return project
+
+    def create_project_with_tasks(
+        self, request: CreateProjectWithTasksRequest, actor: str = GARY_ACTOR
+    ) -> dict:
+        """Project, tasks, and dependencies in one transaction: all or nothing."""
+        now = clock_now(self.clock)
+        with self.db.transaction() as conn:
+            repos = Repositories.bind(conn)
+            project = repos.projects.create(
+                name=request.name,
+                objective=request.objective,
+                status=request.status,
+                priority=request.priority,
+                deadline=request.deadline,
+                metadata=request.metadata,
+                now=now,
+            )
+            repos.audit.write(
+                actor,
+                "project_created",
+                f"Created project: {project['name']}",
+                "project",
+                project["id"],
+                {"priority": project["priority"], "deadline": project["deadline"],
+                 "tasks": len(request.tasks)},
+                now=now,
+            )
+
+            by_key = {}
+            for item in request.tasks:
+                task = create_task_in(
+                    repos,
+                    CreateTaskRequest(
+                        project_id=project["id"],
+                        title=item.title,
+                        description=item.description,
+                        priority=item.priority,
+                        estimated_minutes=item.estimated_minutes,
+                        deadline=item.deadline,
+                        earliest_start=item.earliest_start,
+                    ),
+                    now,
+                    actor,
+                )
+                by_key[" ".join(item.title.split()).casefold()] = task
+
+            for item in request.tasks:
+                task = by_key[" ".join(item.title.split()).casefold()]
+                for title in item.depends_on:
+                    prerequisite = by_key[" ".join(title.split()).casefold()]
+                    add_dependency_in(repos, task, prerequisite, now, actor)
+
+            tasks = []
+            for task in by_key.values():
+                readiness = task_readiness(
+                    task, repos.dependencies.list_dependencies(task["id"]), now
+                )
+                tasks.append(
+                    {
+                        "id": task["id"],
+                        "title": task["title"],
+                        "estimated_minutes": task["estimated_minutes"],
+                        "ready": readiness["ready"],
+                        "blocked_by": readiness["blocked_by"],
+                    }
+                )
+        return {"project": project, "tasks": tasks}
 
     def get_project(self, project_id: str) -> dict:
         now = clock_now(self.clock)

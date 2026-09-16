@@ -64,6 +64,17 @@ class FakeNotebook:
         self.summaries.append((day, markdown))
 
 
+class FakeEmail:
+    def __init__(self, emails=None, fail=False):
+        self.emails = emails or []
+        self.fail = fail
+
+    async def unread_summaries(self):
+        if self.fail:
+            raise RuntimeError("Gmail access has not been granted")
+        return self.emails
+
+
 class FakeCalendar:
     def __init__(self, busy=None, fail=False):
         self.busy = busy or []
@@ -75,14 +86,13 @@ class FakeCalendar:
         return self.busy
 
 
-def cycle(gary, planner=None, notebook=None, calendar=None, max_actions=5, horizon_hours=72):
+def cycle(gary, planner=None, notebook=None, calendar=None, email=None, max_actions=5, horizon_hours=72):
     return PlanningCycle(
         gary,
         planner or FakePlanner(),
         notebook or FakeNotebook(),
         calendar or FakeCalendar(),
-        work_hours=WorkHours(9, 17),
-        work_days=WEEKDAYS,
+        email or FakeEmail(),
         max_actions=max_actions,
         horizon_hours=horizon_hours,
     )
@@ -241,10 +251,12 @@ def test_cycle_schedules_ready_task_and_records_everything(gary, external):
 
     day, markdown = notebook.summaries[0]
     assert day == dt.date(2026, 9, 16)
-    assert markdown.startswith("## Morning planning, 9:00 AM")
-    assert "Film today" in markdown
+    assert markdown.startswith("## Morning brief, 9:00 AM")
+    assert "**Primary objective:** Chief of Staff video" in markdown
+    assert "- 1:00 PM-3:00 PM Film demo" in markdown  # the brief after scheduling
+    assert "**Plan:** Film today" in markdown
     assert "(succeeded)" in markdown
-    assert "Edit video: waiting on Film demo" in markdown
+    assert "**Decision needed:** none" in markdown
 
 
 def test_cycle_rejects_invalid_proposals(gary, external):
@@ -274,7 +286,7 @@ def test_cycle_rejects_invalid_proposals(gary, external):
         (schedule("no-such-task", "2026-09-16T12:00:00-05:00", "2026-09-16T13:00:00-05:00"),
          "unknown task"),
         ({"action_type": "send_external_email", "to": "x@example.com"},
-         "send_external_email is not allowed in a scheduled planning cycle"),
+         "send_external_email is not allowed in a planning cycle"),
         ({"action_type": "move_calendar_event", "task_id": ready["id"], "reason": "x",
           "new_start": "2026-09-16T12:00:00-05:00", "new_end": "2026-09-16T13:00:00-05:00"},
          "the task is not on the calendar"),
@@ -315,16 +327,6 @@ def test_cycle_moves_critical_event_only_with_approval(gary, external):
         schedule(task["id"], "2026-09-16T13:00:00-05:00", "2026-09-16T14:00:00-05:00")
     ]})).run("morning"))
 
-    # Add a yellow escalation for moves, as the backend does.
-    from gary.models.action import MoveCalendarEventPayload
-    from gary.policy import YELLOW
-    from gary.services.action_service import ActionHandler
-
-    gary.actions.handlers["move_calendar_event"] = ActionHandler(
-        payload_model=MoveCalendarEventPayload,
-        summarize=lambda p, c: "Move Film demo",
-        classify=lambda repos, p: YELLOW if repos.tasks.get(p.task_id)["priority"] >= 8 else None,
-    )
     move = {"action_type": "move_calendar_event", "task_id": task["id"], "reason": "Clash",
             "new_start": "2026-09-16T15:00:00-05:00", "new_end": "2026-09-16T16:00:00-05:00"}
     busy = [{"start": "2026-09-16T18:00:00+00:00", "end": "2026-09-16T19:00:00+00:00", "event_id": "event-1"}]
@@ -383,6 +385,8 @@ def test_summary_includes_risks(gary):
     notebook = FakeNotebook()
     run(cycle(gary, notebook=notebook).run("evening"))
     markdown = notebook.summaries[0][1]
-    assert "**Overdue**" in markdown and "Late task (due Tue 5:00 PM)" in markdown
-    assert "Send Sam the draft (due Thu 5:00 PM)" in markdown
+    assert markdown.startswith("## Daily summary, 9:00 AM")
+    assert "- Late task is overdue (was due Tue 5:00 PM)." in markdown
+    assert "- Commitment: Send Sam the draft is due Thu 5:00 PM." in markdown
+    assert "**Tomorrow:**" in markdown
     assert task["id"]

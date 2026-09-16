@@ -49,6 +49,8 @@ class ActionHandler:
     execute: Callable[[RequestModel, dict], Awaitable[dict]] | None = None
     # SQLite changes after the side effect succeeded, inside a transaction.
     record: Callable[[Repositories, RequestModel, dict, str], dict | None] | None = None
+    # Extra audit event on success, e.g. calendar_changed or email_sent.
+    audit_event: str | None = None
 
 
 class ActionService:
@@ -253,6 +255,16 @@ class ActionService:
                     {"action_type": action["action_type"], "result": result},
                     now=now,
                 )
+                if handler.audit_event:
+                    repos.audit.write(
+                        actor,
+                        handler.audit_event,
+                        handler.summarize(payload, context),
+                        "action",
+                        action_id,
+                        {"payload": payload.model_dump(mode="json"), "result": result},
+                        now=now,
+                    )
         except Exception as exc:
             # The external side effect already happened and cannot be rolled
             # back: record that honestly rather than pretending either way.

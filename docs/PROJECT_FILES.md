@@ -80,7 +80,8 @@ Chief of Staff operations package:
   repositories with all SQL;
 - `models/` has the Pydantic request models;
 - `services/` has business logic: tasks, projects, follow-ups, commitments,
-  planning and scoring, actions, approvals, and the scheduled planning cycle
+  planning and scoring, actions, approvals, briefs (`briefing.py`), working
+  time and free blocks (`calendar_blocks.py`), and the planning cycle
   (`planning_cycle.py`);
 - `tools/` has the function tools exposed to Gary.
 

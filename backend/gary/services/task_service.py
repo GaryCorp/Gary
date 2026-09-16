@@ -101,6 +101,32 @@ def update_task_in(
     return task
 
 
+def add_dependency_in(
+    repos: Repositories, task: dict, prerequisite: dict, now: str, actor: str
+) -> bool:
+    """Add a dependency inside an existing transaction, rejecting self and
+    circular dependencies. Returns False if it already existed."""
+    if task["id"] == prerequisite["id"]:
+        raise ValueError("A task cannot depend on itself")
+    if repos.dependencies.depends_on_transitively(prerequisite["id"], task["id"]):
+        raise ValueError(
+            f"Circular dependency: {prerequisite['title']} already depends "
+            f"on {task['title']}"
+        )
+    added = repos.dependencies.add(task["id"], prerequisite["id"], now)
+    if added:
+        repos.audit.write(
+            actor,
+            "dependency_added",
+            f"{task['title']} now depends on {prerequisite['title']}",
+            "task",
+            task["id"],
+            {"depends_on_task_id": prerequisite["id"]},
+            now=now,
+        )
+    return added
+
+
 class TaskService:
     def __init__(self, db: Database, clock: Clock = default_clock):
         self.db = db
@@ -202,33 +228,13 @@ class TaskService:
 
     def add_dependency(self, request: DependencyRequest, actor: str = GARY_ACTOR) -> dict:
         now = clock_now(self.clock)
-        if request.task_id == request.depends_on_task_id:
-            raise ValueError("A task cannot depend on itself")
-
         # BEGIN IMMEDIATE holds the write lock, so the cycle check and insert
         # cannot interleave with another writer.
         with self.db.transaction() as conn:
             repos = Repositories.bind(conn)
             task = require_task(repos, request.task_id)
             prerequisite = require_task(repos, request.depends_on_task_id)
-
-            if repos.dependencies.depends_on_transitively(prerequisite["id"], task["id"]):
-                raise ValueError(
-                    f"Circular dependency: {prerequisite['title']} already depends "
-                    f"on {task['title']}"
-                )
-
-            added = repos.dependencies.add(task["id"], prerequisite["id"], now)
-            if added:
-                repos.audit.write(
-                    actor,
-                    "dependency_added",
-                    f"{task['title']} now depends on {prerequisite['title']}",
-                    "task",
-                    task["id"],
-                    {"depends_on_task_id": prerequisite["id"]},
-                    now=now,
-                )
+            added = add_dependency_in(repos, task, prerequisite, now, actor)
         return {
             "task": task["title"],
             "depends_on": prerequisite["title"],

@@ -121,6 +121,16 @@ If the voice logs say `timed out during opening handshake` and the health check
 also times out, a VPN is probably blocking Docker networking. See the next
 section.
 
+## Gary goes quiet partway through setting up work
+
+Voice logs showing `OpenAI rate limit reached; retrying in ...` mean your
+OpenAI account hit its Realtime tokens-per-minute limit. Each model response
+carries Gary's prompt and tools (about 9,000 tokens), so a limit of 40,000 per
+minute can be reached during multi-step planning. Gary retries twice after the
+suggested wait; if the logs say `not retrying again`, ask again in a minute.
+Higher OpenAI usage tiers raise the limit
+(https://platform.openai.com/account/rate-limits).
+
 ## NordVPN or another VPN is connected
 
 NordVPN's firewall drops traffic to local subnets that are not allowlisted,

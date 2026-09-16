@@ -7,6 +7,7 @@ from conftest import run
 
 EXPECTED_TOOLS = {
     "project_create",
+    "project_create_with_tasks",
     "project_list",
     "project_get",
     "project_update",
@@ -20,7 +21,12 @@ EXPECTED_TOOLS = {
     "followup_create",
     "followup_complete",
     "commitment_create",
-    "commitment_resolve",
+    "commitment_update",
+    "commitment_list",
+    "followup_list_due",
+    "planning_get_brief",
+    "planning_find_work_blocks",
+    "planning_run_cycle",
     "planning_get_context",
     "planning_record_plan",
     "action_propose",
@@ -59,8 +65,11 @@ def test_tools_present_local_times_and_report_errors(gary):
     assert bad["success"] is False
     assert "priority" in bad["error"]
 
-    missing = call(ctx, "task_get", task_id="nope")
-    assert missing == {"success": False, "error": "No task with id nope"}
+    unknown_id = "7d0f4d1c-7e2b-4c55-9d1c-0b1e7f0e9a11"
+    missing = call(ctx, "task_get", task_id=unknown_id)
+    assert missing == {"success": False, "error": f"No task with id {unknown_id}"}
+    not_an_id = call(ctx, "task_get", task_id="nope")
+    assert not_an_id["success"] is False and "must be an id" in not_an_id["error"]
 
 
 def test_voice_approval_requires_confirmation_and_known_id(gary, external):

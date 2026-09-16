@@ -1,6 +1,7 @@
 from gary.models.common import validate_request
 from gary.models.project import (
     CreateProjectRequest,
+    CreateProjectWithTasksRequest,
     GetProjectRequest,
     ListProjectsRequest,
     UpdateProjectRequest,
@@ -9,6 +10,7 @@ from gary.tools.base import (
     Tool,
     ToolContext,
     boolean,
+    integer,
     obj,
     present,
     priority,
@@ -24,6 +26,16 @@ async def project_create(args: dict, ctx: ToolContext) -> dict:
     request = validate_request(CreateProjectRequest, args)
     project = await run_sync(ctx.gary.projects.create_project, request)
     return {"project": present(project, ctx)}
+
+
+async def project_create_with_tasks(args: dict, ctx: ToolContext) -> dict:
+    request = validate_request(CreateProjectWithTasksRequest, args)
+    result = await run_sync(ctx.gary.projects.create_project_with_tasks, request)
+    return {
+        "project": present(result["project"], ctx),
+        "tasks": result["tasks"],
+        "ready_now": [task["title"] for task in result["tasks"] if task["ready"]],
+    }
 
 
 async def project_list(args: dict, ctx: ToolContext) -> dict:
@@ -60,6 +72,42 @@ TOOLS = [
             ("name", "objective"),
         ),
         project_create,
+    ),
+    Tool(
+        "project_create_with_tasks",
+        "Create a project with all its tasks and dependencies in one call. "
+        "Preferred when the user gives a goal: break it into tasks with "
+        "estimates, and list for each task the titles of tasks it waits on. "
+        "Everything is created together or not at all; circular dependencies "
+        "are rejected. Returns which tasks are ready now.",
+        obj(
+            {
+                "name": string("Short project name."),
+                "objective": string("What done looks like."),
+                "priority": priority(),
+                "deadline": timestamp("Project deadline.", nullable=True),
+                "tasks": {
+                    "type": "array",
+                    "description": "The tasks, in a sensible order.",
+                    "items": obj(
+                        {
+                            "title": string("Task title."),
+                            "estimated_minutes": integer("Estimated minutes.", 0),
+                            "priority": priority(),
+                            "deadline": timestamp("Task deadline.", nullable=True),
+                            "depends_on": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Titles of tasks in this list that must finish first.",
+                            },
+                        },
+                        ("title",),
+                    ),
+                },
+            },
+            ("name", "objective", "tasks"),
+        ),
+        project_create_with_tasks,
     ),
     Tool(
         "project_list",

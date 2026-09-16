@@ -39,6 +39,9 @@ services:
       PLANNING_MODEL: "${PLANNING_MODEL:-gpt-5.4-mini}"
       PLANNING_MAX_ACTIONS: "${PLANNING_MAX_ACTIONS:-5}"
       WORK_HOURS: "${WORK_HOURS:-9-17}"
+      PROTECTED_TIMES: "${PROTECTED_TIMES-12:00-13:00}"
+      PLANNING_EMAIL: "${PLANNING_EMAIL:-snippets}"
+      PRINCIPAL_NAME: "${PRINCIPAL_NAME:-Alex}"
 
       CLIENT_SECRETS_FILE: /run/secrets/google_client_secret.json
       TOKEN_STORE_FILE: /data/token_store.enc

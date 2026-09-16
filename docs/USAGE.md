@@ -235,8 +235,20 @@ without remembering the conversation.
 Gary, I need to publish the Chief of Staff video by Friday.
 ```
 
-Gary creates the project, breaks it into tasks, and records which tasks wait
-on others (for example, editing waits on filming). You can also be explicit:
+Gary creates the project, its tasks with time estimates, and which tasks wait
+on others (for example, editing waits on filming) in one step, checks your
+calendar for free work blocks, schedules the tasks that can start, adds
+checkpoints, and tells you whether the deadline is realistic:
+
+```text
+Assistant: Understood. I created the project with four tasks. Testing is the
+critical path. I scheduled testing tomorrow from nine to ten thirty and filming
+from one to four. Friday remains realistic.
+```
+
+Gary schedules inside working hours and never over protected time such as
+lunch, unless you explicitly ask for a particular time. You can also be
+explicit:
 
 ```text
 Gary, add a task to film the demo, two hours, priority nine.
@@ -248,15 +260,28 @@ Priorities run from 1 (almost irrelevant) through 5 (normal) to 10 (critical).
 ### Plan and check status
 
 ```text
-Gary, what should I work on?
-Gary, what's blocked?
-Gary, what's overdue?
+Gary, what should I work on today?
+Gary, what's blocking the video?
+Gary, what's due this week?
+Gary, what am I behind on?
+Gary, give me my morning brief.
+Gary, replan the rest of today.
+Gary, move the lower-priority work to tomorrow.
+Gary, close out the day.
 ```
 
 Gary gathers everything in one step and recommends ready tasks in order of a
-planning score the application calculates from priority, deadline urgency,
-whether the task is overdue, whether other tasks wait on it, and whether it
-fulfils a commitment. Your priority is never changed by the score.
+planning score the application calculates from priority, the project's
+priority, deadline urgency, whether the task is overdue, whether other tasks
+wait on it, and whether it fulfils a commitment. Your priority is never changed
+by the score.
+
+The **morning brief** is short: the primary objective and whether its deadline
+is realistic, today's scheduled work, risks, and any decision needed. Risks
+include scheduled work whose time has passed while the task is unfinished, and
+which tasks that holds up. "Replan the rest of today" and "close out the day"
+run a full planning cycle (see below), which may move lower-priority work and
+writes the day's summary note.
 
 ### Progress, follow-ups, and commitments
 
@@ -264,18 +289,43 @@ fulfils a commitment. Your priority is never changed by the score.
 Gary, I finished filming.
 Gary, remind me at 3 PM to check whether the upload finished.
 Gary, I promised Sam the draft by Thursday.
+Gary, what commitments have I made?
+Gary, remember that editing usually takes me two days.
 ```
 
 Finishing a task closes its follow-ups and tells you what is now unblocked.
-Gary announces due follow-ups and newly overdue tasks on his own, checking
-every five minutes and staying quiet during `EMAIL_CHECK_QUIET_HOURS`.
+Marking a commitment fulfilled, missed, or cancelled happens directly, but
+changing what was promised (such as a later deadline for Sam) needs your
+approval. Preferences go in a **Preferences** note in **Gary › Planning**, which
+planning reads.
+
+When you ask Gary about an email that asks for something ("Can you send me the
+draft by Thursday?"), he offers to record the commitment, create or update the
+task, check your workload, schedule the work, and draft a reply. He only sends
+the reply after the usual confirmation.
+
+Gary announces due follow-ups, newly overdue tasks, and scheduled work that
+passed unfinished on his own, checking every five minutes and staying quiet
+during `EMAIL_CHECK_QUIET_HOURS`. When scheduled work passes unfinished during
+working hours, he also replans (at most every two hours):
+
+```text
+Assistant: Filming is still incomplete and is blocking editing. I moved
+optional research to tomorrow. Friday is still achievable. Moving the filming
+block needs your approval.
+```
 
 ### Scheduled planning
 
-On weekdays at 8:00, 12:30, and 17:30, Gary plans on his own: he reviews your
-projects and tasks, checks when your calendar is busy, reads your planning
-notes, and may put up to five ready tasks on the calendar within working hours.
-If you are near him, he says a short briefing:
+On weekdays at 8:00, 12:30, and 17:30, Gary plans on his own: the **morning
+brief** sets up the day, the **midday review** compares reality with the
+morning plan and replans only if something material changed, and the
+**end-of-day review** records what was completed, unfinished, blocked, and
+moved, and tomorrow's likely priority. Each run reviews your projects and
+tasks, checks when your calendar is busy, reads your planning notes and the
+sender, subject, and preview of unread email, and may schedule or move up to
+five task blocks and create follow-ups, within working hours and outside
+protected time. If you are near him, he says a short briefing:
 
 ```text
 Assistant: I put filming on your calendar at one PM. Editing is still waiting on it.

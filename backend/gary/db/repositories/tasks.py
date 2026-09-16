@@ -159,6 +159,45 @@ class TaskRepository:
             )
         )
 
+    def list_missed_blocks(self, now: str) -> list[dict]:
+        """Tasks whose scheduled block has ended but that are not finished."""
+        return rows_to_dicts(
+            self.conn.execute(
+                """
+                SELECT * FROM tasks
+                WHERE scheduled_end IS NOT NULL
+                  AND scheduled_end <= ?
+                  AND status NOT IN ('completed', 'cancelled')
+                ORDER BY scheduled_end
+                """,
+                (now,),
+            )
+        )
+
+    def list_scheduled_between(self, start: str, end: str) -> list[dict]:
+        return rows_to_dicts(
+            self.conn.execute(
+                """
+                SELECT * FROM tasks
+                WHERE scheduled_start >= ? AND scheduled_start < ?
+                ORDER BY scheduled_start
+                """,
+                (start, end),
+            )
+        )
+
+    def list_completed_between(self, start: str, end: str) -> list[dict]:
+        return rows_to_dicts(
+            self.conn.execute(
+                """
+                SELECT * FROM tasks
+                WHERE status = 'completed' AND completed_at >= ? AND completed_at < ?
+                ORDER BY completed_at
+                """,
+                (start, end),
+            )
+        )
+
     def mark_started(self, task_id: str, now: str | None = None) -> dict:
         now = now or now_utc()
         task = self.get(task_id)

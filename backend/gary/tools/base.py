@@ -42,9 +42,19 @@ class ToolContext:
     # Per voice conversation. approval_ids holds approvals Gary has shown the
     # user in this conversation; only those can be resolved by voice.
     session: dict = field(default_factory=dict)
+    # Optional backend integrations: "calendar" (busy times), "notebook"
+    # (planning notes), "planning_cycle". Tools that need one report when it
+    # is unavailable.
+    integrations: dict = field(default_factory=dict)
 
     def approval_ids(self) -> set[str]:
         return self.session.setdefault("approval_ids", set())
+
+    def integration(self, name: str):
+        service = self.integrations.get(name)
+        if service is None:
+            raise ValueError(f"The {name} integration is not available right now")
+        return service
 
 
 @dataclass(frozen=True)
@@ -122,13 +132,9 @@ def boolean(description: str) -> dict:
     return {"type": "boolean", "description": description}
 
 
-TIMESTAMP_HINT = "ISO 8601 date-time with timezone offset, e.g. 2026-10-10T17:00:00-05:00"
-PRIORITY_HINT = "1 almost irrelevant, 5 normal, 10 critical"
-
-
 def timestamp(description: str, nullable: bool = False) -> dict:
-    return string(f"{description} {TIMESTAMP_HINT}.", nullable=nullable)
+    return string(f"{description} ISO 8601 with offset.", nullable=nullable)
 
 
 def priority(description: str = "Priority") -> dict:
-    return integer(f"{description}: {PRIORITY_HINT}.", 1, 10)
+    return integer(f"{description}, 1-10 (5 normal).", 1, 10)

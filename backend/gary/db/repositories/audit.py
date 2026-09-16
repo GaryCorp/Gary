@@ -58,6 +58,14 @@ class AuditRepository:
             )
         )
 
+    def latest_timestamp(self, event_types: tuple[str, ...]) -> str | None:
+        marks = ", ".join("?" for _ in event_types)
+        row = self.conn.execute(
+            f"SELECT MAX(timestamp) AS latest FROM audit_log WHERE event_type IN ({marks})",
+            event_types,
+        ).fetchone()
+        return row["latest"]
+
     def has_event(self, event_type: str, entity_id: str) -> bool:
         return (
             self.conn.execute(

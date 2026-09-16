@@ -51,7 +51,11 @@ def test_green_action_executes_immediately(gary, external):
     row = action_row(gary, result["action_id"])
     assert row["status"] == "succeeded"
     assert json.loads(row["result_json"]) == {"event_id": "event-1"}
-    assert audit_events(gary, "action", row["id"]) == ["action_proposed", "action_succeeded"]
+    assert audit_events(gary, "action", row["id"]) == [
+        "action_proposed",
+        "action_succeeded",
+        "calendar_changed",
+    ]
 
 
 def test_internal_green_action(gary):

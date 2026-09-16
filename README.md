@@ -15,9 +15,11 @@ projects and tasks. It uses:
 - **Joplin** notes in a Gary notebook, through the desktop app's Web Clipper API.
 - **SQLite** as Gary's Chief of Staff memory: projects, tasks, dependencies,
   follow-ups, commitments, approvals, and an audit log.
-- **Scheduled planning** on weekdays at 8:00, 12:30, and 17:30: one OpenAI
-  call per run that can put ready tasks on your calendar, writes a daily
-  summary to Joplin, and speaks a short briefing.
+- **Chief of Staff planning**: turn a goal into a project, tasks, and
+  dependencies; schedule work into free blocks while protecting lunch and
+  working hours; morning brief, midday review, and end-of-day review on
+  weekdays at 8:00, 12:30, and 17:30; replanning when scheduled work passes
+  unfinished; daily summaries in Joplin.
 - **Approval policy as code**: risky actions such as emails Gary starts wait
   for your approval, by voice or at `http://localhost:8000/approvals`.
 - **Docker Compose** with separate `voice`, `backend`, and `joplin-proxy`

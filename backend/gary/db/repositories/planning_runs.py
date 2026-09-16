@@ -75,6 +75,13 @@ class PlanningRunRepository:
             )
         )
 
+    def latest(self) -> dict | None:
+        return row_to_dict(
+            self.conn.execute(
+                "SELECT * FROM planning_runs ORDER BY started_at DESC LIMIT 1"
+            ).fetchone()
+        )
+
     def fail_stale(self, started_before: str, now: str | None = None) -> int:
         cursor = self.conn.execute(
             """

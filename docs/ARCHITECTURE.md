@@ -219,13 +219,30 @@ SQLite (WAL)      projects, tasks, task_dependencies, followups, commitments,
 Tools exposed to Gary:
 
 ```text
-project_create  project_list  project_get  project_update
+project_create  project_create_with_tasks  project_list  project_get  project_update
 task_create  task_update  task_complete  task_list  task_get
 task_add_dependency  task_remove_dependency
-followup_create  followup_complete  commitment_create  commitment_resolve
-planning_get_context  planning_record_plan
+followup_create  followup_complete  followup_list_due
+commitment_create  commitment_update  commitment_list
+planning_get_context  planning_get_brief  planning_find_work_blocks
+planning_run_cycle  planning_record_plan
 action_propose  approval_list_pending  approval_resolve
 ```
+
+- `project_create_with_tasks` creates a project, its tasks, and dependencies
+  in one transaction, so a goal costs one tool call instead of ten.
+- `planning_get_brief` returns a deterministic brief built by
+  `gary/services/briefing.py`: primary objective with deadline capacity
+  (estimated remaining work against working time left), today's scheduled
+  work, risks, decisions needed, and due follow-ups; midday adds finished and
+  remaining work and earlier plans; evening adds completed, unfinished,
+  blocked, moved, new follow-ups, and tomorrow.
+- `planning_find_work_blocks` returns free blocks within `WORK_HOURS`, minus
+  busy calendar time and `PROTECTED_TIMES` (`gary/services/calendar_blocks.py`).
+- `planning_run_cycle` runs a planning cycle on request (not more than every
+  10 minutes).
+- `commitment_update` records an outcome directly, but changing what was
+  promised becomes a yellow `change_external_commitment` action.
 
 There is no tool to run SQL, open a shell, delete records or the database,
 edit the audit log, or change policy.
@@ -240,8 +257,16 @@ Key rules:
   dependencies are rejected inside a write-locked transaction.
 - **Planning score** is deterministic Python: priority × 10, +40 overdue, +30 /
   +20 / +10 for deadlines within 24 / 72 / 168 hours, +15 if other open tasks
-  depend on it, +20 if it fulfils an open commitment. It never overwrites
-  priority.
+  depend on it, +20 if it fulfils an open commitment, and (project priority −
+  5) × 2. It never overwrites priority.
+- **IDs** passed to tools must be UUIDs.
+- **Missed blocks**: a task whose `scheduled_end` has passed while it is not
+  completed or cancelled appears in `missed_scheduled_blocks` with the open
+  tasks downstream of it.
+- **Working time**: scheduling or moving a task in conversation is refused
+  outside `WORK_HOURS` and `PLANNING_WEEKDAYS` or over `PROTECTED_TIMES`,
+  unless the payload sets `override_working_hours` because the user explicitly
+  asked for that time.
 - **`planning_get_context`** returns active projects, ready, in-progress,
   blocked, and overdue tasks, upcoming deadlines, due follow-ups, open
   commitments, pending approvals, and recent actions in one call, and starts a
@@ -258,44 +283,57 @@ Key rules:
   expire after 72 hours.
 - **Audit log** is append-only, enforced by database triggers.
 - **Alerts**: every `OPS_CHECK_INTERVAL_MINUTES` the backend announces due
-  follow-ups and newly overdue tasks once each (recorded in the audit log so a
-  restart does not repeat them) and writes the daily backup.
+  follow-ups, newly overdue tasks, and missed scheduled blocks once each
+  (recorded in the audit log so a restart does not repeat them) and writes the
+  daily backup. A missed block during working time triggers an
+  `event_triggered` planning cycle, at most every two hours.
 
 #### Scheduled planning cycle
 
-`gary/services/planning_cycle.py` runs in the backend at `PLANNING_TIMES` on
-`PLANNING_WEEKDAYS`, whether or not the voice service is connected:
+`gary/services/planning_cycle.py` runs `morning`, `midday`, and `evening`
+cycles in the backend at `PLANNING_TIMES` on `PLANNING_WEEKDAYS`, whether or
+not the voice service is connected; `manual` cycles on request
+(`planning_run_cycle`); and `event_triggered` cycles after a missed block:
 
 ```text
 planning_get_context         SQLite state; starts a planning_runs row
+BriefingService              the deterministic brief for this cycle type
 JoplinPlanningNotebook       Gary > Planning notes titled like an active
-                             project, plus the previous daily summary
+                             project or "Preferences", plus the previous
+                             daily summary
 GoogleBusyCalendar           busy start/end times for the next 72 hours
+GmailUnreadSummaries         sender, subject, snippet of up to 10 unread
+                             Primary emails (PLANNING_EMAIL)
 OpenAIPlanner                ONE Responses API call, strict JSON schema:
-                             summary, spoken briefing, calendar proposals
+                             summary, spoken briefing, proposals
 validate_cycle_actions       deterministic Python checks
 action_propose               normal policy: green runs, yellow waits
 complete_cycle               plan, results, and rejections saved + audited
-write_daily_summary          Gary > Daily Summaries > "Daily summary YYYY-MM-DD"
+write_daily_summary          the brief as a note section in
+                             Gary > Daily Summaries > "Daily summary YYYY-MM-DD"
 announce briefing            spoken if voice is connected and not quiet hours
 ```
 
 Guardrails:
 
 - One model call per run and no tool loop. The model can only propose
-  `schedule_task` and `move_calendar_event`; it cannot send email, change
-  tasks, or approve anything in a scheduled run.
+  `schedule_task`, `move_calendar_event`, and `create_followup`; it cannot
+  send email, change tasks, or approve anything in a planning run.
 - Every proposal is checked in Python before policy applies: the task exists
   and is open, `schedule_task` only for ready, unscheduled tasks, times have an
   offset, 15 to 240 minutes long, at least 10 minutes ahead and within 72
-  hours, inside `WORK_HOURS` on a planning weekday, no overlap with busy times
-  (other than the task's own event) or other proposals, one action per task,
-  and at most `PLANNING_MAX_ACTIONS`. Rejections are recorded with reasons.
+  hours, inside `WORK_HOURS` on a planning weekday, not over `PROTECTED_TIMES`,
+  no overlap with busy times (other than the task's own event) or other
+  proposals, moves of at least 30 minutes (smaller slips are not worth
+  changing the calendar), one action per task, follow-ups due within 7 days
+  and not duplicating a pending one, and at most `PLANNING_MAX_ACTIONS`.
+  Rejections are recorded with reasons.
 - If the calendar cannot be read, nothing is scheduled. If Joplin is closed,
   planning continues without notes and the summary is skipped.
-- A run is started at most once per type per day, including failed runs, so a
-  failure is never retried in a loop. A run missed while the backend was down
-  is caught up within 90 minutes of its time.
+- A scheduled run is started at most once per type per day, including failed
+  runs, so a failure is never retried in a loop. A run missed while the backend
+  was down is caught up within 90 minutes of its time. Requested cycles need 10
+  minutes since the last cycle, event-triggered ones two hours.
 - Runs are serialized, and all database work uses short transactions; no
   transaction is open during the model call or Google requests.
 
@@ -303,11 +341,12 @@ Action handlers:
 
 | action_type | Risk | Effect |
 |---|---|---|
-| `create_internal_task`, `update_internal_task` | green | SQLite only |
-| `schedule_task` | green | creates a Google Calendar event, then stores its ID and times on the task |
-| `move_calendar_event` | green, yellow for priority ≥ 8 or an open commitment | moves the task's event, then updates the task |
-| `send_external_email` | yellow | sends one plain-text email |
-| `spend_money`, `change_security_settings`, `access_password_manager`, `change_own_permissions` | red | refused |
+| `create_internal_task`, `update_internal_task`, `create_followup` | green | SQLite only |
+| `change_external_commitment` | yellow | changes a commitment's description, recipient, or deadline |
+| `schedule_task` | green | creates a Google Calendar event, then stores its ID and times on the task; audited as `calendar_changed` |
+| `move_calendar_event` | green, yellow for priority ≥ 8 or an open commitment | moves the task's event, then updates the task; audited as `calendar_changed` |
+| `send_external_email` | yellow | sends one plain-text email; audited as `email_sent` |
+| `spend_money`, `change_security_settings`, `access_password_manager`, `change_own_permissions`, `modify_permissions`, `delete_audit_log` | red | refused |
 
 ### 7. Joplin proxy container
 
@@ -387,6 +426,18 @@ pre-roll + microphone PCM24k
        v
    speakers
 ```
+
+## Realtime tool calls
+
+When the model makes several tool calls in one response (common when setting
+up work), the backend sends each result as the call arrives and asks for one
+follow-up response after `response.done`. A response that fails on OpenAI's
+tokens-per-minute limit is retried after the suggested wait (at most 30
+seconds, twice in a row), with a `bridge.notice` in the voice logs.
+
+Each response carries the prompt and about 40 tool schemas (roughly 9,000
+tokens), so an OpenAI account with a 40,000 tokens-per-minute Realtime limit
+can hit it during multi-step planning; the retry keeps the conversation going.
 
 ## Realtime session lifetime
 

@@ -68,6 +68,25 @@ class FollowupRepository:
             )
         )
 
+    def list_created_between(self, start: str, end: str) -> list[dict]:
+        return rows_to_dicts(
+            self.conn.execute(
+                """
+                SELECT * FROM followups
+                WHERE created_at >= ? AND created_at < ?
+                ORDER BY created_at
+                """,
+                (start, end),
+            )
+        )
+
+    def list_pending(self) -> list[dict]:
+        return rows_to_dicts(
+            self.conn.execute(
+                "SELECT * FROM followups WHERE status = 'pending' ORDER BY due_at"
+            )
+        )
+
     def list_pending_for_project(self, project_id: str) -> list[dict]:
         return rows_to_dicts(
             self.conn.execute(

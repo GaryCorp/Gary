@@ -12,15 +12,21 @@ RED = "red"        # rejected by policy
 ACTION_POLICIES = {
     "create_internal_task": GREEN,
     "update_internal_task": GREEN,
+    "create_followup": GREEN,
     "schedule_task": GREEN,
-    "move_calendar_event": GREEN,  # escalated to yellow for critical events
+    # Moving a non-critical task block is green; a critical one (see
+    # CRITICAL_TASK_PRIORITY) is escalated to yellow by its handler.
+    "move_calendar_event": GREEN,
     "send_external_email": YELLOW,
+    "change_external_commitment": YELLOW,
     "cancel_external_meeting": YELLOW,
     "download_file": YELLOW,
     "spend_money": RED,
     "change_security_settings": RED,
     "access_password_manager": RED,
     "change_own_permissions": RED,
+    "modify_permissions": RED,
+    "delete_audit_log": RED,
 }
 
 RISK_ORDER = {GREEN: 0, YELLOW: 1, RED: 2}

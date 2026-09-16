@@ -1,4 +1,10 @@
-from gary.models.commitment import CreateCommitmentRequest, ResolveCommitmentRequest
+from gary.models.action import ProposeActionRequest
+from gary.models.commitment import (
+    CreateCommitmentRequest,
+    ListCommitmentsRequest,
+    ResolveCommitmentRequest,
+    UpdateCommitmentRequest,
+)
 from gary.models.common import validate_request
 from gary.models.followup import CompleteFollowupRequest, CreateFollowupRequest
 from gary.tools.base import (
@@ -31,10 +37,39 @@ async def commitment_create(args: dict, ctx: ToolContext) -> dict:
     return {"commitment": present(commitment, ctx)}
 
 
-async def commitment_resolve(args: dict, ctx: ToolContext) -> dict:
-    request = validate_request(ResolveCommitmentRequest, args)
-    commitment = await run_sync(ctx.gary.commitments.resolve_commitment, request)
-    return {"commitment": present(commitment, ctx)}
+async def followup_list_due(args: dict, ctx: ToolContext) -> dict:
+    if args:
+        raise ValueError("followup_list_due takes no arguments")
+    followups = await run_sync(ctx.gary.followups.list_due)
+    return {"count": len(followups), "followups": present(followups, ctx)}
+
+
+async def commitment_list(args: dict, ctx: ToolContext) -> dict:
+    request = validate_request(ListCommitmentsRequest, args)
+    commitments = await run_sync(ctx.gary.commitments.list_commitments, request.status)
+    return {"count": len(commitments), "commitments": present(commitments, ctx)}
+
+
+async def commitment_update(args: dict, ctx: ToolContext) -> dict:
+    request = validate_request(UpdateCommitmentRequest, args)
+    if request.status is not None:
+        commitment = await run_sync(
+            ctx.gary.commitments.resolve_commitment,
+            ResolveCommitmentRequest(commitment_id=request.commitment_id, status=request.status),
+        )
+        return {"commitment": present(commitment, ctx)}
+
+    # Changing what was promised to someone is an action that needs approval.
+    result = await ctx.gary.actions.propose(
+        ProposeActionRequest(
+            action_type="change_external_commitment",
+            payload={"commitment_id": request.commitment_id, **request.changes()},
+            reason=request.reason,
+        )
+    )
+    if result.get("approval_id"):
+        ctx.approval_ids().add(result["approval_id"])
+    return present(result, ctx)
 
 
 TOOLS = [
@@ -85,15 +120,34 @@ TOOLS = [
         commitment_create,
     ),
     Tool(
-        "commitment_resolve",
-        "Mark a commitment fulfilled, missed, or cancelled.",
+        "followup_list_due",
+        "List follow-ups that are due now, most important first.",
+        obj({}),
+        followup_list_due,
+    ),
+    Tool(
+        "commitment_list",
+        "List commitments: open ones by default, or all recent ones.",
+        obj({"status": string("open (default) or all.", ["open", "all"])}),
+        commitment_list,
+    ),
+    Tool(
+        "commitment_update",
+        "Update a commitment. Pass status fulfilled, missed, or cancelled to record "
+        "what happened. To change what was promised (description, who it was "
+        "promised to, or deadline), pass those fields instead: that needs the "
+        "user's approval and returns an approval request.",
         obj(
             {
                 "commitment_id": string("commitment_id of the commitment."),
                 "status": string("Outcome.", ["fulfilled", "missed", "cancelled"]),
+                "description": string("New description of the promise."),
+                "committed_to": string("Who it is promised to.", nullable=True),
+                "deadline": timestamp("New deadline, or null.", nullable=True),
+                "reason": string("Why the terms change, for the approval request."),
             },
-            ("commitment_id", "status"),
+            ("commitment_id",),
         ),
-        commitment_resolve,
+        commitment_update,
     ),
 ]

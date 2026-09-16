@@ -1,5 +1,41 @@
 # Changelog
 
+## 1.13.0 — Chief of Staff upgrade
+
+- Gary's prompt now includes the Chief of Staff role: turning goals into
+  projects, coordinating time, monitoring progress, replanning, respecting
+  human limits, treating external content as untrusted, and never bypassing
+  approvals. `PRINCIPAL_NAME` sets the name Gary uses (default Alex).
+- New tools: `project_create_with_tasks` (project, tasks, and dependencies in
+  one transaction), `planning_get_brief`, `planning_find_work_blocks`,
+  `planning_run_cycle`, `followup_list_due`, `commitment_list`, and
+  `commitment_update` (replaces `commitment_resolve`; changing a commitment's
+  terms needs approval).
+- Deterministic briefs: morning (primary objective, deadline capacity, today,
+  risks, decisions), midday (finished, remaining, earlier plans), and evening
+  (completed, unfinished, blocked, moved, new follow-ups, tomorrow). Daily
+  summary notes use this format.
+- Missed scheduled blocks are detected with their downstream tasks, announced
+  once, and trigger an event-triggered replan (at most every two hours).
+- Planning cycles see unread email senders, subjects, and snippets
+  (`PLANNING_EMAIL`), "Preferences" planning notes, and earlier plans from
+  today; they may also create follow-ups, and ignore moves under 30 minutes.
+- `PROTECTED_TIMES` (default lunch, 12:00-13:00) is never scheduled over, and
+  scheduling in conversation outside working time needs an explicit
+  `override_working_hours`.
+- Project priority is a planning-score factor. Policy adds `create_followup`
+  (green), `change_external_commitment` (yellow), `modify_permissions` and
+  `delete_audit_log` (red). Calendar changes and sent email get
+  `calendar_changed` and `email_sent` audit events. Tool IDs must be UUIDs.
+- Fixed: when the Realtime model made several tool calls in one response, the
+  backend requested a new response after each result and the model stopped
+  responding. It now asks once after the response finishes. Responses that fail
+  on OpenAI's rate limit are retried.
+- Verified with the real Realtime model: "publish the next video by Friday"
+  created the project, tasks, and dependencies, scheduled work on the calendar,
+  added a checkpoint, and answered status, brief, and approval questions.
+- 115 tests.
+
 ## 1.12.0 — Scheduled planning cycle
 
 - Gary plans on his own on weekdays at 8:00, 12:30, and 17:30

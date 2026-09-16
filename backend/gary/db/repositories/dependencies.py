@@ -85,6 +85,27 @@ class DependencyRepository:
         ).fetchone()
         return row is not None
 
+    def open_downstream_of(self, task_id: str) -> list[dict]:
+        """Unfinished tasks that depend, directly or indirectly, on ``task_id``."""
+        return rows_to_dicts(
+            self.conn.execute(
+                """
+                WITH RECURSIVE downstream(id) AS (
+                    SELECT task_id FROM task_dependencies WHERE depends_on_task_id = ?
+                    UNION
+                    SELECT d.task_id
+                    FROM task_dependencies d
+                    JOIN downstream s ON d.depends_on_task_id = s.id
+                )
+                SELECT t.id, t.title, t.status, t.deadline
+                FROM downstream s JOIN tasks t ON t.id = s.id
+                WHERE t.status NOT IN ('completed', 'cancelled')
+                ORDER BY t.title
+                """,
+                (task_id,),
+            )
+        )
+
     def task_ids_blocking_open_tasks(self) -> set[str]:
         """Tasks that at least one unfinished task depends on."""
         return {

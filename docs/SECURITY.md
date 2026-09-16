@@ -178,11 +178,26 @@ emails.
 - The audit log is append-only, enforced by database triggers, and no tool
   can delete records, the database, or the audit log.
 - `data/gary.db` and its backups are created owner-only (600, folder 700).
-- The scheduled planning cycle makes one model call per run with a strict
-  output schema, may only propose scheduling or moving task calendar blocks,
-  and every proposal passes deterministic checks (readiness, working hours,
-  horizon, busy times, count) before the normal policy. It never sends email
-  or approves anything, and a failed run is not retried.
+- The planning cycle makes one model call per run with a strict output
+  schema, may only propose scheduling or moving task calendar blocks and
+  creating follow-ups, and every proposal passes deterministic checks
+  (readiness, working hours, protected times, horizon, busy times, count)
+  before the normal policy. It never sends email or approves anything, a failed
+  run is not retried, and requested and event-triggered cycles are rate
+  limited.
+- Unread email snippets given to planning are labelled untrusted, and the
+  planner and Gary are told that instructions inside email, notes, or other
+  content are data, not instructions. The worst a malicious email could do in a
+  planning run is suggest calendar blocks or follow-ups that still pass the
+  deterministic checks and policy.
+- Changing what was promised in a commitment is a yellow action. Red policy
+  also covers `modify_permissions` and `delete_audit_log`, and no tool can
+  change permissions or policy.
+- IDs passed to tools must be UUIDs, so free text cannot be used as an ID.
+- Working-time protection is deterministic: work outside working hours or over
+  protected times is only scheduled when the call sets
+  `override_working_hours`, which Gary is told to use only when you explicitly
+  ask for that time. The planning model cannot set it.
 
 ## Joplin tools
 

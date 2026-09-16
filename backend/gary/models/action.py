@@ -39,6 +39,9 @@ class ScheduleTaskPayload(TimeRangeMixin):
     task_id: EntityId
     start: Timestamp
     end: Timestamp
+    # Only when the user explicitly asked for time outside working hours or
+    # over protected time such as lunch.
+    override_working_hours: bool = False
 
     def range(self):
         return self.start, self.end
@@ -48,6 +51,7 @@ class MoveCalendarEventPayload(TimeRangeMixin):
     task_id: EntityId
     new_start: Timestamp
     new_end: Timestamp
+    override_working_hours: bool = False
 
     def range(self):
         return self.new_start, self.new_end

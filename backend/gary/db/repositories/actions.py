@@ -82,6 +82,22 @@ class ActionRepository:
         )
         return cursor.rowcount == 1
 
+    def list_executed_between(
+        self, start: str, end: str, action_type: str | None = None
+    ) -> list[dict]:
+        return rows_to_dicts(
+            self.conn.execute(
+                """
+                SELECT * FROM actions
+                WHERE status = 'succeeded'
+                  AND executed_at >= ? AND executed_at < ?
+                  AND (? IS NULL OR action_type = ?)
+                ORDER BY executed_at
+                """,
+                (start, end, action_type, action_type),
+            )
+        )
+
     def list_recent(self, since: str, limit: int = 10) -> list[dict]:
         return rows_to_dicts(
             self.conn.execute(

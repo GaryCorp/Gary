@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 import pytest
 
 from gary.models.common import validate_request
@@ -12,6 +14,9 @@ from gary.services.common import NotFoundError
 from gary.models.followup import CreateFollowupRequest
 
 from conftest import audit_events, make_project, make_task
+
+TASK_ID = str(uuid4())
+PROJECT_ID = str(uuid4())
 
 
 def test_create_get_update_project(gary, clock):
@@ -71,7 +76,7 @@ def test_create_get_update_task(gary):
 
 def test_task_requires_existing_project(gary):
     with pytest.raises(NotFoundError):
-        make_task(gary, project_id="missing")
+        make_task(gary, project_id=str(uuid4()))
 
 
 def test_complete_task_closes_followups_atomically(gary):
@@ -192,11 +197,11 @@ def test_invalid_priority_rejected():
 
 def test_invalid_status_rejected():
     with pytest.raises(ValueError, match="status"):
-        validate_request(UpdateTaskRequest, {"task_id": "t", "status": "done"})
+        validate_request(UpdateTaskRequest, {"task_id": TASK_ID, "status": "done"})
     with pytest.raises(ValueError, match="status"):
-        validate_request(UpdateTaskRequest, {"task_id": "t", "status": "completed"})
+        validate_request(UpdateTaskRequest, {"task_id": TASK_ID, "status": "completed"})
     with pytest.raises(ValueError, match="status"):
-        validate_request(UpdateProjectRequest, {"project_id": "p", "status": "finished"})
+        validate_request(UpdateProjectRequest, {"project_id": PROJECT_ID, "status": "finished"})
 
 
 @pytest.mark.parametrize(
@@ -206,6 +211,15 @@ def test_invalid_status_rejected():
 def test_invalid_timestamp_rejected(value):
     with pytest.raises(ValueError, match="deadline"):
         validate_request(CreateTaskRequest, {"title": "x", "deadline": value})
+
+
+def test_ids_must_be_uuids():
+    with pytest.raises(ValueError, match="task_id: must be an id"):
+        validate_request(UpdateTaskRequest, {"task_id": "nope", "priority": 3})
+    with pytest.raises(ValueError, match="project_id"):
+        validate_request(CreateTaskRequest, {"title": "x", "project_id": "'; DROP TABLE tasks; --"})
+    upper = str(uuid4()).upper()
+    assert validate_request(UpdateTaskRequest, {"task_id": upper, "priority": 3}).task_id == upper.lower()
 
 
 def test_other_validation_rules():
@@ -218,9 +232,9 @@ def test_other_validation_rules():
     with pytest.raises(ValueError, match="core fields"):
         validate_request(CreateTaskRequest, {"title": "x", "metadata": {"status": "completed"}})
     with pytest.raises(ValueError, match="cannot be cleared"):
-        validate_request(UpdateTaskRequest, {"task_id": "t", "title": None})
+        validate_request(UpdateTaskRequest, {"task_id": TASK_ID, "title": None})
     with pytest.raises(ValueError, match="no changes"):
-        validate_request(UpdateTaskRequest, {"task_id": "t"})
+        validate_request(UpdateTaskRequest, {"task_id": TASK_ID})
 
     ok = validate_request(CreateTaskRequest, {"title": "x", "metadata": {"youtube_episode": 3}})
     assert ok.metadata == {"youtube_episode": 3}

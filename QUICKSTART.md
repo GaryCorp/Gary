@@ -163,8 +163,12 @@ More examples are in `docs/USAGE.md`.
   makes one OpenAI request, may put ready tasks on your calendar within working
   hours (9 to 5), writes **Gary › Daily Summaries** in Joplin, and speaks a
   short briefing. Set `PLANNING_TIMES=` in `.env` to turn it off.
-- **Announcements** for new email (hourly), due follow-ups, and overdue tasks
-  (every five minutes), except during quiet hours (10 PM to 7 AM).
+- **Announcements** for new email (hourly), due follow-ups, overdue tasks, and
+  scheduled work that passed unfinished (every five minutes), except during
+  quiet hours (10 PM to 7 AM). Unfinished scheduled work during the day also
+  triggers a replan.
+- **Human limits**: planning keeps to 9 to 5 on weekdays and never schedules
+  over lunch (`PROTECTED_TIMES`, default 12:00-13:00).
 - **Approvals**: anything that needs your OK waits at
   `http://localhost:8000/approvals`, or answer Gary by voice.
 - **Backups** of `data/gary.db` go to `data/backups` daily.

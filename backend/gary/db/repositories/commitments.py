@@ -6,6 +6,7 @@ from gary.db.repositories.base import (
     now_utc,
     row_to_dict,
     rows_to_dicts,
+    update_columns,
 )
 
 
@@ -53,6 +54,24 @@ class CommitmentRepository:
             (status, now or now_utc(), commitment_id),
         )
         return self.get(commitment_id)
+
+    def update(self, commitment_id: str, now: str | None = None, **changes) -> dict:
+        changes["updated_at"] = now or now_utc()
+        update_columns(
+            self.conn,
+            "commitments",
+            commitment_id,
+            changes,
+            frozenset({"description", "committed_to", "deadline", "status", "updated_at"}),
+        )
+        return self.get(commitment_id)
+
+    def list_all(self, limit: int = 50) -> list[dict]:
+        return rows_to_dicts(
+            self.conn.execute(
+                "SELECT * FROM commitments ORDER BY updated_at DESC LIMIT ?", (limit,)
+            )
+        )
 
     def list_open(self) -> list[dict]:
         return rows_to_dicts(

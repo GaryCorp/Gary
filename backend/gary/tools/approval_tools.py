@@ -8,7 +8,10 @@ ACTION_PAYLOADS = (
     "Payload by action_type: "
     "schedule_task {task_id, start, end} puts a task on the calendar; "
     "move_calendar_event {task_id, new_start, new_end} moves a scheduled task's "
-    "calendar event; "
+    "calendar event (both refuse times outside working hours or over protected "
+    "time unless override_working_hours is true, which is only for times the "
+    "user explicitly asked for); "
+    "create_followup takes the same fields as followup_create; "
     "send_external_email {to, subject, body} sends one email; "
     "create_internal_task and update_internal_task take the same fields as "
     "task_create and task_update. Times are ISO 8601 with timezone offset."
@@ -70,6 +73,7 @@ TOOLS = [
                         "schedule_task",
                         "move_calendar_event",
                         "send_external_email",
+                        "create_followup",
                         "create_internal_task",
                         "update_internal_task",
                     ],

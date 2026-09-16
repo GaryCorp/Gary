@@ -1,4 +1,5 @@
 import json
+import uuid
 from typing import Annotated, Any
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationError
@@ -31,6 +32,13 @@ def _timestamp(value: str) -> str:
     return parse_timestamp(value, "timestamp")
 
 
+def _entity_id(value: str) -> str:
+    try:
+        return str(uuid.UUID(value))
+    except (ValueError, AttributeError, TypeError):
+        raise ValueError("must be an id returned by a Gary tool (a UUID)") from None
+
+
 def _metadata(value: dict[str, Any] | None) -> dict[str, Any] | None:
     if value is None:
         return None
@@ -49,7 +57,7 @@ def _metadata(value: dict[str, Any] | None) -> dict[str, Any] | None:
 Timestamp = Annotated[str, AfterValidator(_timestamp)]
 Priority = Annotated[int, Field(strict=True, ge=1, le=10)]
 Minutes = Annotated[int, Field(strict=True, ge=0, le=100_000)]
-EntityId = Annotated[str, Field(min_length=1, max_length=64)]
+EntityId = Annotated[str, Field(min_length=1, max_length=64), AfterValidator(_entity_id)]
 Metadata = Annotated[dict[str, Any] | None, AfterValidator(_metadata)]
 
 

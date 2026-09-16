@@ -69,7 +69,11 @@ def test_new_alerts_reported_once(gary, clock):
     alerts = gary.planning.collect_new_alerts()
     assert alerts["overdue_tasks"] == []  # not repeated
     assert [f["id"] for f in alerts["due_followups"]] == [followup["id"]]
-    assert gary.planning.collect_new_alerts() == {"due_followups": [], "overdue_tasks": []}
+    assert gary.planning.collect_new_alerts() == {
+        "due_followups": [],
+        "overdue_tasks": [],
+        "missed_blocks": [],
+    }
     assert "task_overdue_detected" in audit_events(gary, "task", task["id"])
 
 

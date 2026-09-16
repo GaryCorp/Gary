@@ -8,7 +8,12 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from gary import build_gary  # noqa: E402
-from gary.models.action import ScheduleTaskPayload, SendExternalEmailPayload  # noqa: E402
+from gary.models.action import (  # noqa: E402
+    MoveCalendarEventPayload,
+    ScheduleTaskPayload,
+    SendExternalEmailPayload,
+)
+from gary.policy import CRITICAL_TASK_PRIORITY, YELLOW  # noqa: E402
 from gary.models.common import RequestModel  # noqa: E402
 from gary.models.project import CreateProjectRequest  # noqa: E402
 from gary.models.task import CreateTaskRequest  # noqa: E402
@@ -44,6 +49,13 @@ class FakeExternal:
         self.sent_emails.append(payload.to)
         return {"sent_message_id": f"msg-{len(self.sent_emails)}"}
 
+    async def move_event(self, payload: MoveCalendarEventPayload, context: dict) -> dict:
+        event_id = context["task"]["calendar_event_id"]
+        if event_id not in self.events:
+            raise RuntimeError("That calendar event no longer exists")
+        self.events[event_id] = (payload.new_start, payload.new_end)
+        return {"event_id": event_id}
+
     async def create_event(self, payload: ScheduleTaskPayload, context: dict) -> dict:
         if self.fail_next:
             error, self.fail_next = self.fail_next, None
@@ -72,12 +84,43 @@ def _record_schedule(repos, payload, result, now):
     return {}
 
 
+def _check_move(repos, payload):
+    task = require_task(repos, payload.task_id)
+    if not task["calendar_event_id"]:
+        raise ValueError("not on the calendar")
+    return {"task": task}
+
+
+def _classify_move(repos, payload):
+    task = repos.tasks.get(payload.task_id)
+    critical = task["priority"] >= CRITICAL_TASK_PRIORITY or task["id"] in repos.commitments.open_task_ids()
+    return YELLOW if critical else None
+
+
+def _record_move(repos, payload, result, now):
+    repos.tasks.update(
+        payload.task_id, now=now, scheduled_start=payload.new_start, scheduled_end=payload.new_end
+    )
+    return {}
+
+
 def fake_handlers(external: FakeExternal) -> dict[str, ActionHandler]:
+    """Mirror the backend's Google handlers with in-memory fakes."""
     return {
+        "move_calendar_event": ActionHandler(
+            payload_model=MoveCalendarEventPayload,
+            summarize=lambda p, c: f"Move {c['task']['title']}" if c.get("task") else "Move",
+            check=_check_move,
+            classify=_classify_move,
+            execute=external.move_event,
+            record=_record_move,
+            audit_event="calendar_changed",
+        ),
         "send_external_email": ActionHandler(
             payload_model=SendExternalEmailPayload,
             summarize=lambda p, c: f"Email {p.to}: {p.subject}",
             execute=external.send_email,
+            audit_event="email_sent",
         ),
         "schedule_task": ActionHandler(
             payload_model=ScheduleTaskPayload,
@@ -85,6 +128,7 @@ def fake_handlers(external: FakeExternal) -> dict[str, ActionHandler]:
             check=_check_schedule,
             execute=external.create_event,
             record=_record_schedule,
+            audit_event="calendar_changed",
         ),
     }
 

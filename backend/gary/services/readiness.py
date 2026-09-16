@@ -52,8 +52,14 @@ def calculate_task_score(
     now: str,
     blocks_other_tasks: bool,
     has_external_commitment: bool,
+    project_priority: int | None = None,
 ) -> int:
     score = task["priority"] * 10
+
+    # Tasks in a more important project rank higher; a normal-priority (5)
+    # project, or no project, adds nothing.
+    if project_priority is not None:
+        score += (project_priority - 5) * 2
 
     if task_is_overdue(task, now):
         score += 40

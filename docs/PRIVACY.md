@@ -58,9 +58,11 @@ Google OAuth credentials are stored locally in encrypted form.
 What you ask Gary to note is sent to OpenAI as part of the conversation, like
 any request, and saved to your local Joplin app. The names of notebooks inside
 Gary, and the titles of notes in them, are sent when Gary looks up where a note
-goes or which note to delete. In conversation Gary never reads the text of
-existing notes, and cannot see notebooks outside Gary. The one exception is the
-scheduled planning cycle below.
+goes or which note to delete. Gary never reads the text of existing notes,
+and cannot see notebooks outside Gary, with one exception: planning (the
+planning cycle below, and `planning_get_context` in conversation) reads
+Planning notes titled like an active project or "Preferences", and Gary's
+previous daily summary.
 
 ## Projects and tasks
 
@@ -72,16 +74,23 @@ runs in the backend only; Gary speaks the titles aloud.
 
 ## Scheduled planning cycle
 
-Each scheduled run (by default 8:00, 12:30, and 17:30 on weekdays) makes one
-request to OpenAI (`PLANNING_MODEL`) containing:
+Each planning cycle (scheduled by default at 8:00, 12:30, and 17:30 on
+weekdays, run on request with "replan" or "close out the day", or after
+scheduled work passes unfinished) makes one request to OpenAI
+(`PLANNING_MODEL`) containing:
 
 - the same operations state `planning_get_context` returns: projects, tasks,
   deadlines, follow-ups, commitments, pending approvals, and recent actions;
 - your busy calendar times for the next 72 hours, as start and end times only,
   with no event titles, attendees, or descriptions;
+- the deterministic brief: today's scheduled work, completed and unfinished
+  tasks, risks, pending approvals, and earlier plans from today;
 - the text (up to 3000 characters each) of notes in **Gary › Planning** whose
-  title matches an active project name, and of Gary's previous daily summary
-  note. No other note is read.
+  title matches an active project name or is "Preferences", and of Gary's
+  previous daily summary note. No other note is read;
+- the sender name, subject, and Gmail's short preview (about 200 characters) of
+  up to 10 unread Primary inbox emails, never bodies or addresses. Set
+  `PLANNING_EMAIL=subjects` to leave out previews, or `off` to leave out email.
 
 The request is sent with `store: false`. The daily summary is written to
 **Gary › Daily Summaries** in Joplin, and a short briefing may be spoken aloud.

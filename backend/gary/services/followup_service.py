@@ -13,6 +13,35 @@ from gary.services.common import (
 )
 
 
+def create_followup_in(
+    repos: Repositories, request: CreateFollowupRequest, now: str, actor: str
+) -> dict:
+    """Create a follow-up inside an existing transaction."""
+    require_project(repos, request.project_id)
+    task = require_task(repos, request.task_id)
+    project_id = request.project_id or (task["project_id"] if task else None)
+
+    followup = repos.followups.create(
+        title=request.title,
+        due_at=request.due_at,
+        description=request.description,
+        priority=request.priority,
+        project_id=project_id,
+        task_id=request.task_id,
+        now=now,
+    )
+    repos.audit.write(
+        actor,
+        "followup_created",
+        f"Created follow-up: {followup['title']}",
+        "followup",
+        followup["id"],
+        {"due_at": followup["due_at"], "task_id": followup["task_id"]},
+        now=now,
+    )
+    return followup
+
+
 class FollowupService:
     def __init__(self, db: Database, clock: Clock = default_clock):
         self.db = db
@@ -21,30 +50,7 @@ class FollowupService:
     def create_followup(self, request: CreateFollowupRequest, actor: str = GARY_ACTOR) -> dict:
         now = clock_now(self.clock)
         with self.db.transaction() as conn:
-            repos = Repositories.bind(conn)
-            require_project(repos, request.project_id)
-            task = require_task(repos, request.task_id)
-            project_id = request.project_id or (task["project_id"] if task else None)
-
-            followup = repos.followups.create(
-                title=request.title,
-                due_at=request.due_at,
-                description=request.description,
-                priority=request.priority,
-                project_id=project_id,
-                task_id=request.task_id,
-                now=now,
-            )
-            repos.audit.write(
-                actor,
-                "followup_created",
-                f"Created follow-up: {followup['title']}",
-                "followup",
-                followup["id"],
-                {"due_at": followup["due_at"], "task_id": followup["task_id"]},
-                now=now,
-            )
-        return followup
+            return create_followup_in(Repositories.bind(conn), request, now, actor)
 
     def complete_followup(
         self, request: CompleteFollowupRequest, actor: str = GARY_ACTOR
@@ -139,3 +145,8 @@ class CommitmentService:
     def list_open(self) -> list[dict]:
         with self.db.read() as conn:
             return Repositories.bind(conn).commitments.list_open()
+
+    def list_commitments(self, status: str = "open") -> list[dict]:
+        with self.db.read() as conn:
+            repos = Repositories.bind(conn)
+            return repos.commitments.list_open() if status == "open" else repos.commitments.list_all()

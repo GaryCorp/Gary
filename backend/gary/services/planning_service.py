@@ -24,13 +24,138 @@ PLANNING_TYPES = ("morning", "midday", "evening", "event_triggered", "manual")
 
 
 class RecordPlanRequest(RequestModel):
-    planning_run_id: EntityId
+    # Omit when no planning_get_context call started a run in this conversation.
+    planning_run_id: EntityId | None = None
     summary: str = Field(min_length=1, max_length=4000)
     action_ids: list[EntityId] = Field(default_factory=list, max_length=50)
 
 
 def shift(now: str, **delta) -> str:
     return format_utc(to_datetime(now) + dt.timedelta(**delta))
+
+
+def collect_operations(repos: Repositories, now: str) -> dict:
+    upcoming_end = shift(now, days=UPCOMING_DEADLINE_DAYS)
+    projects = repos.projects.list_active()
+    all_projects = {p["id"]: p for p in repos.projects.list_all()}
+    blocking_ids = repos.dependencies.task_ids_blocking_open_tasks()
+    commitment_task_ids = repos.commitments.open_task_ids()
+
+    ready, blocked, underway, overdue = [], [], [], []
+    open_tasks = repos.tasks.list_open()
+    for task in open_tasks:
+        dependencies = repos.dependencies.list_dependencies(task["id"])
+        readiness = task_readiness(task, dependencies, now)
+        project = all_projects.get(task["project_id"])
+        entry = {
+            "task_id": task["id"],
+            "title": task["title"],
+            "project": project["name"] if project else None,
+            "status": task["status"],
+            "priority": task["priority"],
+            "planning_score": calculate_task_score(
+                task,
+                now,
+                blocks_other_tasks=task["id"] in blocking_ids,
+                has_external_commitment=task["id"] in commitment_task_ids,
+                project_priority=project["priority"] if project else None,
+            ),
+            "deadline": task["deadline"],
+            "estimated_minutes": task["estimated_minutes"],
+            "scheduled_start": task["scheduled_start"],
+            "scheduled_end": task["scheduled_end"],
+        }
+
+        if task_is_overdue(task, now):
+            overdue.append(entry)
+        if readiness["ready"]:
+            ready.append(entry)
+        elif task["status"] == "in_progress":
+            underway.append(entry)
+        else:
+            blocked.append(
+                {
+                    **entry,
+                    "blocked_by": readiness["blocked_by"],
+                    "reasons": readiness["reasons"],
+                }
+            )
+
+    def by_score(entry):
+        return (-entry["planning_score"], entry["deadline"] or "~")
+
+    ready.sort(key=by_score)
+    blocked.sort(key=by_score)
+    underway.sort(key=by_score)
+    overdue.sort(key=lambda entry: entry["deadline"])
+
+    missed = [
+        {
+            "task_id": task["id"],
+            "title": task["title"],
+            "status": task["status"],
+            "scheduled_start": task["scheduled_start"],
+            "scheduled_end": task["scheduled_end"],
+            "affects": [t["title"] for t in repos.dependencies.open_downstream_of(task["id"])],
+        }
+        for task in repos.tasks.list_missed_blocks(now)
+    ]
+
+    open_commitments = repos.commitments.list_open()
+    upcoming_deadlines = sorted(
+        [
+            {"type": "task", "title": t["title"], "deadline": t["deadline"]}
+            for t in repos.tasks.list_deadlines_between(now, upcoming_end)
+        ]
+        + [
+            {"type": "project", "title": p["name"], "deadline": p["deadline"]}
+            for p in projects
+            if p["deadline"] and now <= p["deadline"] <= upcoming_end
+        ]
+        + [
+            {"type": "commitment", "title": c["description"], "deadline": c["deadline"]}
+            for c in open_commitments
+            if c["deadline"] and c["deadline"] <= upcoming_end
+        ],
+        key=lambda item: item["deadline"],
+    )
+
+    return {
+        "now": now,
+        "active_projects": [
+            {
+                "project_id": p["id"],
+                "name": p["name"],
+                "status": p["status"],
+                "priority": p["priority"],
+                "deadline": p["deadline"],
+                "open_tasks": sum(1 for t in open_tasks if t["project_id"] == p["id"]),
+            }
+            for p in projects
+        ],
+        "ready_tasks": ready[:CONTEXT_LIST_LIMIT],
+        "in_progress_tasks": underway[:CONTEXT_LIST_LIMIT],
+        "blocked_tasks": blocked[:CONTEXT_LIST_LIMIT],
+        "overdue_tasks": overdue[:CONTEXT_LIST_LIMIT],
+        "missed_scheduled_blocks": missed[:CONTEXT_LIST_LIMIT],
+        "upcoming_deadlines": upcoming_deadlines[:CONTEXT_LIST_LIMIT],
+        "due_followups": repos.followups.list_due(now)[:CONTEXT_LIST_LIMIT],
+        "upcoming_followups": repos.followups.list_pending_between(
+            now, shift(now, hours=UPCOMING_FOLLOWUP_HOURS)
+        )[:CONTEXT_LIST_LIMIT],
+        "open_commitments": open_commitments[:CONTEXT_LIST_LIMIT],
+        "pending_approvals": repos.approvals.list_pending()[:CONTEXT_LIST_LIMIT],
+        "recent_actions": repos.actions.list_recent(shift(now, hours=-RECENT_ACTION_HOURS)),
+        "truncated_lists": {
+            name: count
+            for name, count in {
+                "ready_tasks": len(ready),
+                "blocked_tasks": len(blocked),
+                "overdue_tasks": len(overdue),
+            }.items()
+            if count > CONTEXT_LIST_LIMIT
+        },
+    }
 
 
 class PlanningService:
@@ -45,117 +170,11 @@ class PlanningService:
             raise ValueError(f"planning_type must be one of {PLANNING_TYPES}")
 
         now = clock_now(self.clock)
-        upcoming_end = shift(now, days=UPCOMING_DEADLINE_DAYS)
-
         with self.db.transaction() as conn:
             repos = Repositories.bind(conn)
             repos.planning_runs.fail_stale(shift(now, hours=-STALE_PLANNING_RUN_HOURS), now)
             expire_stale_approvals(repos, now)
-
-            projects = repos.projects.list_active()
-            project_names = {p["id"]: p["name"] for p in repos.projects.list_all()}
-            blocking_ids = repos.dependencies.task_ids_blocking_open_tasks()
-            commitment_task_ids = repos.commitments.open_task_ids()
-
-            ready, blocked, underway, overdue = [], [], [], []
-            open_tasks = repos.tasks.list_open()
-            for task in open_tasks:
-                dependencies = repos.dependencies.list_dependencies(task["id"])
-                readiness = task_readiness(task, dependencies, now)
-                entry = {
-                    "task_id": task["id"],
-                    "title": task["title"],
-                    "project": project_names.get(task["project_id"]),
-                    "status": task["status"],
-                    "priority": task["priority"],
-                    "planning_score": calculate_task_score(
-                        task,
-                        now,
-                        blocks_other_tasks=task["id"] in blocking_ids,
-                        has_external_commitment=task["id"] in commitment_task_ids,
-                    ),
-                    "deadline": task["deadline"],
-                    "estimated_minutes": task["estimated_minutes"],
-                    "scheduled_start": task["scheduled_start"],
-                    "scheduled_end": task["scheduled_end"],
-                }
-
-                if task_is_overdue(task, now):
-                    overdue.append(entry)
-                if readiness["ready"]:
-                    ready.append(entry)
-                elif task["status"] in ("in_progress",):
-                    underway.append(entry)
-                else:
-                    blocked.append(
-                        {
-                            **entry,
-                            "blocked_by": readiness["blocked_by"],
-                            "reasons": readiness["reasons"],
-                        }
-                    )
-
-            by_score = lambda entry: (-entry["planning_score"], entry["deadline"] or "~")
-            ready.sort(key=by_score)
-            blocked.sort(key=by_score)
-            underway.sort(key=by_score)
-            overdue.sort(key=lambda entry: entry["deadline"])
-
-            upcoming_deadlines = sorted(
-                [
-                    {"type": "task", "title": t["title"], "deadline": t["deadline"]}
-                    for t in repos.tasks.list_deadlines_between(now, upcoming_end)
-                ]
-                + [
-                    {"type": "project", "title": p["name"], "deadline": p["deadline"]}
-                    for p in projects
-                    if p["deadline"] and now <= p["deadline"] <= upcoming_end
-                ]
-                + [
-                    {"type": "commitment", "title": c["description"], "deadline": c["deadline"]}
-                    for c in repos.commitments.list_open()
-                    if c["deadline"] and c["deadline"] <= upcoming_end
-                ],
-                key=lambda item: item["deadline"],
-            )
-
-            context = {
-                "now": now,
-                "active_projects": [
-                    {
-                        "project_id": p["id"],
-                        "name": p["name"],
-                        "status": p["status"],
-                        "priority": p["priority"],
-                        "deadline": p["deadline"],
-                        "open_tasks": sum(1 for t in open_tasks if t["project_id"] == p["id"]),
-                    }
-                    for p in projects
-                ],
-                "ready_tasks": ready[:CONTEXT_LIST_LIMIT],
-                "in_progress_tasks": underway[:CONTEXT_LIST_LIMIT],
-                "blocked_tasks": blocked[:CONTEXT_LIST_LIMIT],
-                "overdue_tasks": overdue[:CONTEXT_LIST_LIMIT],
-                "upcoming_deadlines": upcoming_deadlines[:CONTEXT_LIST_LIMIT],
-                "due_followups": repos.followups.list_due(now)[:CONTEXT_LIST_LIMIT],
-                "upcoming_followups": repos.followups.list_pending_between(
-                    now, shift(now, hours=UPCOMING_FOLLOWUP_HOURS)
-                )[:CONTEXT_LIST_LIMIT],
-                "open_commitments": repos.commitments.list_open()[:CONTEXT_LIST_LIMIT],
-                "pending_approvals": repos.approvals.list_pending()[:CONTEXT_LIST_LIMIT],
-                "recent_actions": repos.actions.list_recent(
-                    shift(now, hours=-RECENT_ACTION_HOURS)
-                ),
-                "truncated_lists": {
-                    name: count
-                    for name, count in {
-                        "ready_tasks": len(ready),
-                        "blocked_tasks": len(blocked),
-                        "overdue_tasks": len(overdue),
-                    }.items()
-                    if count > CONTEXT_LIST_LIMIT
-                },
-            }
+            context = collect_operations(repos, now)
 
             counts = {
                 key: len(value)
@@ -170,11 +189,34 @@ class PlanningService:
 
         return {"planning_run_id": run["id"], **context}
 
+    def snapshot(self) -> dict:
+        """The same operational picture without starting a planning run."""
+        now = clock_now(self.clock)
+        with self.db.transaction() as conn:
+            repos = Repositories.bind(conn)
+            expire_stale_approvals(repos, now)
+            return collect_operations(repos, now)
+
+    def latest_run(self) -> dict | None:
+        with self.db.read() as conn:
+            return Repositories.bind(conn).planning_runs.latest()
+
+    def last_cycle_finished_at(self) -> str | None:
+        """When the last full planning cycle completed or failed. Context
+        lookups in conversation do not count."""
+        with self.db.read() as conn:
+            return Repositories.bind(conn).audit.latest_timestamp(
+                ("planning_cycle_completed", "planning_cycle_failed")
+            )
+
     def record_plan(self, request: RecordPlanRequest, actor: str = GARY_ACTOR) -> dict:
         now = clock_now(self.clock)
         with self.db.transaction() as conn:
             repos = Repositories.bind(conn)
-            run = repos.planning_runs.get(request.planning_run_id)
+            if request.planning_run_id is None:
+                run = repos.planning_runs.start("manual", "recorded in conversation", now)
+            else:
+                run = repos.planning_runs.get(request.planning_run_id)
             if run is None:
                 raise NotFoundError(f"No planning run with id {request.planning_run_id}")
             if run["status"] != "running":
@@ -306,4 +348,25 @@ class PlanningService:
                     now=now,
                 )
 
-        return {"due_followups": followups, "overdue_tasks": overdue}
+            missed = []
+            for task in repos.tasks.list_missed_blocks(now):
+                block_key = f"{task['id']}@{task['scheduled_end']}"
+                if repos.audit.has_event("scheduled_block_missed", block_key):
+                    continue
+                downstream = [t["title"] for t in repos.dependencies.open_downstream_of(task["id"])]
+                repos.audit.write(
+                    SYSTEM_ACTOR,
+                    "scheduled_block_missed",
+                    f"Scheduled time passed but not finished: {task['title']}",
+                    "task_block",
+                    block_key,
+                    {
+                        "task_id": task["id"],
+                        "scheduled_end": task["scheduled_end"],
+                        "affects": downstream,
+                    },
+                    now=now,
+                )
+                missed.append({**task, "affects": downstream})
+
+        return {"due_followups": followups, "overdue_tasks": overdue, "missed_blocks": missed}
