@@ -18,7 +18,8 @@ It is not designed as an Internet-facing multi-user service.
 
 - OpenAI API key;
 - Google OAuth client secret;
-- Google refresh token store.
+- Google refresh token store;
+- Joplin token.
 
 ### Backend receives
 
@@ -53,7 +54,7 @@ Joplin's port. It runs read-only as your user with all capabilities dropped.
 
 ## Container controls
 
-Both services use:
+All three services use:
 
 ```text
 no-new-privileges:true
@@ -73,6 +74,9 @@ The voice service receives only the host sound-server socket it needs:
 ```
 
 It does not use `privileged: true`.
+
+`joplin-proxy` also runs with a read-only filesystem, as your host user, and
+with its script mounted read-only.
 
 ## Resource limits
 
@@ -111,6 +115,12 @@ chmod 700 data
 
 The application validates the OAuth `state` parameter to reduce CSRF risk.
 
+## VPN allowlist
+
+The fixed assistant subnet (`172.30.99.0/24`) is allowlisted in NordVPN so
+containers can reach each other. Allowlisted traffic bypasses the VPN tunnel,
+but this subnet exists only on your machine, so nothing extra leaves it.
+
 ## Calendar tool validation
 
 The backend validates:
@@ -146,21 +156,29 @@ These reduce but cannot eliminate prompt-injection risk. Listen to the
 recipient and text Gary reads back before confirming, especially for new
 emails.
 
+## Joplin tools
+
+- all note tools are confined to the Gary notebook (`JOPLIN_NOTEBOOK`) and its
+  direct sub-notebooks; other notebooks are never matched;
+- no tool returns note text, so existing notes cannot leak to OpenAI or be
+  used for prompt injection;
+- deleting requires spoken confirmation and `confirmed: true`, accepts only
+  note IDs listed or created in the current voice session, rechecks the note is
+  still inside Gary, and moves one note to the Joplin trash rather than
+  deleting it permanently;
+- notes cannot be edited or moved, and notebooks cannot be deleted;
+- the agent is told to put email content in a note only when asked.
+
 ## Git
 
-The provided `.gitignore` ignores:
+The provided `.gitignore` ignores secrets and local data:
 
 ```text
 .env
 .env.bak*
-.models/
-```
-
-Also add these before committing, because they contain secrets:
-
-```text
 client_secret.json
-data/
+data/*   (except data/.gitkeep)
+.models/
 ```
 
 Always inspect `git status` before pushing a repository.

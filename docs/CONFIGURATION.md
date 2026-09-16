@@ -37,7 +37,8 @@ Primary GID used to build the non-root container users.
 
 ### `AUDIO_GID`
 
-Host group ID that owns the sound devices.
+Host group ID that owns the sound devices. No longer used since audio moved to
+the PipeWire/PulseAudio socket; `setup.sh` still sets it.
 
 ## OpenAI
 
@@ -243,8 +244,9 @@ Default:
 Gary
 ```
 
-The top-level notebook Gary writes to. It is created if it does not exist. Gary
-can only create notes in it and in notebooks inside it.
+The top-level notebook Gary uses. It is created if it does not exist. Gary can
+only create, list, and delete notes in it and in notebooks inside it, and
+creates new notebooks inside it.
 
 Joplin listens only on the host's `127.0.0.1:41184`, which containers cannot
 reach. The `joplin-proxy` service runs on the host network and forwards
@@ -282,9 +284,10 @@ inside `ASSISTANT_SUBNET`; change both together.
 
 ### `AUDIO_DEVICE`
 
-Default: empty.
+Default: empty (`.env.example` sets `default`).
 
-An empty value lets PortAudio choose its default device.
+An empty value or `default` uses the host PipeWire/PulseAudio server's default
+device.
 
 To list devices:
 

@@ -1,41 +1,36 @@
 {
   "project": "ai-calendar-assistant-complete",
-  "file_count": 28,
+  "file_count": 31,
   "files": [
     {
-      "path": ".dockerignore",
-      "bytes": 57,
-      "sha256": "d9f2aca5027bf0b2f48b9ff5ab7faa425abc9435233e4489fb2094ac0167701b"
-    },
-    {
       "path": ".env.example",
-      "bytes": 1614,
-      "sha256": "e430dbda2f6545345644680671b5d8bf9f3eef4eaef09697cff9470fc4a854f4"
+      "bytes": 4839,
+      "sha256": "70679e71a5196044e5f90e7a0abd1f9a73643669cf5496be87b64b38967a0195"
     },
     {
       "path": ".gitignore",
-      "bytes": 94,
-      "sha256": "eb2bdf14ef83cc5e941b82085dc0bbdaaf1a1999e3f792a1d1b4ee2198b2feb9"
+      "bytes": 212,
+      "sha256": "ed96dcfb18fab615cb13cacd770bb7b57ab8208e41d77167b4bcdea12bea43e0"
     },
     {
       "path": "CHANGELOG.md",
-      "bytes": 1038,
-      "sha256": "83c6483fdff420ef9c1f1e48cccf5e008f9b5814e65c11bbe0aabee547a978d8"
+      "bytes": 5708,
+      "sha256": "e5402d104bf1dbe9a5b288221cdb411d164e03c35e560ddb9bfbab4c2b574212"
     },
     {
       "path": "Makefile",
-      "bytes": 434,
-      "sha256": "c4c7d4b8d3cf0de95609d9bd143b2f384c317bdcc5952060601097e72e6815e7"
+      "bytes": 762,
+      "sha256": "2787024d43660d535314ccc1312adabbab85b7944b83ebecc944c8d8a4be0a0f"
     },
     {
       "path": "QUICKSTART.md",
-      "bytes": 1572,
-      "sha256": "b1f55b7b4fada019b236b9886a0d85a97d18f65a45305c2bfa64283a7c5432c8"
+      "bytes": 2680,
+      "sha256": "e6258d3c02f66b0ba868b3a53a2a7a5a4dccc98ae254ece6ed07d93a1c7fce41"
     },
     {
       "path": "README.md",
-      "bytes": 2194,
-      "sha256": "5f5591baed4d927eb6c52b595e48fb6859a046eb9aee1dcf997f740dc9ec5e16"
+      "bytes": 3190,
+      "sha256": "69e6bff31c67819a81a613bf387dc0e413e93cf564b9dba3e23617b201fdf4ba"
     },
     {
       "path": "backend/Dockerfile",
@@ -49,8 +44,8 @@
     },
     {
       "path": "backend/app/main.py",
-      "bytes": 24129,
-      "sha256": "2fbdd466efb8fb8af6dd9ca924ee888bf80b712b1b2553fc628ce2ffc00eed18"
+      "bytes": 87320,
+      "sha256": "9922269d4953b67ed5be47d9179568098f6ca391633b6f2491ca9718b9e6d798"
     },
     {
       "path": "backend/requirements.txt",
@@ -58,9 +53,14 @@
       "sha256": "704486dd964797b8eda682953df6a8cd285cbea996ac2c5dffa60c3bca7d6c78"
     },
     {
+      "path": "compose.gpu.yaml",
+      "bytes": 742,
+      "sha256": "d86ae87e0f70a3da034d4394b0a9b307d0a8ae7a39e420e8020ed583c2807414"
+    },
+    {
       "path": "compose.yaml",
-      "bytes": 1758,
-      "sha256": "158d762d93c2657bff9aa2deca0c87b2394f9b7aaba45b47bb255bd06fcf6f23"
+      "bytes": 5146,
+      "sha256": "af4e8bddc4e6a0a6867777ecfaff44dc4f910c4f7d88a245028a8c924f0d7395"
     },
     {
       "path": "data/.gitkeep",
@@ -69,53 +69,63 @@
     },
     {
       "path": "docs/ARCHITECTURE.md",
-      "bytes": 2560,
-      "sha256": "9ab85b6bc832bb5d9699242d97c6d0ff971263162c4e71fe23acc81c3e3463e3"
+      "bytes": 10430,
+      "sha256": "f2f0bf8feecf873e64f6b9311bb7bde8407de08860fc5d9dcf03988425cb188e"
     },
     {
       "path": "docs/CONFIGURATION.md",
-      "bytes": 2024,
-      "sha256": "f809984b136e70ececb638d382586a5ab3903e9ec1054eeb3780dcc3cf020c8e"
+      "bytes": 5733,
+      "sha256": "528709488bb404a1d3caf3d98306e73c9ad7ef8610729cab66496286e20a0963"
     },
     {
       "path": "docs/GOOGLE_OAUTH.md",
-      "bytes": 1887,
-      "sha256": "39dd412b575f20756ebd62754ed272302fca3a3a45a864af88d7f3d9b76e8131"
+      "bytes": 2824,
+      "sha256": "adb9142f3ad7d246e2b7a4760d7dda752d6c9708da06b28a9cd0c2c452f390b1"
     },
     {
       "path": "docs/PRIVACY.md",
-      "bytes": 1333,
-      "sha256": "88cb6954edaeeda8fc4b6a6bc981ec30011ac054217421f8511b9a553f56743c"
+      "bytes": 2505,
+      "sha256": "9df0b89abd92cd3909038123824e48fbb557906a8770077b5d75a80d4f08504f"
     },
     {
       "path": "docs/PROJECT_FILES.md",
-      "bytes": 2407,
-      "sha256": "b991230b0d45f057e2606f43bd407e2e86fd0f629e56e63a77af4346cb283291"
+      "bytes": 3253,
+      "sha256": "9d88f603a2ce332a33105779d46e4dea540c9d6f506468b6d3c0c9eda03cf29e"
     },
     {
       "path": "docs/SECURITY.md",
-      "bytes": 2171,
-      "sha256": "e9987899312a392173230856c80b45eefeac399bf21f2afb577f999507b5730e"
+      "bytes": 5074,
+      "sha256": "52dc488a419f76e09a5fa5d7c5b31b13a3b24ece859c65a694e34247fe72fef1"
     },
     {
       "path": "docs/SETUP.md",
-      "bytes": 1561,
-      "sha256": "ebb3dd28bcee4d5bd3b88c4510b60d83281fde3981770fd374c2206de23b7142"
+      "bytes": 3489,
+      "sha256": "fed650f8a654f16f7c11a6cc6848b74d29d0d6b0968194b30a992aa0b9d28552"
     },
     {
       "path": "docs/TROUBLESHOOTING.md",
-      "bytes": 2248,
-      "sha256": "2f59e8879bde88bcdd8f7c9437d16ad840b35f228e97e11a87f28ceff996ab1c"
+      "bytes": 4980,
+      "sha256": "15729a9380d0e852e69e52341bad441b6e879fa7e4833fc6c32b5af4d8c27af7"
     },
     {
       "path": "docs/USAGE.md",
-      "bytes": 1736,
-      "sha256": "22ee8d8b22469478a5d1af37a4888349670321ced47524a68a67ee79663531a8"
+      "bytes": 6055,
+      "sha256": "f0644aa657edfa22b3f272292ecfd226b1672c84087f09443a47fb95549abd52"
+    },
+    {
+      "path": "joplin_proxy/joplin_proxy.py",
+      "bytes": 2417,
+      "sha256": "7febddc59d455e6b19cdf3731638350eba0f1c54a3a6aad7eff93511356a0ccd"
+    },
+    {
+      "path": "main.py",
+      "bytes": 528,
+      "sha256": "dfc31835c0454c385b134a16c45d8d1dabc295285c7e4018654ba09632cdfa11"
     },
     {
       "path": "scripts/check_python.sh",
-      "bytes": 161,
-      "sha256": "0397cf1a9af381eb90565db2da79a2b9c32fea51f4ede67dd164bc4001592343"
+      "bytes": 212,
+      "sha256": "a273d0d9643c8242c3c424b5ed5750eef49a27e301a00eda407d1b5deb034581"
     },
     {
       "path": "scripts/diagnose.sh",
@@ -124,23 +134,28 @@
     },
     {
       "path": "setup.sh",
-      "bytes": 2385,
-      "sha256": "733932967d761c89a8e364a8658342e78c83a5c4d2716d84317ad50178e334c5"
+      "bytes": 2558,
+      "sha256": "43d8eefbd92e289ada9e0ebd15681eb13fe3d45586c7a21bcac48d327d42c04c"
     },
     {
       "path": "voice/Dockerfile",
-      "bytes": 897,
-      "sha256": "11c1292ff74fde4d18b4176845127c270e60eee3cadcc3d44ba39dbc647ad822"
+      "bytes": 2331,
+      "sha256": "8f976d36ba049e0d26b5feb38c43992cede69371e00be051a2f79a0f5fd44636"
     },
     {
       "path": "voice/requirements.txt",
-      "bytes": 99,
-      "sha256": "02277371c4e59ebe7b5bf6bdf8ce9a1433b6fcac0a3a1c2e2b14b3bc68374bb0"
+      "bytes": 117,
+      "sha256": "86a567acf827b28108ef4e3b76bd9bd69507aa17f32204e76cb1aa43b1e9e1ca"
+    },
+    {
+      "path": "voice/run_whisper.py",
+      "bytes": 3646,
+      "sha256": "e100c786f133eb9a88cf4a0fd411044218c7f88bf156d7a26c6b030916c9d07d"
     },
     {
       "path": "voice/voice_client.py",
-      "bytes": 12695,
-      "sha256": "9d30d18b998d75498fe7e886ee5aa4047e1c40d13f81c7ab3300561ce1cd3d70"
+      "bytes": 18730,
+      "sha256": "be5ad7fc91d69a56607a9f9687151933f8d51f74683f69fc28c91e8be08997e3"
     }
   ]
 }

@@ -45,7 +45,7 @@ Save it to the project root as:
 client_secret.json
 ```
 
-Do not commit this file; add it to `.gitignore`.
+Do not commit this file. The provided `.gitignore` already ignores it.
 
 ## 6. Scopes requested by this project
 

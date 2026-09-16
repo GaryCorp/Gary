@@ -20,7 +20,8 @@ The voice container does **not** receive:
 
 - the OpenAI API key;
 - Google OAuth client credentials;
-- Google refresh credentials.
+- Google refresh credentials;
+- the Joplin token.
 
 ### 2. Backend container
 
@@ -32,7 +33,8 @@ Responsibilities:
 - WebSocket bridge from the voice service.
 - OpenAI Realtime connection, opened per activation.
 - Tool schema definition.
-- Calendar and Gmail API execution.
+- Calendar, Gmail, and Joplin API execution.
+- Hourly new email check.
 - Input validation.
 
 ### 3. Google Calendar
@@ -164,9 +166,16 @@ delete_joplin_note
 ```
 
 They call the Joplin desktop app's Web Clipper API through the `joplin-proxy`
-service. Joplin listens only on the host's `127.0.0.1:41184`; `joplin-proxy`
-runs on the host network, listens on the assistant network's gateway
-(`172.30.99.1:41184`), and accepts connections only from the assistant subnet.
+service (see [Joplin proxy](#6-joplin-proxy-container)).
+
+- `list_joplin_notebooks` returns the Gary notebook and its sub-notebooks.
+- `create_joplin_notebook` creates a sub-notebook inside Gary, or reports that
+  one with that name already exists.
+- `create_joplin_note` creates a Markdown note in Gary or one of its
+  sub-notebooks and returns the note's ID.
+- `list_joplin_notes` returns note titles, notebook names, and update times,
+  optionally filtered by words in the title.
+- `delete_joplin_note` moves one note to the Joplin trash.
 
 Note safeguards:
 
@@ -183,6 +192,34 @@ Note safeguards:
 - New notebooks are always created inside Gary, and an existing name is reused
   rather than duplicated.
 - Titles are one line, up to 200 characters; bodies up to 20000 characters.
+
+### 6. Joplin proxy container
+
+Joplin desktop listens only on the host's `127.0.0.1:41184`, which containers
+cannot reach. The `joplin-proxy` service runs `joplin_proxy/joplin_proxy.py` in
+the stock `python:3.12-slim` image on the host network:
+
+```text
+backend container
+    |
+    v
+172.30.99.1:41184   (assistant network gateway, joplin-proxy)
+    |
+    v
+127.0.0.1:41184     (Joplin Web Clipper API)
+```
+
+It accepts connections only from `ASSISTANT_SUBNET`, holds no secrets (the
+backend sends the Joplin token with each request), and closes the connection if
+Joplin is not running, so the backend can tell the user to open Joplin.
+
+### 7. Docker network
+
+The voice and backend containers share the `assistant_net` bridge network,
+which has a fixed subnet, `172.30.99.0/24`, and gateway `172.30.99.1`
+(`ASSISTANT_SUBNET` and `ASSISTANT_GATEWAY`). `joplin-proxy` listens on that
+gateway address from the host side. A fixed subnet lets a VPN such as NordVPN
+allowlist it permanently.
 
 ## Audio flow
 
@@ -218,10 +255,10 @@ pre-roll + microphone PCM24k
             v
      OpenAI Realtime
        |           |
-       |           +--> calendar / email tool
+       |           +--> calendar / email / notes tool
        |                    |
        |                    v
-       |          Google Calendar / Gmail
+       |      Google Calendar / Gmail / Joplin
        |
        v
  assistant text
@@ -254,14 +291,17 @@ Consequences:
 The wake-word loop is local and unaffected by upstream disconnects, so the
 service can run indefinitely.
 
-## Why two containers
+## Why separate containers
 
 The separation reduces unnecessary secret exposure.
 
 The microphone process can be restarted or modified without giving it the
-OpenAI or Google credentials.
+OpenAI, Google, or Joplin credentials.
 
 The backend can remain isolated from direct audio-device access.
+
+Only the small `joplin-proxy` needs the host network, so the backend and voice
+services stay on the isolated bridge network.
 
 ## Host exposure
 

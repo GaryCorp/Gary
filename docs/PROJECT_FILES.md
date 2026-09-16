@@ -22,13 +22,14 @@ Complete environment-variable template.
 
 Prevents local credentials and runtime data from being committed.
 
-### `.dockerignore`
+### `compose.gpu.yaml`
 
-Reduces Docker build context and excludes secrets.
+Optional override that runs local Whisper on an NVIDIA GPU (`make up-gpu`).
 
 ### `setup.sh`
 
-Creates `.env`, random local secrets, host UID/GID, and audio GID.
+Creates `.env`, random local secrets, host UID/GID, and audio GID, and
+restricts `.env` and `data/` permissions.
 
 ### `Makefile`
 
@@ -36,7 +37,15 @@ Convenience commands.
 
 ### `CHANGELOG.md`
 
-Summary of the final build.
+Version history.
+
+### `MANIFEST.json`
+
+File list with sizes and SHA-256 hashes.
+
+### `main.py`
+
+PyCharm sample script. Not used by the assistant.
 
 ### `client_secret.json`
 
@@ -67,15 +76,17 @@ Contains:
 - encrypted token persistence;
 - Calendar API read/create helpers;
 - Realtime WebSocket bridge;
-- constrained calendar read and create function tools;
+- constrained calendar read, create, and delete function tools;
 - Gmail tools;
-- Joplin note and notebook tools.
+- Joplin note and notebook tools;
+- the hourly new email check.
 
 ## `voice/`
 
 ### `voice/Dockerfile`
 
-Builds the CPU-only local Whisper audio service.
+Builds the local Whisper and Piper TTS audio service (CPU by default, CUDA
+with `compose.gpu.yaml`).
 
 ### `voice/requirements.txt`
 
@@ -90,7 +101,13 @@ Contains:
 - wake-word detection;
 - pre-roll;
 - Realtime audio forwarding;
-- assistant audio playback.
+- local Piper TTS playback of Gary's replies;
+- new email announcements.
+
+### `voice/run_whisper.py`
+
+Runs the voice client directly on the host from the project virtualenv instead
+of in Docker, connecting to the backend on `127.0.0.1:8000`.
 
 ## `joplin_proxy/`
 
@@ -108,7 +125,7 @@ Checks Docker, host audio, configuration, and container audio visibility.
 
 ### `scripts/check_python.sh`
 
-Runs Python syntax checks on both application modules.
+Runs Python syntax checks on the backend, voice client, and Joplin proxy.
 
 ## `docs/`
 
