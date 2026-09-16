@@ -1,0 +1,28 @@
+# Run local Whisper on an NVIDIA GPU.
+#
+# Requires the host NVIDIA driver and nvidia-container-toolkit.
+# Use: docker compose -f compose.yaml -f compose.gpu.yaml up -d --build
+# (or: make up-gpu)
+
+services:
+  voice:
+    build:
+      args:
+        WHISPER_DEVICE: cuda
+
+    environment:
+      WHISPER_DEVICE: cuda
+      # int8 fits small GPUs (e.g. 2 GB) and works on Pascal and newer.
+      WHISPER_COMPUTE_TYPE: "${WHISPER_COMPUTE_TYPE:-int8}"
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+
+    # CUDA runtime libraries need more host memory than the CPU build.
+    mem_limit: 3g
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

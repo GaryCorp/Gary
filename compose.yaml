@@ -1,0 +1,135 @@
+name: ai-calendar-assistant
+
+services:
+  backend:
+    build:
+      context: ./backend
+      args:
+        APP_UID: "${HOST_UID:-1000}"
+        APP_GID: "${HOST_GID:-1000}"
+
+    restart: unless-stopped
+
+    environment:
+      OPENAI_API_KEY: "${OPENAI_API_KEY:?Set OPENAI_API_KEY in .env}"
+      SESSION_SECRET: "${SESSION_SECRET:?Run bash setup.sh}"
+      TOKEN_ENCRYPTION_KEY: "${TOKEN_ENCRYPTION_KEY:?Run bash setup.sh}"
+      VOICE_BRIDGE_TOKEN: "${VOICE_BRIDGE_TOKEN:?Run bash setup.sh}"
+
+      OPENAI_REALTIME_MODEL: "${OPENAI_REALTIME_MODEL:-gpt-realtime-2.1}"
+      LOCAL_TIMEZONE: "${LOCAL_TIMEZONE:-America/Chicago}"
+      WAKE_WORD: "${WAKE_WORD:-gary}"
+      EMAIL_CHECK_INTERVAL_MINUTES: "${EMAIL_CHECK_INTERVAL_MINUTES:-60}"
+      EMAIL_CHECK_QUIET_HOURS: "${EMAIL_CHECK_QUIET_HOURS-22-7}"
+
+      CLIENT_SECRETS_FILE: /run/secrets/google_client_secret.json
+      TOKEN_STORE_FILE: /data/token_store.enc
+      REDIRECT_URI: http://localhost:8000/oauth2callback
+
+      # The OAuth callback is plain http on host loopback only (127.0.0.1:8000).
+      OAUTHLIB_INSECURE_TRANSPORT: "1"
+      # Google may return previously granted scopes (include_granted_scopes).
+      OAUTHLIB_RELAX_TOKEN_SCOPE: "1"
+
+    volumes:
+      - type: bind
+        source: ./client_secret.json
+        target: /run/secrets/google_client_secret.json
+        read_only: true
+        bind:
+          create_host_path: false
+
+      - type: bind
+        source: ./data
+        target: /data
+        bind:
+          create_host_path: false
+
+    ports:
+      - "127.0.0.1:8000:8000"
+
+    networks:
+      assistant_net:
+        aliases:
+          - backend
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    pids_limit: 128
+    mem_limit: 768m
+    cpus: 1.50
+
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  voice:
+    build:
+      context: ./voice
+      args:
+        APP_UID: "${HOST_UID:-1000}"
+        APP_GID: "${HOST_GID:-1000}"
+        WHISPER_MODEL: "${WHISPER_MODEL:-base.en}"
+        PIPER_VOICE: "${PIPER_VOICE:-en_US-ryan-medium}"
+
+    restart: unless-stopped
+
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    environment:
+      BACKEND_WS_URL: ws://backend:8000/internal/voice
+      VOICE_BRIDGE_TOKEN: "${VOICE_BRIDGE_TOKEN:?Run bash setup.sh}"
+
+      WHISPER_MODEL_PATH: "/models/${WHISPER_MODEL:-base.en}"
+      PIPER_VOICE_PATH: "/models/piper/${PIPER_VOICE:-en_US-ryan-medium}.onnx"
+      PIPER_LENGTH_SCALE: "${PIPER_LENGTH_SCALE:-1.0}"
+      WAKE_WORD: "${WAKE_WORD:-gary}"
+      AUDIO_DEVICE: "${AUDIO_DEVICE:-}"
+
+      PRE_ROLL_SECONDS: "${PRE_ROLL_SECONDS:-1.8}"
+      WAKE_WINDOW_SECONDS: "${WAKE_WINDOW_SECONDS:-2.2}"
+      WAKE_CHECK_INTERVAL_SECONDS: "${WAKE_CHECK_INTERVAL_SECONDS:-1.25}"
+
+      ACTIVE_SESSION_SECONDS: "${ACTIVE_SESSION_SECONDS:-45}"
+      FOLLOWUP_GRACE_SECONDS: "${FOLLOWUP_GRACE_SECONDS:-10}"
+
+      PULSE_SERVER: unix:/run/pulse/native
+
+    # Host PipeWire/PulseAudio socket. Raw /dev/snd access fails for playback
+    # because the host sound server already holds the output device.
+    volumes:
+      - type: bind
+        source: "/run/user/${HOST_UID:-1000}/pulse/native"
+        target: /run/pulse/native
+        bind:
+          create_host_path: false
+
+    networks:
+      - assistant_net
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    pids_limit: 128
+    mem_limit: 1400m
+    cpus: 2.00
+
+networks:
+  assistant_net:
+    driver: bridge

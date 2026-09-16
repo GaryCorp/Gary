@@ -1,0 +1,10 @@
+.env
+.idea
+.venv
+# Whisper models are downloaded by the Docker build (and by run_whisper.py)
+.models/
+.env.bak*
+# Secrets: Google OAuth client and encrypted Google tokens
+client_secret.json
+data/*
+!data/.gitkeep

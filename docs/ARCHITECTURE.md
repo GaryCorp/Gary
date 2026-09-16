@@ -1,0 +1,243 @@
+# Architecture
+
+## Components
+
+### 1. Voice container
+
+Responsibilities:
+
+- Use host audio through the PipeWire/PulseAudio socket.
+- Capture 24 kHz mono microphone audio.
+- Keep a short rolling pre-roll buffer.
+- Resample a wake window to 16 kHz.
+- Run `faster-whisper` locally.
+- Detect the wake word `Gary`.
+- Stream PCM audio to the backend only after activation.
+- Speak the assistant's text replies with local Piper TTS.
+- Mute the microphone stream while the assistant is speaking.
+
+The voice container does **not** receive:
+
+- the OpenAI API key;
+- Google OAuth client credentials;
+- Google refresh credentials.
+
+### 2. Backend container
+
+Responsibilities:
+
+- FastAPI web UI.
+- Google OAuth.
+- Encrypted Google credential persistence.
+- WebSocket bridge from the voice service.
+- OpenAI Realtime connection, opened per activation.
+- Tool schema definition.
+- Calendar and Gmail API execution.
+- Input validation.
+
+### 3. Google Calendar
+
+The backend has four tools. They are available only to the voice agent as
+OpenAI Realtime function tools; there are no web endpoints for creating or
+deleting events.
+
+```text
+create_calendar_event
+create_all_day_event
+list_calendar_events
+delete_calendar_event
+```
+
+`create_calendar_event` accepts:
+
+- title
+- start time
+- end time
+- optional description
+
+`create_all_day_event` accepts:
+
+- title
+- first day (`YYYY-MM-DD`)
+- optional last day, inclusive, for multi-day events (capped at 366 days)
+- optional description
+
+The backend converts the inclusive last day to Google's exclusive end date.
+
+`list_calendar_events` accepts:
+
+- start and end times;
+- an optional result limit, capped at 25;
+- an optional free-text query.
+
+The read path expands recurring events, orders results chronologically, handles
+timed and all-day entries, and returns only the event fields needed for a spoken
+summary, including each `event_id`. Query ranges are capped at 366 days.
+
+`delete_calendar_event` accepts:
+
+- an `event_id`
+- `confirmed`, which must be `true`
+
+Deletion safeguards:
+
+- The agent is instructed to list matching events, read the event back, and
+  get an explicit yes before deleting.
+- The backend rejects the call unless `confirmed` is `true`.
+- The backend only deletes event IDs that were returned by
+  `list_calendar_events` or created during the same voice session, so a
+  guessed or hallucinated ID cannot delete anything.
+- One event per call. For a recurring series, only that occurrence is deleted.
+
+The backend validates all tool arguments before calling Google.
+
+### 4. Gmail
+
+The backend has six email tools, also available only to the voice agent:
+
+```text
+list_unread_emails
+search_emails
+find_email_contact
+read_email
+send_email_reply
+send_new_email
+```
+
+- `list_unread_emails` searches `in:inbox is:unread category:primary`, skips
+  no-reply senders, and returns sender, subject, received time, and a snippet
+  (up to 10 emails).
+- `search_emails` runs a Gmail search query over all mail except spam and
+  trash (up to 10 emails), including sent mail.
+- `find_email_contact` searches From/To/Cc headers for a name and returns up
+  to 5 matching addresses, ranked by whether you have emailed them.
+- `read_email` returns the plain-text body (HTML is converted to text), with
+  quoted earlier replies removed, truncated to 3000 characters.
+- `send_email_reply` sends a plain-text reply in the same thread.
+- `send_new_email` sends a plain-text email in a new thread to one address.
+
+Email safeguards:
+
+- Only emails returned by `list_unread_emails` or `search_emails` in the same
+  voice session can be read or replied to. Emails you sent cannot be replied to.
+- The recipient is taken from the original email's `Reply-To` or `From`
+  header. The tool has no recipient parameter, so text inside an email cannot
+  redirect a reply. Replies to no-reply or bounce addresses are refused.
+- `confirmed` must be `true`, after Gary reads the reply and recipient aloud.
+- One reply per email per session; reply body capped at 5000 characters.
+- New emails take exactly one plain address (no display names, lists, or CC).
+  The backend checks your Sent mail; if you have never emailed the address,
+  `new_recipient_confirmed` must also be `true`, after Gary spells the address
+  out. At most 5 new emails per session, and no identical resends.
+- Header values are reduced to a single line to prevent header injection.
+- Tool results label email content as untrusted, and the agent is instructed
+  never to follow instructions found inside email.
+
+Scopes are `gmail.readonly` and `gmail.send`; the backend cannot modify or
+delete mail.
+
+#### New email check
+
+While the voice service is connected, the backend checks for unread Primary
+inbox email received since the last check, every
+`EMAIL_CHECK_INTERVAL_MINUTES`. It builds the announcement itself from sender
+names and subjects and sends it to the voice service as a `bridge.announce`
+message, which Piper speaks. OpenAI is not involved and Gary does not wake.
+
+- Announced email IDs and the last check time are kept in backend memory, so a
+  voice reconnect neither repeats nor misses announcements. A backend restart
+  starts from the restart time.
+- Checks during quiet hours are skipped without moving the last check time.
+- The voice service holds announcements until an active conversation ends,
+  and ignores the wake word while Gary is speaking.
+
+## Audio flow
+
+### Sleeping state
+
+```text
+microphone
+    |
+    v
+voice container
+    |
+    +-- 24 kHz rolling buffer
+    |
+    +-- 24 kHz -> 16 kHz
+            |
+            v
+      local faster-whisper
+            |
+            v
+       wake-word test
+```
+
+No deliberate OpenAI microphone stream exists in this state.
+
+### Active state
+
+```text
+pre-roll + microphone PCM24k
+            |
+            v
+        FastAPI
+            |
+            v
+     OpenAI Realtime
+       |           |
+       |           +--> calendar / email tool
+       |                    |
+       |                    v
+       |          Google Calendar / Gmail
+       |
+       v
+ assistant text
+       |
+       v
+ voice container
+       |
+       +-- local Piper TTS
+       |
+       v
+   speakers
+```
+
+## Realtime session lifetime
+
+OpenAI Realtime sessions expire after 60 minutes. The backend therefore opens a
+Realtime connection when the first audio of an activation arrives, and closes it
+when the voice service reports going back to sleep (`bridge.reset`).
+
+Consequences:
+
+- no upstream connection is held open while the assistant sleeps;
+- sessions last as long as a conversation, so the 60-minute limit is not
+  reached in normal use;
+- if a session does expire mid-conversation, the next audio chunk transparently
+  opens a new one and the voice service logs `[OpenAI session renewed]`;
+- each new session gets fresh instructions, so the current date stays correct
+  in a long-running deployment.
+
+The wake-word loop is local and unaffected by upstream disconnects, so the
+service can run indefinitely.
+
+## Why two containers
+
+The separation reduces unnecessary secret exposure.
+
+The microphone process can be restarted or modified without giving it the
+OpenAI or Google credentials.
+
+The backend can remain isolated from direct audio-device access.
+
+## Host exposure
+
+Docker publishes:
+
+```text
+127.0.0.1:8000
+```
+
+Only the local host can directly reach the published FastAPI port.
+
+The voice-to-backend connection uses the Docker bridge network.
