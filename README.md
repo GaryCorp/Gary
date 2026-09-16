@@ -12,6 +12,8 @@ Google Calendar, Gmail, and Joplin notes. It uses:
 - **Gmail API** to read, search, reply to, and send email, with spoken
   confirmation before anything is sent.
 - **Joplin** notes in a Gary notebook, through the desktop app's Web Clipper API.
+- **SQLite** as Gary's Chief of Staff memory: projects, tasks, dependencies,
+  follow-ups, commitments, approvals, and an audit log.
 - **Docker Compose** with separate `voice`, `backend`, and `joplin-proxy`
   services.
 
@@ -39,7 +41,7 @@ After the wake word is detected:
         ↓
     optional tool call
         ↓
-    Google Calendar / Gmail / Joplin
+    Google Calendar / Gmail / Joplin / local SQLite
         ↓
     reply text spoken locally by Piper
 
@@ -65,6 +67,7 @@ Or ask:
 - **"Gary, what's on my calendar tomorrow?"**
 - **"Gary, do I have any new emails?"**
 - **"Gary, make a note: call the plumber tomorrow."**
+- **"Gary, I need to publish the video by Friday. What should I work on first?"**
 
 See [`docs/USAGE.md`](docs/USAGE.md) for everything Gary can do.
 

@@ -34,7 +34,8 @@ Responsibilities:
 - OpenAI Realtime connection, opened per activation.
 - Tool schema definition.
 - Calendar, Gmail, and Joplin API execution.
-- Hourly new email check.
+- Chief of Staff operations database (SQLite), approvals page, and backups.
+- Hourly new email check, and follow-up and overdue alerts.
 - Input validation.
 
 ### 3. Google Calendar
@@ -166,7 +167,7 @@ delete_joplin_note
 ```
 
 They call the Joplin desktop app's Web Clipper API through the `joplin-proxy`
-service (see [Joplin proxy](#6-joplin-proxy-container)).
+service (see [Joplin proxy](#7-joplin-proxy-container)).
 
 - `list_joplin_notebooks` returns the Gary notebook and its sub-notebooks.
 - `create_joplin_notebook` creates a sub-notebook inside Gary, or reports that
@@ -193,7 +194,81 @@ Note safeguards:
   rather than duplicated.
 - Titles are one line, up to 200 characters; bodies up to 20000 characters.
 
-### 6. Joplin proxy container
+### 6. Chief of Staff operations (SQLite)
+
+Structured operational state lives in `data/gary.db`, managed by the
+`backend/gary` package. Joplin stays the place for human-readable notes.
+
+```text
+Gary (OpenAI Realtime)
+   |  structured tool calls
+   v
+gary/tools        narrow tools, input validated with Pydantic models
+   v
+gary/services     business rules, policy, transactions, audit
+   v
+gary/db           repositories with parameterized SQL, migrations
+   v
+SQLite (WAL)      projects, tasks, task_dependencies, followups, commitments,
+                  approvals, actions, audit_log, planning_runs
+```
+
+Tools exposed to Gary:
+
+```text
+project_create  project_list  project_get  project_update
+task_create  task_update  task_complete  task_list  task_get
+task_add_dependency  task_remove_dependency
+followup_create  followup_complete  commitment_create  commitment_resolve
+planning_get_context  planning_record_plan
+action_propose  approval_list_pending  approval_resolve
+```
+
+There is no tool to run SQL, open a shell, delete records or the database,
+edit the audit log, or change policy.
+
+Key rules:
+
+- **Timestamps** must be ISO 8601 with an offset and are stored normalized to
+  UTC, so SQL comparisons stay correct across daylight saving time. Tools show
+  them in `LOCAL_TIMEZONE`.
+- **Readiness**: a task is ready when it is `todo` or `scheduled`, every
+  dependency is completed, and its earliest start has passed. Circular
+  dependencies are rejected inside a write-locked transaction.
+- **Planning score** is deterministic Python: priority × 10, +40 overdue, +30 /
+  +20 / +10 for deadlines within 24 / 72 / 168 hours, +15 if other open tasks
+  depend on it, +20 if it fulfils an open commitment. It never overwrites
+  priority.
+- **`planning_get_context`** returns active projects, ready, in-progress,
+  blocked, and overdue tasks, upcoming deadlines, due follow-ups, open
+  commitments, pending approvals, and recent actions in one call, and starts a
+  `planning_runs` row that `planning_record_plan` completes.
+- **Actions**: `action_propose` validates the payload for the action type,
+  `gary/policy.py` sets the risk (a handler may only escalate it), green runs,
+  yellow creates an approval, red is rejected. Execution validates current
+  state, runs the external call with no transaction open, then records success
+  or failure in a short transaction and audits it. A failure is never recorded
+  as success.
+- **Approvals** are resolved by voice (`approval_resolve`, which needs
+  `confirmed: true` and an approval shown in the same conversation) or on the
+  `/approvals` page (session CSRF token and origin check). Pending approvals
+  expire after 72 hours.
+- **Audit log** is append-only, enforced by database triggers.
+- **Alerts**: every `OPS_CHECK_INTERVAL_MINUTES` the backend announces due
+  follow-ups and newly overdue tasks once each (recorded in the audit log so a
+  restart does not repeat them) and writes the daily backup.
+
+Action handlers:
+
+| action_type | Risk | Effect |
+|---|---|---|
+| `create_internal_task`, `update_internal_task` | green | SQLite only |
+| `schedule_task` | green | creates a Google Calendar event, then stores its ID and times on the task |
+| `move_calendar_event` | green, yellow for priority ≥ 8 or an open commitment | moves the task's event, then updates the task |
+| `send_external_email` | yellow | sends one plain-text email |
+| `spend_money`, `change_security_settings`, `access_password_manager`, `change_own_permissions` | red | refused |
+
+### 7. Joplin proxy container
 
 Joplin desktop listens only on the host's `127.0.0.1:41184`, which containers
 cannot reach. The `joplin-proxy` service runs `joplin_proxy/joplin_proxy.py` in
@@ -213,7 +288,7 @@ It accepts connections only from `ASSISTANT_SUBNET`, holds no secrets (the
 backend sends the Joplin token with each request), and closes the connection if
 Joplin is not running, so the backend can tell the user to open Joplin.
 
-### 7. Docker network
+### 8. Docker network
 
 The voice and backend containers share the `assistant_net` bridge network,
 which has a fixed subnet, `172.30.99.0/24`, and gateway `172.30.99.1`
@@ -255,10 +330,10 @@ pre-roll + microphone PCM24k
             v
      OpenAI Realtime
        |           |
-       |           +--> calendar / email / notes tool
+       |           +--> calendar / email / notes / operations tool
        |                    |
        |                    v
-       |      Google Calendar / Gmail / Joplin
+       |      Google Calendar / Gmail / Joplin / SQLite
        |
        v
  assistant text

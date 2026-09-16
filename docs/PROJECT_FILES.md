@@ -63,6 +63,29 @@ Builds the FastAPI service.
 
 Backend Python dependencies.
 
+### `backend/requirements-dev.txt`
+
+Test dependencies (pytest), used by `make test`.
+
+### `backend/gary/`
+
+Chief of Staff operations package:
+
+- `container.py` builds the services (`build_gary`);
+- `policy.py` holds the action risk policy;
+- `timeutil.py` holds the timestamp rules;
+- `backup.py` makes SQLite backups;
+- `db/` has the connection, migrations (`db/migrations/NNN_name.sql`), and
+  repositories with all SQL;
+- `models/` has the Pydantic request models;
+- `services/` has business logic: tasks, projects, follow-ups, commitments,
+  planning and scoring, actions, and approvals;
+- `tools/` has the function tools exposed to Gary.
+
+### `backend/tests/`
+
+pytest suite for the operations package, using temporary databases.
+
 ### `backend/app/__init__.py`
 
 Python package marker.
@@ -79,6 +102,8 @@ Contains:
 - constrained calendar read, create, and delete function tools;
 - Gmail tools;
 - Joplin note and notebook tools;
+- Google Calendar and Gmail action handlers for the operations package;
+- the approvals web page;
 - the hourly new email check.
 
 ## `voice/`

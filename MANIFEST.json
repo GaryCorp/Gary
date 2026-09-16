@@ -1,11 +1,11 @@
 {
   "project": "ai-calendar-assistant-complete",
-  "file_count": 31,
+  "file_count": 83,
   "files": [
     {
       "path": ".env.example",
-      "bytes": 4839,
-      "sha256": "70679e71a5196044e5f90e7a0abd1f9a73643669cf5496be87b64b38967a0195"
+      "bytes": 5278,
+      "sha256": "f3625e65a848597c9ecf878f5690442bd0184ce721944f60e2a50c7b3a9f03e1"
     },
     {
       "path": ".gitignore",
@@ -14,13 +14,13 @@
     },
     {
       "path": "CHANGELOG.md",
-      "bytes": 5708,
-      "sha256": "e5402d104bf1dbe9a5b288221cdb411d164e03c35e560ddb9bfbab4c2b574212"
+      "bytes": 6716,
+      "sha256": "bb0c139e4e6d10c8aedd6afa87b90f959efc52f03b9ad683b0432ae9172a2d70"
     },
     {
       "path": "Makefile",
-      "bytes": 762,
-      "sha256": "2787024d43660d535314ccc1312adabbab85b7944b83ebecc944c8d8a4be0a0f"
+      "bytes": 1107,
+      "sha256": "141380328f263ec2e66ab29151d9d4ebd9c6036f23d45b29fceb592b39369e83"
     },
     {
       "path": "QUICKSTART.md",
@@ -29,13 +29,13 @@
     },
     {
       "path": "README.md",
-      "bytes": 3190,
-      "sha256": "69e6bff31c67819a81a613bf387dc0e413e93cf564b9dba3e23617b201fdf4ba"
+      "bytes": 3420,
+      "sha256": "40118d3836a0ecefff57bb295ef3da90109389e0e76dfcc452b2beddc33798fb"
     },
     {
       "path": "backend/Dockerfile",
-      "bytes": 481,
-      "sha256": "0dbdfbe3f86cfbc1db7bd8b6c026a5bee0e690d13b580e5967b74f1efe54a0fe"
+      "bytes": 498,
+      "sha256": "1deb0315887417d9b7464efefc486c9c86afccb7d4b4cc22ad31aafd52c64ba7"
     },
     {
       "path": "backend/app/__init__.py",
@@ -44,13 +44,273 @@
     },
     {
       "path": "backend/app/main.py",
-      "bytes": 87320,
-      "sha256": "9922269d4953b67ed5be47d9179568098f6ca391633b6f2491ca9718b9e6d798"
+      "bytes": 103835,
+      "sha256": "09aabf9b0ec7b2f94eea131924d5bc52d676dc89376f134ba4d3b20a1249decd"
+    },
+    {
+      "path": "backend/gary/__init__.py",
+      "bytes": 504,
+      "sha256": "c1fa54d91f44d80db383c71208d8485d57cec6919a63029cf7cce44f5f00f5fe"
+    },
+    {
+      "path": "backend/gary/backup.py",
+      "bytes": 1457,
+      "sha256": "173d38596bf8e8d582d04a679a62e87b0c2a1ee44aa8ddc8c165b64506c28663"
+    },
+    {
+      "path": "backend/gary/container.py",
+      "bytes": 1680,
+      "sha256": "a4c0ee8519debefe77dec0c428b149f8484b1cc3b7d87ceda0113dbc5a271f80"
+    },
+    {
+      "path": "backend/gary/db/__init__.py",
+      "bytes": 174,
+      "sha256": "118f848431ce68347c33a3d8de32cd3f931573a39f8d42d4f5132907e1fc46d5"
+    },
+    {
+      "path": "backend/gary/db/connection.py",
+      "bytes": 2371,
+      "sha256": "e8a70973c936ebf02b2c0be949ce99e0f87a99109cd4180b116b73e32c99af74"
+    },
+    {
+      "path": "backend/gary/db/migrations.py",
+      "bytes": 2961,
+      "sha256": "8d26e02ac44111f488f5b567171c03216bfe7eee7ee3f606476a0032f9d89ea8"
+    },
+    {
+      "path": "backend/gary/db/migrations/001_initial.sql",
+      "bytes": 7755,
+      "sha256": "f8ddf588b6604963f81cfd493e06c893a769e7912fad8c1e71403fc37f636de3"
+    },
+    {
+      "path": "backend/gary/db/repositories/__init__.py",
+      "bytes": 1867,
+      "sha256": "c94a48c23991cc19677cd1e4960ceab5a9622314aa2924dc2a90c87a6b6879eb"
+    },
+    {
+      "path": "backend/gary/db/repositories/actions.py",
+      "bytes": 2772,
+      "sha256": "b1e4d645c46ebc2d8847009a009978ee142f191d52be5f811e6526f9c30cbfaa"
+    },
+    {
+      "path": "backend/gary/db/repositories/approvals.py",
+      "bytes": 2743,
+      "sha256": "407b56e84876ee1fe8058c01271bb918748d29ce8dea6f3b0785556b748bf1d5"
+    },
+    {
+      "path": "backend/gary/db/repositories/audit.py",
+      "bytes": 2007,
+      "sha256": "a117b69375b0746e8f351c65509d188a035da523f1d248b85a9ec5f9e68eebc8"
+    },
+    {
+      "path": "backend/gary/db/repositories/base.py",
+      "bytes": 1576,
+      "sha256": "32ca939eef9070cbb121a830f8d4db931dd8101474f5e6c11f24f2a352d4a289"
+    },
+    {
+      "path": "backend/gary/db/repositories/commitments.py",
+      "bytes": 2167,
+      "sha256": "34ee5e18882f37ca8906cd702ac09f2953f2b471421537e8d42c0c9c32a869cd"
+    },
+    {
+      "path": "backend/gary/db/repositories/dependencies.py",
+      "bytes": 3418,
+      "sha256": "f8bd4386917e8fd1e3c2966c272d104119b909fbf16d4318828cd5d70b0b7b9e"
+    },
+    {
+      "path": "backend/gary/db/repositories/followups.py",
+      "bytes": 3226,
+      "sha256": "0134fc545ceefecf1385cdd480e2ccb9ad7e89734c3fdfe2f48e186ff335949f"
+    },
+    {
+      "path": "backend/gary/db/repositories/planning_runs.py",
+      "bytes": 2066,
+      "sha256": "b342a9d48d71f59824a6f39e604111e39d5d4b34a0e6ca393140573e9997d7a2"
+    },
+    {
+      "path": "backend/gary/db/repositories/projects.py",
+      "bytes": 2836,
+      "sha256": "52a0dc76a857d8108f98f3b0d76eb8dab184f07c48bfef9dd53e3c4652485282"
+    },
+    {
+      "path": "backend/gary/db/repositories/tasks.py",
+      "bytes": 5391,
+      "sha256": "21c1cf2d9b63859fa4852bd922b32dc4e1670f4700bae0b568faab3fa62f6ae6"
+    },
+    {
+      "path": "backend/gary/models/__init__.py",
+      "bytes": 236,
+      "sha256": "0e367c68cfd73d19812d6a7529e933edd477a4edb2c682faa7a1f58e427fd385"
+    },
+    {
+      "path": "backend/gary/models/action.py",
+      "bytes": 2132,
+      "sha256": "cd7d0bf10c22b7daa38786e768e424f8618202931092a8c13a83b60c7b4f61bb"
+    },
+    {
+      "path": "backend/gary/models/approval.py",
+      "bytes": 315,
+      "sha256": "426a428d6627aa077bcbe53eacc112c3c813da12798db70ed804bc15381e07df"
+    },
+    {
+      "path": "backend/gary/models/commitment.py",
+      "bytes": 540,
+      "sha256": "8f82abddad9166e1d1c5dcb71176288b493244dbfeda260b1989dfa9bd50a03e"
+    },
+    {
+      "path": "backend/gary/models/common.py",
+      "bytes": 2788,
+      "sha256": "3a78ee0a315e2cbf85f9aa1f766afd4606709a0c6767e08cc84393f4ebb3cb3b"
+    },
+    {
+      "path": "backend/gary/models/followup.py",
+      "bytes": 553,
+      "sha256": "e3c05305f8954c9960289b5f8efd9e168606b685c031f45942cc50ddd94e94e9"
+    },
+    {
+      "path": "backend/gary/models/project.py",
+      "bytes": 1302,
+      "sha256": "f2adc0d584b33f7c52d1d95cab5f736176b55b4378d88951fd8dac87d0bb50a8"
+    },
+    {
+      "path": "backend/gary/models/task.py",
+      "bytes": 2258,
+      "sha256": "fcdf68dc586b37811e883e8ddba757c05fdbe189931702c31b294dfc52fb0bc6"
+    },
+    {
+      "path": "backend/gary/policy.py",
+      "bytes": 1607,
+      "sha256": "dbf6c1a109e91c3cb46272e14eee4fe5b27f996f2f9469e70f1cb6a1307d205f"
+    },
+    {
+      "path": "backend/gary/services/__init__.py",
+      "bytes": 204,
+      "sha256": "983390cd1db59a288a9446433597e72d899251cfa42c7c4027491508395e68d7"
+    },
+    {
+      "path": "backend/gary/services/action_service.py",
+      "bytes": 11420,
+      "sha256": "5d10e4fa0c5c175101eb132b62fe3c64d09bb0e3fecd9a9c00daa6f573931ba3"
+    },
+    {
+      "path": "backend/gary/services/approval_service.py",
+      "bytes": 5007,
+      "sha256": "845a425d3f2af5b0ac5fb88eb4ccfacae17e3f02839add0423abbcd31eaa1e58"
+    },
+    {
+      "path": "backend/gary/services/common.py",
+      "bytes": 1032,
+      "sha256": "6ed24dbc0447d98fb3b0abaa7072374bcc101822dfe0545a2b27d1a64e45b854"
+    },
+    {
+      "path": "backend/gary/services/followup_service.py",
+      "bytes": 5266,
+      "sha256": "cd2bad1459e692038888e30d6d64b7ccb5dc9df0d2b7f0f1a48a77dcab707ae0"
+    },
+    {
+      "path": "backend/gary/services/internal_actions.py",
+      "bytes": 1918,
+      "sha256": "cac3e9bc95c1c30801e90f7fbe5bd8d03320426dfe3cccf290fc4ef8fcc32525"
+    },
+    {
+      "path": "backend/gary/services/planning_service.py",
+      "bytes": 10276,
+      "sha256": "2736998f8f1a0515eac7d6c1ec3b9625b9cfba6b7271b8e6f529161fca17a160"
+    },
+    {
+      "path": "backend/gary/services/project_service.py",
+      "bytes": 4442,
+      "sha256": "94e5bf305dbc3c0f077860f1de2c5da88b422d017f851ee14aea55d6d767345b"
+    },
+    {
+      "path": "backend/gary/services/readiness.py",
+      "bytes": 2162,
+      "sha256": "5780b432164c557b76c784eb89d759526400baadc2c2a1dd087ef9da937d8df0"
+    },
+    {
+      "path": "backend/gary/services/task_service.py",
+      "bytes": 10004,
+      "sha256": "b2b278927117fc06914943577742a2c1a24c072ed0f786ad4f1706b3e0ca96c4"
+    },
+    {
+      "path": "backend/gary/timeutil.py",
+      "bytes": 1685,
+      "sha256": "770c243da775ff6fb638f40ba07c7e5da35d9ae7903977b481b565effa5e50fa"
+    },
+    {
+      "path": "backend/gary/tools/__init__.py",
+      "bytes": 1528,
+      "sha256": "1e1bd88a3e73342c87f80b395ae861c51382aad6c265c8d2e895f39de4dff298"
+    },
+    {
+      "path": "backend/gary/tools/approval_tools.py",
+      "bytes": 4511,
+      "sha256": "7d49e950612263c5abec9959896bb64fa189677e85657257e939d8eaaf066095"
+    },
+    {
+      "path": "backend/gary/tools/base.py",
+      "bytes": 3705,
+      "sha256": "d7d151114a3a6c3d8e21e39fb0a2905a5aeaeb1a8c69dd1c81698c4a746a149f"
+    },
+    {
+      "path": "backend/gary/tools/followup_tools.py",
+      "bytes": 3643,
+      "sha256": "179e63f133c10cfedc0a131efb2e298f13526a0398df557c4d0ab3e7be793c63"
+    },
+    {
+      "path": "backend/gary/tools/planning_tools.py",
+      "bytes": 2053,
+      "sha256": "74897b135edc11eff9515b2a66cdd99d2cb5b47e4b91c3efcfdf17383eddf2b5"
+    },
+    {
+      "path": "backend/gary/tools/project_tools.py",
+      "bytes": 3370,
+      "sha256": "6a4a0b34d71d1a67c86272153e731b5396006f32ffde75a3ae7d6fa0dc466b17"
+    },
+    {
+      "path": "backend/gary/tools/task_tools.py",
+      "bytes": 6596,
+      "sha256": "1c82849387650631267e19c434f17c1782cea44361c72cb1ea27b003dd0a5645"
+    },
+    {
+      "path": "backend/requirements-dev.txt",
+      "bytes": 34,
+      "sha256": "8636f9ab1a075be9f3039e2a6471837259c4f36b625bcaf7a3d9a1edd2419c6d"
     },
     {
       "path": "backend/requirements.txt",
       "bytes": 220,
       "sha256": "704486dd964797b8eda682953df6a8cd285cbea996ac2c5dffa60c3bca7d6c78"
+    },
+    {
+      "path": "backend/tests/conftest.py",
+      "bytes": 4222,
+      "sha256": "63c982d8e318304c306541c163b30b9ea07f6739473417578424c69c8cc03bd0"
+    },
+    {
+      "path": "backend/tests/test_actions_approvals.py",
+      "bytes": 9036,
+      "sha256": "9c969012c11c1c091ae24e37967de64b1bde6ee66d46be092d37b3a2402a9462"
+    },
+    {
+      "path": "backend/tests/test_database.py",
+      "bytes": 8169,
+      "sha256": "67d501381fb943dc024b5c0079a7ff72f7b2f816cdff9e766d1fbbd60411a67f"
+    },
+    {
+      "path": "backend/tests/test_planning.py",
+      "bytes": 8112,
+      "sha256": "fd339b6a6c258d82230cbc215efa31822e44fb8e1d2d044748d56d2954b4ad78"
+    },
+    {
+      "path": "backend/tests/test_projects_tasks.py",
+      "bytes": 9276,
+      "sha256": "992a6f9eb6b07a944409b88f8369a4c7112b3ddd5cfd68124db85defca0528bb"
+    },
+    {
+      "path": "backend/tests/test_tools.py",
+      "bytes": 4312,
+      "sha256": "bc531809969b64fc06b62c777db9aed65205cebe78387a11151bf6a15d8c41af"
     },
     {
       "path": "compose.gpu.yaml",
@@ -59,8 +319,8 @@
     },
     {
       "path": "compose.yaml",
-      "bytes": 5146,
-      "sha256": "af4e8bddc4e6a0a6867777ecfaff44dc4f910c4f7d88a245028a8c924f0d7395"
+      "bytes": 5412,
+      "sha256": "2bb02443ef7cc3e1ad2be1c82f6f575871064d83c8321496da3f234957a73fb6"
     },
     {
       "path": "data/.gitkeep",
@@ -69,13 +329,13 @@
     },
     {
       "path": "docs/ARCHITECTURE.md",
-      "bytes": 10430,
-      "sha256": "f2f0bf8feecf873e64f6b9311bb7bde8407de08860fc5d9dcf03988425cb188e"
+      "bytes": 14074,
+      "sha256": "7ba0a5f445545f33ba7ea01b79424fd2b6fb6579cf89c224fd53f8136d80db67"
     },
     {
       "path": "docs/CONFIGURATION.md",
-      "bytes": 5733,
-      "sha256": "528709488bb404a1d3caf3d98306e73c9ad7ef8610729cab66496286e20a0963"
+      "bytes": 6676,
+      "sha256": "c2512e9c9ea04f81428d7550c2f08a6c8a0647adf93bc32b28a3d9730f72862c"
     },
     {
       "path": "docs/GOOGLE_OAUTH.md",
@@ -84,18 +344,18 @@
     },
     {
       "path": "docs/PRIVACY.md",
-      "bytes": 2505,
-      "sha256": "9df0b89abd92cd3909038123824e48fbb557906a8770077b5d75a80d4f08504f"
+      "bytes": 2894,
+      "sha256": "e0cdc509da652072301b4fdf186d7a73c8765941ba55547930e49e7e927542fd"
     },
     {
       "path": "docs/PROJECT_FILES.md",
-      "bytes": 3253,
-      "sha256": "9d88f603a2ce332a33105779d46e4dea540c9d6f506468b6d3c0c9eda03cf29e"
+      "bytes": 4086,
+      "sha256": "276d1b93758f99343cc9ace5fc3bdbd33ae8092dd0f737b36e333bfbc5392b15"
     },
     {
       "path": "docs/SECURITY.md",
-      "bytes": 5074,
-      "sha256": "52dc488a419f76e09a5fa5d7c5b31b13a3b24ece859c65a694e34247fe72fef1"
+      "bytes": 6323,
+      "sha256": "4fe1519f5c409fac1329c3fd562c326bf10ee633ad5e0eb967aabafd644c6b8d"
     },
     {
       "path": "docs/SETUP.md",
@@ -104,13 +364,13 @@
     },
     {
       "path": "docs/TROUBLESHOOTING.md",
-      "bytes": 4980,
-      "sha256": "15729a9380d0e852e69e52341bad441b6e879fa7e4833fc6c32b5af4d8c27af7"
+      "bytes": 5717,
+      "sha256": "9c8b12d61c62b616d87ade5b158e589d168d0a907e70e3ea675f98c846e6d34b"
     },
     {
       "path": "docs/USAGE.md",
-      "bytes": 6055,
-      "sha256": "f0644aa657edfa22b3f272292ecfd226b1672c84087f09443a47fb95549abd52"
+      "bytes": 8817,
+      "sha256": "84502a1c6b433d519a3344288f94a52ded73a232114948cb04130ebeaffe903c"
     },
     {
       "path": "joplin_proxy/joplin_proxy.py",
@@ -124,8 +384,8 @@
     },
     {
       "path": "scripts/check_python.sh",
-      "bytes": 212,
-      "sha256": "a273d0d9643c8242c3c424b5ed5750eef49a27e301a00eda407d1b5deb034581"
+      "bytes": 290,
+      "sha256": "74b0c9273d41971af0ffe1a17dbb59ac6ef9caab74a16e8a48a2153891e6226b"
     },
     {
       "path": "scripts/diagnose.sh",

@@ -1,4 +1,4 @@
-.PHONY: setup build up down logs status audio-devices diagnose rebuild build-gpu up-gpu gpu-check
+.PHONY: setup build up down logs status audio-devices diagnose rebuild build-gpu up-gpu gpu-check test
 
 GPU_COMPOSE = docker compose -f compose.yaml -f compose.gpu.yaml
 
@@ -38,3 +38,10 @@ diagnose:
 rebuild:
 	docker compose build
 	docker compose up -d
+
+# Runs the SQLite backend tests in the backend image, against temporary databases.
+test:
+	docker compose build backend
+	docker compose run --rm --no-deps -T \
+		-v ./backend:/src:ro -w /src -e PYTHONDONTWRITEBYTECODE=1 \
+		backend sh -c "pip install --quiet --user -r requirements-dev.txt && python -m pytest -p no:cacheprovider -q tests"

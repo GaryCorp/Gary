@@ -156,6 +156,27 @@ These reduce but cannot eliminate prompt-injection risk. Listen to the
 recipient and text Gary reads back before confirming, especially for new
 emails.
 
+## Chief of Staff operations
+
+- Gary never runs SQL: tools call services, and repositories use parameterized
+  queries only. Column names in updates come from code allowlists.
+- All tool input is validated with Pydantic models that reject unknown fields,
+  out-of-range priorities, invalid statuses, and timestamps without an offset.
+- Risk levels come from `gary/policy.py`. Gary cannot pass a risk level, and a
+  handler can only make an action stricter.
+- Red actions are refused without creating an approval. Yellow actions run
+  only after the user approves by voice (spoken confirmation, `confirmed:
+  true`, and an approval shown in that conversation) or on the `/approvals`
+  page. Approvals cannot be resolved twice and expire after 72 hours.
+- Voice approval has the same trust level as spoken email confirmation: a
+  misheard or injected "yes" could approve. Use the web page for anything you
+  want to read in full first.
+- The approvals page is local-only and protects its form with a per-session
+  CSRF token and an origin check.
+- The audit log is append-only, enforced by database triggers, and no tool
+  can delete records, the database, or the audit log.
+- `data/gary.db` and its backups are created owner-only (600, folder 700).
+
 ## Joplin tools
 
 - all note tools are confined to the Gary notebook (`JOPLIN_NOTEBOOK`) and its

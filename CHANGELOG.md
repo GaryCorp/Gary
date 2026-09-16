@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.11.0 — Chief of Staff SQLite backend
+
+- New `backend/gary` package: SQLite (`data/gary.db`, WAL) as the source of
+  truth for projects, tasks, dependencies, follow-ups, commitments, approvals,
+  actions, planning runs, and an append-only audit log, with versioned
+  migrations, a repository/service/tool layering, and Pydantic validation.
+- 20 new voice-agent tools, including `planning_get_context`, which returns
+  ready, blocked, and overdue work ranked by a deterministic planning score.
+- Actions go through policy as code: green runs, yellow waits for approval,
+  red is refused. Supported actions: schedule or move a task's calendar event,
+  send an email, create or update tasks.
+- Approvals by voice or at `http://localhost:8000/approvals`; they expire after
+  72 hours.
+- The backend announces due follow-ups and newly overdue tasks, and makes daily
+  SQLite backups (`OPS_CHECK_INTERVAL_MINUTES`, `GARY_BACKUP_KEEP`).
+- `make test` runs the new test suite (76 tests) in the backend image.
+
 ## 1.10.0 — Delete Joplin notes
 
 - Added `list_joplin_notes` (titles, notebooks, and update times only, never

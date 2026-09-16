@@ -220,6 +220,37 @@ Local hours, on a 24-hour clock, when Gary does not announce new email: `22-7`
 means 10 PM to 7 AM. Email that arrives then is announced at the first check
 afterwards. Leave empty to announce at any hour.
 
+## Chief of Staff database
+
+### `GARY_DB_PATH`
+
+Default in `compose.yaml`: `/data/gary.db` inside the backend container, which
+is `data/gary.db` in the project.
+
+SQLite database for projects, tasks, follow-ups, commitments, approvals,
+actions, planning runs, and the audit log. Schema migrations run automatically
+at startup; the database is never recreated.
+
+### `GARY_BACKUP_DIR`
+
+Default: `/data/backups` (`data/backups` in the project).
+
+A backup is written with SQLite's backup API at startup and then once a day,
+as `gary-YYYY-MM-DD.db`. The folder and files are owner-only.
+
+### `GARY_BACKUP_KEEP`
+
+Default: `14`. Number of daily backups kept.
+
+### `OPS_CHECK_INTERVAL_MINUTES`
+
+Default: `5`.
+
+How often the backend looks for due follow-ups and newly overdue tasks to
+announce, and makes the daily backup. Each is announced once. Announcements
+respect `EMAIL_CHECK_QUIET_HOURS`. `0` turns the check off (backups still run
+at startup).
+
 ## Joplin
 
 Gary uses the Joplin desktop app's Web Clipper API. In Joplin, open

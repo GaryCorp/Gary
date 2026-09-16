@@ -61,6 +61,14 @@ Gary, and the titles of notes in them, are sent when Gary looks up where a note
 goes or which note to delete. Gary never reads the text of existing notes, and
 cannot see notebooks outside Gary.
 
+## Projects and tasks
+
+The operations database stays on your machine in `data/gary.db`, with daily
+backups in `data/backups`. When Gary uses the operations tools, the returned
+project, task, follow-up, commitment, approval, and action details are sent to
+OpenAI as part of the conversation. The periodic follow-up and overdue check
+runs in the backend only; Gary speaks the titles aloud.
+
 ## OpenAI key
 
 The API key is not placed in the voice container.

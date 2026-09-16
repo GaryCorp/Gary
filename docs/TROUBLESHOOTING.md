@@ -175,6 +175,33 @@ Test the whole path from the backend:
 docker compose exec backend python -c "import asyncio; from app.main import list_joplin_notebooks as f; print(asyncio.run(f()))"
 ```
 
+## Gary says an action is waiting for approval
+
+Open `http://localhost:8000/approvals`, or say "Gary, what needs my approval?".
+Approvals expire after 72 hours; ask Gary to propose the action again.
+
+If an approved action shows as failed, the page lists the error, for example
+Gmail access not granted or a calendar event that no longer exists.
+
+## Operations database
+
+Run the backend tests:
+
+```bash
+make test
+```
+
+The database and migrations are checked at backend startup; a failing
+migration is rolled back and logged in `docker compose logs backend`. To
+restore a backup:
+
+```bash
+docker compose stop backend
+cp data/backups/gary-YYYY-MM-DD.db data/gary.db
+rm -f data/gary.db-wal data/gary.db-shm
+docker compose start backend
+```
+
 ## Google login loops
 
 Confirm the Google OAuth redirect URI exactly matches:

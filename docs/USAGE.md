@@ -222,6 +222,81 @@ Gary, what notes do I have in Groceries?
 Gary can see note titles but not what notes say. He cannot edit or move notes,
 delete notebooks, or touch notebooks outside Gary.
 
+## Chief of Staff: projects, tasks, and planning
+
+Gary keeps your projects, tasks, deadlines, dependencies, follow-ups, and
+commitments in a local SQLite database (`data/gary.db`). It persists across
+restarts, so Gary knows tomorrow what is done, blocked, overdue, and approved
+without remembering the conversation.
+
+### Set up a project
+
+```text
+Gary, I need to publish the Chief of Staff video by Friday.
+```
+
+Gary creates the project, breaks it into tasks, and records which tasks wait
+on others (for example, editing waits on filming). You can also be explicit:
+
+```text
+Gary, add a task to film the demo, two hours, priority nine.
+Gary, editing can't start until filming is done.
+```
+
+Priorities run from 1 (almost irrelevant) through 5 (normal) to 10 (critical).
+
+### Plan and check status
+
+```text
+Gary, what should I work on?
+Gary, what's blocked?
+Gary, what's overdue?
+```
+
+Gary gathers everything in one step and recommends ready tasks in order of a
+planning score the application calculates from priority, deadline urgency,
+whether the task is overdue, whether other tasks wait on it, and whether it
+fulfils a commitment. Your priority is never changed by the score.
+
+### Progress, follow-ups, and commitments
+
+```text
+Gary, I finished filming.
+Gary, remind me at 3 PM to check whether the upload finished.
+Gary, I promised Sam the draft by Thursday.
+```
+
+Finishing a task closes its follow-ups and tells you what is now unblocked.
+Gary announces due follow-ups and newly overdue tasks on his own, checking
+every five minutes and staying quiet during `EMAIL_CHECK_QUIET_HOURS`.
+
+### Scheduling and approvals
+
+```text
+Gary, put filming on my calendar Thursday from 1 to 3.
+```
+
+Things Gary does outside the database become **actions**, and the application,
+not Gary, decides their risk:
+
+| Risk | What happens | Examples |
+|---|---|---|
+| Green | Runs immediately | schedule a task, move a normal task's calendar block, create or update tasks |
+| Yellow | Waits for your approval | send an email Gary initiated, move the calendar block of a priority 8+ task or one tied to a commitment |
+| Red | Refused | spend money, change security settings, access a password manager |
+
+Approve or reject a yellow action by voice:
+
+```text
+Assistant: Emailing Sam with the subject "Draft" needs your approval. Should I send it?
+User: Yes, approve it.
+Assistant: Approved and sent.
+```
+
+or at `http://localhost:8000/approvals`, which shows the exact recipient, text,
+or times. Unanswered approvals expire after 72 hours. Gary only reports an
+action as done when it actually succeeded.
+
 ## Follow-up behavior
 
 After an assistant response, a short follow-up period remains active.
@@ -257,6 +332,15 @@ Open:
 ```text
 http://localhost:8000/events
 ```
+
+## Approvals page
+
+```text
+http://localhost:8000/approvals
+```
+
+Lists actions waiting for approval with Approve and Reject buttons, and
+recently resolved ones with their outcome.
 
 ## Logs
 

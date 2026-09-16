@@ -27,6 +27,12 @@ services:
       JOPLIN_API_URL: "http://${ASSISTANT_GATEWAY:-172.30.99.1}:41184"
       JOPLIN_NOTEBOOK: "${JOPLIN_NOTEBOOK:-Gary}"
 
+      # Chief of Staff operations database (SQLite) and its daily backups.
+      GARY_DB_PATH: /data/gary.db
+      GARY_BACKUP_DIR: /data/backups
+      GARY_BACKUP_KEEP: "${GARY_BACKUP_KEEP:-14}"
+      OPS_CHECK_INTERVAL_MINUTES: "${OPS_CHECK_INTERVAL_MINUTES:-5}"
+
       CLIENT_SECRETS_FILE: /run/secrets/google_client_secret.json
       TOKEN_STORE_FILE: /data/token_store.enc
       REDIRECT_URI: http://localhost:8000/oauth2callback
