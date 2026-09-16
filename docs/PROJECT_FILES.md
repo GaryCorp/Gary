@@ -33,7 +33,7 @@ restricts `.env` and `data/` permissions.
 
 ### `Makefile`
 
-Convenience commands.
+Convenience commands, including `make test`.
 
 ### `CHANGELOG.md`
 
@@ -203,10 +203,13 @@ This file.
 
 Keeps the directory in source archives.
 
-At runtime the backend may create:
+At runtime the backend creates:
 
 ```text
-data/token_store.enc
+data/token_store.enc          encrypted Google credentials
+data/gary.db                  Chief of Staff database (plus -wal and -shm files)
+data/backups/gary-YYYY-MM-DD.db   daily database backups
 ```
 
-That runtime credential file is intentionally not included in the archive.
+These runtime files are git-ignored and intentionally not included in the
+archive.

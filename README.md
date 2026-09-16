@@ -1,7 +1,8 @@
 # Gary — AI Calendar Assistant (Docker)
 
 A privacy-oriented Ubuntu voice assistant named **Gary** that manages your
-Google Calendar, Gmail, and Joplin notes. It uses:
+Google Calendar, Gmail, and Joplin notes, and acts as a chief of staff for your
+projects and tasks. It uses:
 
 - **Local faster-whisper** for the wake word **"Gary"**.
 - A short **pre-roll audio buffer**, so the beginning of the command is not lost.
@@ -14,6 +15,11 @@ Google Calendar, Gmail, and Joplin notes. It uses:
 - **Joplin** notes in a Gary notebook, through the desktop app's Web Clipper API.
 - **SQLite** as Gary's Chief of Staff memory: projects, tasks, dependencies,
   follow-ups, commitments, approvals, and an audit log.
+- **Scheduled planning** on weekdays at 8:00, 12:30, and 17:30: one OpenAI
+  call per run that can put ready tasks on your calendar, writes a daily
+  summary to Joplin, and speaks a short briefing.
+- **Approval policy as code**: risky actions such as emails Gary starts wait
+  for your approval, by voice or at `http://localhost:8000/approvals`.
 - **Docker Compose** with separate `voice`, `backend`, and `joplin-proxy`
   services.
 
@@ -30,6 +36,10 @@ Before the wake word is detected:
     local faster-whisper
 
 No microphone audio is intentionally sent to OpenAI before activation.
+
+Gary also speaks on his own for new email, due follow-ups, overdue tasks, and
+scheduled planning briefings. Those checks run in the backend; only the
+scheduled planning run calls OpenAI.
 
 After the wake word is detected:
 
@@ -61,6 +71,7 @@ See [`docs/PROJECT_FILES.md`](docs/PROJECT_FILES.md) for the complete manifest.
 6. Build and start with Docker Compose.
 7. Sign into Google once at `http://localhost:8000`.
 8. Say: **"Gary, add a dentist appointment Friday at 2 PM."**
+9. Optionally run the tests: `./scripts/test.sh`.
 
 Or ask:
 
@@ -69,7 +80,8 @@ Or ask:
 - **"Gary, make a note: call the plumber tomorrow."**
 - **"Gary, I need to publish the video by Friday. What should I work on first?"**
 
-See [`docs/USAGE.md`](docs/USAGE.md) for everything Gary can do.
+See [`docs/USAGE.md`](docs/USAGE.md) for everything Gary can do. Scheduled
+planning is on by default; set `PLANNING_TIMES=` in `.env` to turn it off.
 
 ## Documentation
 

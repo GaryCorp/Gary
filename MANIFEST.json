@@ -24,13 +24,13 @@
     },
     {
       "path": "QUICKSTART.md",
-      "bytes": 2680,
-      "sha256": "e6258d3c02f66b0ba868b3a53a2a7a5a4dccc98ae254ece6ed07d93a1c7fce41"
+      "bytes": 3523,
+      "sha256": "0d6fa21dc6977ce4fe78833b83cc3c22ea3925eab92710d32eeb18145bf7765b"
     },
     {
       "path": "README.md",
-      "bytes": 3420,
-      "sha256": "40118d3836a0ecefff57bb295ef3da90109389e0e76dfcc452b2beddc33798fb"
+      "bytes": 4147,
+      "sha256": "61d3538b00d61dfd719f9d9208b4f4b4616f67b8c76568ff9ebd71c378c10c7a"
     },
     {
       "path": "backend/Dockerfile",
@@ -344,8 +344,8 @@
     },
     {
       "path": "docs/ARCHITECTURE.md",
-      "bytes": 16319,
-      "sha256": "29366075d25c93303b5b697d286aeaad47f0686f5b37a8dca44dfb6d070f229b"
+      "bytes": 16878,
+      "sha256": "9cf4d81af39f9f6b956ebc245d5ca09d5ca88192d95b89c5d8b6b6f3e3949f8d"
     },
     {
       "path": "docs/CONFIGURATION.md",
@@ -354,8 +354,8 @@
     },
     {
       "path": "docs/GOOGLE_OAUTH.md",
-      "bytes": 2824,
-      "sha256": "adb9142f3ad7d246e2b7a4760d7dda752d6c9708da06b28a9cd0c2c452f390b1"
+      "bytes": 2982,
+      "sha256": "d73c103b5a61802429022e556af27053f15b6d30d289dd36eb2a8301eb69499f"
     },
     {
       "path": "docs/PRIVACY.md",
@@ -364,13 +364,13 @@
     },
     {
       "path": "docs/PROJECT_FILES.md",
-      "bytes": 4417,
-      "sha256": "9b70ed00a3061f9a68526d12099f595e4a42305686c85b7aa870dcd59e854d25"
+      "bytes": 4621,
+      "sha256": "23f4498227981272a0935009c09589e1f21fea2010090287dab8b150d82f6e3b"
     },
     {
       "path": "docs/SECURITY.md",
-      "bytes": 6957,
-      "sha256": "3aeaedb59cfcedbd2510f316193c1613c80e6c5f32b03841d9b275f402517610"
+      "bytes": 7138,
+      "sha256": "30e16a1d3db2c9b27dc30fe26da2c29c7e4210d74300d2cbbb1748f696d46dd3"
     },
     {
       "path": "docs/SETUP.md",
@@ -384,8 +384,8 @@
     },
     {
       "path": "docs/USAGE.md",
-      "bytes": 9733,
-      "sha256": "008e5a0db38b6ee8282896228098aa200a2d0561fc5bfce3b4a4a525c4f7df6a"
+      "bytes": 10049,
+      "sha256": "73ff9e4b344c4eee220a0271bf338909631952e611cc63c4050ef33c7877b434"
     },
     {
       "path": "joplin_proxy/joplin_proxy.py",

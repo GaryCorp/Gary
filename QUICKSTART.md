@@ -149,12 +149,31 @@ Gary, add a dentist appointment Friday at 2 PM.
 The local Whisper container detects the wake word first. Only after activation
 does it stream the buffered pre-roll and live microphone audio to the backend.
 
+Or set up some work:
+
+```text
+Gary, I need to publish the Chief of Staff video by Friday. What should I work on first?
+```
+
 More examples are in `docs/USAGE.md`.
 
-## 11. Stop
+## 11. Know what runs on its own
+
+- **Scheduled planning** runs on weekdays at 8:00, 12:30, and 17:30. Each run
+  makes one OpenAI request, may put ready tasks on your calendar within working
+  hours (9 to 5), writes **Gary › Daily Summaries** in Joplin, and speaks a
+  short briefing. Set `PLANNING_TIMES=` in `.env` to turn it off.
+- **Announcements** for new email (hourly), due follow-ups, and overdue tasks
+  (every five minutes), except during quiet hours (10 PM to 7 AM).
+- **Approvals**: anything that needs your OK waits at
+  `http://localhost:8000/approvals`, or answer Gary by voice.
+- **Backups** of `data/gary.db` go to `data/backups` daily.
+
+## 12. Stop
 
 ```bash
 docker compose down
 ```
 
-Google refresh credentials remain encrypted in `data/token_store.enc`.
+Google refresh credentials remain encrypted in `data/token_store.enc`, and
+projects, tasks, and approvals remain in `data/gary.db`.

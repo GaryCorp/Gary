@@ -380,3 +380,14 @@ Backend only:
 ```bash
 docker compose logs -f backend
 ```
+
+Joplin proxy only:
+
+```bash
+docker compose logs -f joplin-proxy
+```
+
+Planning runs, actions, and approvals are recorded in `data/gary.db`
+(`planning_runs`, `actions`, `approvals`, and the append-only `audit_log`); see
+[Troubleshooting](TROUBLESHOOTING.md#scheduled-planning-did-not-run-or-did-nothing)
+for a query.

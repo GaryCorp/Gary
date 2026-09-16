@@ -35,6 +35,7 @@ Responsibilities:
 - Tool schema definition.
 - Calendar, Gmail, and Joplin API execution.
 - Chief of Staff operations database (SQLite), approvals page, and backups.
+- Scheduled planning cycle (morning, midday, evening).
 - Hourly new email check, and follow-up and overdue alerts.
 - Input validation.
 
@@ -426,8 +427,22 @@ Docker publishes:
 127.0.0.1:8000
 ```
 
-Only the local host can directly reach the published FastAPI port.
+Only the local host can directly reach the published FastAPI port, which
+serves:
+
+```text
+/               status and links
+/login, /oauth2callback, /logout   Google sign-in
+/events         upcoming calendar events
+/approvals      pending approvals (GET) and decisions (POST, CSRF-protected)
+/health         container health check
+/internal/voice voice bridge WebSocket (bridge token required)
+```
 
 The voice-to-backend connection uses the Docker bridge network.
 
 `joplin-proxy` listens only on the bridge gateway address, not on the LAN.
+
+Outbound, the backend connects to OpenAI (Realtime during conversations, and
+the Responses API for scheduled planning runs), Google APIs, and Joplin
+through `joplin-proxy`.

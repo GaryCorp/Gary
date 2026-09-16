@@ -45,7 +45,9 @@ The Compose file publishes FastAPI as:
 ```
 
 Do not change this to a public bind unless you deliberately build a production
-security layer around the service.
+security layer around the service. The web interface, including the
+`/approvals` page that can approve Gary's actions, has no login of its own and
+relies on this loopback-only binding.
 
 `joplin-proxy` uses the host network so it can reach Joplin on `127.0.0.1`. It
 listens only on the assistant network's gateway address (`172.30.99.1:41184`),
@@ -206,7 +208,7 @@ The provided `.gitignore` ignores secrets and local data:
 .env
 .env.bak*
 client_secret.json
-data/*   (except data/.gitkeep)
+data/*   (except data/.gitkeep): token store, gary.db, backups
 .models/
 ```
 

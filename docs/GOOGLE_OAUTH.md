@@ -59,8 +59,10 @@ https://www.googleapis.com/auth/gmail.readonly
 https://www.googleapis.com/auth/gmail.send
 ```
 
-`calendar.events` allows reading, creating, and deleting calendar events
-without requesting the broadest Calendar scope.
+`calendar.events` allows reading, creating, moving, and deleting calendar
+events without requesting the broadest Calendar scope. Gary uses it for the
+calendar voice tools, for scheduling and moving task blocks, and to read busy
+times (start and end only) for scheduled planning.
 
 `gmail.readonly` lets Gary list and read your email; it cannot change, label,
 archive, or delete messages. `gmail.send` lets Gary send replies and new emails. The broader
