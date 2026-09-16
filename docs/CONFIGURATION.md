@@ -219,6 +219,22 @@ Local hours, on a 24-hour clock, when Gary does not announce new email: `22-7`
 means 10 PM to 7 AM. Email that arrives then is announced at the first check
 afterwards. Leave empty to announce at any hour.
 
+## Docker network
+
+### `ASSISTANT_SUBNET`
+
+Default:
+
+```text
+172.30.99.0/24
+```
+
+Subnet of the private network between the voice and backend containers. It is
+fixed so that a VPN allowlist entry keeps working when Docker recreates the
+network (see [Troubleshooting](TROUBLESHOOTING.md#nordvpn-or-another-vpn-is-connected)).
+Change it only if it overlaps another network, then run `docker compose down`
+and `docker compose up -d` so the network is recreated.
+
 ## Audio device
 
 ### `AUDIO_DEVICE`

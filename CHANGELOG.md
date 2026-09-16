@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.1 — Works with NordVPN
+
+- The Docker network between the voice and backend containers now uses a
+  fixed subnet, `ASSISTANT_SUBNET` (default `172.30.99.0/24`), so it can be
+  allowlisted in a VPN. Previously NordVPN's firewall blocked the voice
+  container from reaching the backend (`timed out during opening handshake`).
+- Run `nordvpn allowlist add subnet 172.30.99.0/24`; see
+  `docs/TROUBLESHOOTING.md`.
+
 ## 1.8.0 — Hourly new email check
 
 - The backend checks for new unread Primary inbox email every hour and Gary

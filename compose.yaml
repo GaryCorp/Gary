@@ -133,3 +133,8 @@ services:
 networks:
   assistant_net:
     driver: bridge
+    # Fixed subnet so a VPN allowlist entry (e.g. NordVPN) keeps working when
+    # the network is recreated. See docs/TROUBLESHOOTING.md.
+    ipam:
+      config:
+        - subnet: "${ASSISTANT_SUBNET:-172.30.99.0/24}"

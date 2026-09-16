@@ -117,6 +117,40 @@ Expected:
 {"ok":true}
 ```
 
+If the voice logs say `timed out during opening handshake` and the health check
+also times out, a VPN is probably blocking Docker networking. See the next
+section.
+
+## NordVPN or another VPN is connected
+
+NordVPN's firewall drops traffic to local subnets that are not allowlisted,
+including Docker networks. The voice container then cannot reach the backend:
+
+```text
+[voice] timed out during opening handshake; reconnecting...
+```
+
+and `curl http://127.0.0.1:8000/health` times out on the host, even though
+the backend logs show it is healthy.
+
+Allowlist the assistant's network (`ASSISTANT_SUBNET`, default
+`172.30.99.0/24`) and restart the voice service:
+
+```bash
+nordvpn allowlist add subnet 172.30.99.0/24
+docker compose restart voice
+```
+
+Check with:
+
+```bash
+nordvpn settings
+```
+
+The subnet should be listed under **Allowlisted subnets**. The allowlist entry
+persists across VPN reconnects and reboots. For other VPNs, allow the same
+subnet as local or split-tunnel traffic.
+
 ## Google login loops
 
 Confirm the Google OAuth redirect URI exactly matches:
