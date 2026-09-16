@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.12.0 — Scheduled planning cycle
+
+- Gary plans on his own on weekdays at 8:00, 12:30, and 17:30
+  (`PLANNING_TIMES`, `PLANNING_WEEKDAYS`), whether or not voice is connected.
+  Each run makes one OpenAI call (`PLANNING_MODEL`, default `gpt-5.4-mini`)
+  with a strict JSON schema; there is no agent loop and no retry.
+- The planner sees the operations state, busy calendar times (no titles),
+  Gary › Planning notes titled like an active project, and the previous daily
+  summary. It may only propose scheduling or moving task calendar blocks.
+- Python validates every proposal (readiness, `WORK_HOURS`, 72-hour horizon,
+  busy times, overlaps, at most `PLANNING_MAX_ACTIONS`) before normal policy.
+- Each run is recorded in `planning_runs` with results and rejection reasons,
+  appended to a daily summary note in Gary › Daily Summaries, and may speak a
+  short briefing.
+- `scripts/test.sh` runs the tests without `make`; the suite now has 90 tests.
+- Verified live against OpenAI, Google Calendar (schedule and move), Gmail
+  (approved send), and Joplin.
+
 ## 1.11.0 — Chief of Staff SQLite backend
 
 - New `backend/gary` package: SQLite (`data/gary.db`, WAL) as the source of

@@ -33,6 +33,13 @@ services:
       GARY_BACKUP_KEEP: "${GARY_BACKUP_KEEP:-14}"
       OPS_CHECK_INTERVAL_MINUTES: "${OPS_CHECK_INTERVAL_MINUTES:-5}"
 
+      # Scheduled planning cycle. Set PLANNING_TIMES empty to turn it off.
+      PLANNING_TIMES: "${PLANNING_TIMES-morning=08:00,midday=12:30,evening=17:30}"
+      PLANNING_WEEKDAYS: "${PLANNING_WEEKDAYS:-mon,tue,wed,thu,fri}"
+      PLANNING_MODEL: "${PLANNING_MODEL:-gpt-5.4-mini}"
+      PLANNING_MAX_ACTIONS: "${PLANNING_MAX_ACTIONS:-5}"
+      WORK_HOURS: "${WORK_HOURS:-9-17}"
+
       CLIENT_SECRETS_FILE: /run/secrets/google_client_secret.json
       TOKEN_STORE_FILE: /data/token_store.enc
       REDIRECT_URI: http://localhost:8000/oauth2callback

@@ -270,6 +270,25 @@ Finishing a task closes its follow-ups and tells you what is now unblocked.
 Gary announces due follow-ups and newly overdue tasks on his own, checking
 every five minutes and staying quiet during `EMAIL_CHECK_QUIET_HOURS`.
 
+### Scheduled planning
+
+On weekdays at 8:00, 12:30, and 17:30, Gary plans on his own: he reviews your
+projects and tasks, checks when your calendar is busy, reads your planning
+notes, and may put up to five ready tasks on the calendar within working hours.
+If you are near him, he says a short briefing:
+
+```text
+Assistant: I put filming on your calendar at one PM. Editing is still waiting on it.
+```
+
+Each run adds a section to a daily summary note in **Gary › Daily Summaries**
+in Joplin, listing the plan, what was scheduled, what was not and why, and
+overdue work, blockers, follow-ups, and commitments. To steer planning for a
+project, write a note in **Gary › Planning** titled exactly like the project,
+for example "Prefer mornings for filming." Scheduled runs never send email or
+approve anything. Change the times or turn runs off in `.env` (see
+[Configuration](CONFIGURATION.md#scheduled-planning)).
+
 ### Scheduling and approvals
 
 ```text

@@ -181,8 +181,10 @@ service (see [Joplin proxy](#7-joplin-proxy-container)).
 Note safeguards:
 
 - No tool reads note text. `list_joplin_notes` returns titles, notebook names,
-  and update times (up to 20, newest first), so note content never reaches
-  OpenAI. Notes cannot be edited or moved, and notebooks cannot be deleted.
+  and update times (up to 20, newest first). Notes cannot be edited or moved,
+  and notebooks cannot be deleted. Only the scheduled planning cycle reads
+  note text, limited to Gary › Planning notes titled like an active project
+  and the previous daily summary.
 - `delete_joplin_note` deletes one note per call and requires
   `confirmed: true`, after Gary reads the title and notebook aloud. Only
   note IDs listed or created in the same voice session are accepted, and the
@@ -257,6 +259,44 @@ Key rules:
 - **Alerts**: every `OPS_CHECK_INTERVAL_MINUTES` the backend announces due
   follow-ups and newly overdue tasks once each (recorded in the audit log so a
   restart does not repeat them) and writes the daily backup.
+
+#### Scheduled planning cycle
+
+`gary/services/planning_cycle.py` runs in the backend at `PLANNING_TIMES` on
+`PLANNING_WEEKDAYS`, whether or not the voice service is connected:
+
+```text
+planning_get_context         SQLite state; starts a planning_runs row
+JoplinPlanningNotebook       Gary > Planning notes titled like an active
+                             project, plus the previous daily summary
+GoogleBusyCalendar           busy start/end times for the next 72 hours
+OpenAIPlanner                ONE Responses API call, strict JSON schema:
+                             summary, spoken briefing, calendar proposals
+validate_cycle_actions       deterministic Python checks
+action_propose               normal policy: green runs, yellow waits
+complete_cycle               plan, results, and rejections saved + audited
+write_daily_summary          Gary > Daily Summaries > "Daily summary YYYY-MM-DD"
+announce briefing            spoken if voice is connected and not quiet hours
+```
+
+Guardrails:
+
+- One model call per run and no tool loop. The model can only propose
+  `schedule_task` and `move_calendar_event`; it cannot send email, change
+  tasks, or approve anything in a scheduled run.
+- Every proposal is checked in Python before policy applies: the task exists
+  and is open, `schedule_task` only for ready, unscheduled tasks, times have an
+  offset, 15 to 240 minutes long, at least 10 minutes ahead and within 72
+  hours, inside `WORK_HOURS` on a planning weekday, no overlap with busy times
+  (other than the task's own event) or other proposals, one action per task,
+  and at most `PLANNING_MAX_ACTIONS`. Rejections are recorded with reasons.
+- If the calendar cannot be read, nothing is scheduled. If Joplin is closed,
+  planning continues without notes and the summary is skipped.
+- A run is started at most once per type per day, including failed runs, so a
+  failure is never retried in a loop. A run missed while the backend was down
+  is caught up within 90 minutes of its time.
+- Runs are serialized, and all database work uses short transactions; no
+  transaction is open during the model call or Google requests.
 
 Action handlers:
 

@@ -251,6 +251,49 @@ announce, and makes the daily backup. Each is announced once. Announcements
 respect `EMAIL_CHECK_QUIET_HOURS`. `0` turns the check off (backups still run
 at startup).
 
+## Scheduled planning
+
+### `PLANNING_TIMES`
+
+Default:
+
+```text
+morning=08:00,midday=12:30,evening=17:30
+```
+
+Local times of the scheduled planning runs. Names must be `morning`,
+`midday`, or `evening`. Leave empty (`PLANNING_TIMES=`) to turn scheduled runs
+off. Each run makes one OpenAI request, may put tasks on the calendar, writes
+the daily summary note, and may speak a short briefing (see
+[Architecture](ARCHITECTURE.md#scheduled-planning-cycle)).
+
+### `PLANNING_WEEKDAYS`
+
+Default: `mon,tue,wed,thu,fri`. Days when runs happen and when Gary may
+schedule work.
+
+### `WORK_HOURS`
+
+Default: `9-17`. Local hours, on a 24-hour clock, within which scheduled runs
+may place calendar blocks.
+
+### `PLANNING_MODEL`
+
+Default: `gpt-5.4-mini`. OpenAI model for the planning request (Responses API
+with structured output).
+
+### `PLANNING_MAX_ACTIONS`
+
+Default: `5`, capped at 10. Most calendar proposals accepted from one run.
+
+### Planning notes
+
+To give Gary context for a project, create a note in **Gary › Planning** in
+Joplin titled exactly like the project, for example `Chief of Staff video`.
+Scheduled runs read those notes and Gary's previous daily summary; no other
+notes are read. Summaries are written to **Gary › Daily Summaries**, one note
+per day.
+
 ## Joplin
 
 Gary uses the Joplin desktop app's Web Clipper API. In Joplin, open

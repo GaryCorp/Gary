@@ -176,13 +176,21 @@ emails.
 - The audit log is append-only, enforced by database triggers, and no tool
   can delete records, the database, or the audit log.
 - `data/gary.db` and its backups are created owner-only (600, folder 700).
+- The scheduled planning cycle makes one model call per run with a strict
+  output schema, may only propose scheduling or moving task calendar blocks,
+  and every proposal passes deterministic checks (readiness, working hours,
+  horizon, busy times, count) before the normal policy. It never sends email
+  or approves anything, and a failed run is not retried.
 
 ## Joplin tools
 
 - all note tools are confined to the Gary notebook (`JOPLIN_NOTEBOOK`) and its
   direct sub-notebooks; other notebooks are never matched;
 - no tool returns note text, so existing notes cannot leak to OpenAI or be
-  used for prompt injection;
+  used for prompt injection through a conversation. The scheduled planning
+  cycle reads only Gary › Planning notes titled like an active project and
+  Gary's own previous daily summary; the model is told that text is data, and
+  its only possible effect is calendar proposals that Python validates;
 - deleting requires spoken confirmation and `confirmed: true`, accepts only
   note IDs listed or created in the current voice session, rechecks the note is
   still inside Gary, and moves one note to the Joplin trash rather than

@@ -88,6 +88,11 @@ not exist. Joplin must be open whenever you want Gary to use notes.
 
 Leave `JOPLIN_TOKEN` empty to run without notes.
 
+Gary's scheduled planning runs (weekdays at 8:00, 12:30, and 17:30) write a
+daily summary to **Gary › Daily Summaries** and read planning notes you put in
+**Gary › Planning**, titled like a project. Change or turn off the schedule
+with `PLANNING_TIMES` in `.env`.
+
 ## G. VPN
 
 With NordVPN connected, its firewall drops traffic to Docker networks that are
@@ -169,6 +174,12 @@ Gary, make a note: test note from Gary.
 ```
 
 If required details are missing, the assistant can ask a follow-up.
+
+Run the backend tests (uses Docker, no local Python setup needed):
+
+```bash
+./scripts/test.sh
+```
 
 ## M. Restart
 

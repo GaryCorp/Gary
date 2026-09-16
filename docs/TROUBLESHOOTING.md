@@ -191,6 +191,13 @@ Run the backend tests:
 make test
 ```
 
+If `make` is not installed (`make: command not found`), run the script it
+calls, or install make with `sudo apt install make`:
+
+```bash
+./scripts/test.sh
+```
+
 The database and migrations are checked at backend startup; a failing
 migration is rolled back and logged in `docker compose logs backend`. To
 restore a backup:
@@ -201,6 +208,26 @@ cp data/backups/gary-YYYY-MM-DD.db data/gary.db
 rm -f data/gary.db-wal data/gary.db-shm
 docker compose start backend
 ```
+
+## Scheduled planning did not run or did nothing
+
+- Runs happen at `PLANNING_TIMES` on `PLANNING_WEEKDAYS` only, and a run missed
+  by more than 90 minutes (for example, the backend was stopped) is skipped
+  until the next time.
+- Each type runs once a day, even if it failed. Check the result:
+
+  ```bash
+  docker compose exec backend python -c "import sqlite3; c = sqlite3.connect('/data/gary.db'); [print(r) for r in c.execute('SELECT planning_type, status, started_at, error_message FROM planning_runs ORDER BY started_at DESC LIMIT 5')]"
+  ```
+
+- `failed` with an OpenAI error: check `OPENAI_API_KEY` and that
+  `PLANNING_MODEL` is available to your key.
+- Completed but nothing scheduled: the plan in `plan_json` lists each rejected
+  proposal with its reason (for example, outside working hours), and
+  `calendar_error` if Google Calendar could not be read.
+- No daily summary note: Joplin must be open with the Web Clipper enabled.
+- No spoken briefing: the voice service must be connected, it is not quiet
+  hours, and the model may return no briefing when nothing needs attention.
 
 ## Google login loops
 

@@ -11,6 +11,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from contextlib import asynccontextmanager
 from email.message import EmailMessage
 from email.utils import getaddresses, parseaddr, parsedate_to_datetime
 from pathlib import Path
@@ -30,6 +31,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from gary import build_gary
 from gary.backup import backup_daily
+from gary.planner import OpenAIPlanner
 from gary.db.repositories import Repositories
 from gary.models.action import (
     MoveCalendarEventPayload,
@@ -39,7 +41,17 @@ from gary.models.action import (
 from gary.policy import CRITICAL_TASK_PRIORITY, USER_ACTOR, YELLOW
 from gary.services.action_service import ActionHandler
 from gary.services.common import require_task
-from gary.timeutil import to_datetime, to_local
+from gary.services.planning_cycle import (
+    PlanningCycle,
+    daily_summary_title,
+    due_planning_types,
+    parse_schedule,
+    parse_weekdays,
+    parse_work_hours,
+    previous_summary,
+    select_relevant_notes,
+)
+from gary.timeutil import parse_timestamp, to_datetime, to_local
 from gary.tools import TOOL_NAMES as GARY_TOOL_NAMES
 from gary.tools import TOOL_SCHEMAS as GARY_TOOL_SCHEMAS
 from gary.tools import ToolContext as GaryToolContext
@@ -67,6 +79,16 @@ GARY_DB_PATH = Path(os.getenv("GARY_DB_PATH", "/data/gary.db"))
 GARY_BACKUP_DIR = Path(os.getenv("GARY_BACKUP_DIR", str(GARY_DB_PATH.parent / "backups")))
 GARY_BACKUP_KEEP = int(os.getenv("GARY_BACKUP_KEEP", "14"))
 OPS_CHECK_INTERVAL_MINUTES = float(os.getenv("OPS_CHECK_INTERVAL_MINUTES", "5"))
+PLANNING_SCHEDULE = parse_schedule(
+    os.getenv("PLANNING_TIMES", "morning=08:00,midday=12:30,evening=17:30")
+)
+PLANNING_WEEKDAYS = parse_weekdays(os.getenv("PLANNING_WEEKDAYS", "mon,tue,wed,thu,fri"))
+PLANNING_MODEL = os.getenv("PLANNING_MODEL", "gpt-5.4-mini").strip()
+PLANNING_MAX_ACTIONS = max(0, min(int(os.getenv("PLANNING_MAX_ACTIONS", "5")), 10))
+WORK_HOURS = parse_work_hours(os.getenv("WORK_HOURS", "9-17"))
+JOPLIN_PLANNING_NOTEBOOK = "Planning"
+JOPLIN_SUMMARY_NOTEBOOK = "Daily Summaries"
+PLANNING_NOTE_CHARS = 3000
 SESSION_SECRET = os.environ["SESSION_SECRET"]
 VOICE_BRIDGE_TOKEN = os.environ["VOICE_BRIDGE_TOKEN"]
 TOKEN_ENCRYPTION_KEY = os.environ["TOKEN_ENCRYPTION_KEY"]
@@ -116,7 +138,24 @@ JOPLIN_NOTE_TITLE_LIMIT = 200
 JOPLIN_NOTE_BODY_LIMIT = 20000
 JOPLIN_NOTE_LIST_LIMIT = 20
 
-app = FastAPI(title="Local AI Calendar Assistant")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Scheduled planning runs in the backend, whether or not voice is connected.
+    scheduler = (
+        asyncio.create_task(run_planning_scheduler()) if PLANNING_SCHEDULE else None
+    )
+    try:
+        yield
+    finally:
+        if scheduler is not None:
+            scheduler.cancel()
+            try:
+                await scheduler
+            except (asyncio.CancelledError, Exception):
+                pass
+
+
+app = FastAPI(title="Local AI Calendar Assistant", lifespan=lifespan)
 app.add_middleware(
     SessionMiddleware,
     secret_key=SESSION_SECRET,
@@ -1753,6 +1792,183 @@ async def announce_operations(websocket: WebSocket) -> None:
             )
 
 
+# ---------------------------------------------------------------------------
+# Scheduled planning cycle: Joplin planning notes and daily summaries, busy
+# calendar times, the planner model call, and the scheduler.
+# ---------------------------------------------------------------------------
+
+voice_connections: set[WebSocket] = set()
+
+
+def find_child_notebook(children: list[dict], name: str) -> dict | None:
+    return next(
+        (f for f in children if notebook_key(f["title"]) == notebook_key(name)),
+        None,
+    )
+
+
+class JoplinPlanningNotebook:
+    """Reads only Gary > Planning notes titled like an active project, and the
+    previous daily summary Gary wrote. Writes one summary note per day."""
+
+    async def _note_text(self, note_id: str) -> str:
+        note = await joplin_request(
+            "GET", f"/notes/{urllib.parse.quote(note_id)}?fields=body"
+        )
+        return (note.get("body") or "")[:PLANNING_NOTE_CHARS]
+
+    async def get_relevant_notes(self, project_names: list[str], today: dt.date) -> list[dict]:
+        if not JOPLIN_TOKEN:
+            return []
+        _, children = await gary_notebooks()
+        notes = []
+
+        planning = find_child_notebook(children, JOPLIN_PLANNING_NOTEBOOK)
+        if planning and project_names:
+            listed = await joplin_items(f"/folders/{planning['id']}/notes?fields=id,title")
+            for note in select_relevant_notes(listed, project_names):
+                notes.append(
+                    {
+                        "source": f"{JOPLIN_PLANNING_NOTEBOOK} note",
+                        "title": note["title"],
+                        "text": await self._note_text(note["id"]),
+                    }
+                )
+
+        summaries = find_child_notebook(children, JOPLIN_SUMMARY_NOTEBOOK)
+        if summaries:
+            listed = await joplin_items(f"/folders/{summaries['id']}/notes?fields=id,title")
+            previous = previous_summary(listed, today)
+            if previous:
+                notes.append(
+                    {
+                        "source": "previous daily summary",
+                        "title": previous["title"],
+                        "text": await self._note_text(previous["id"]),
+                    }
+                )
+        return notes
+
+    async def write_daily_summary(self, day: dt.date, markdown: str) -> None:
+        if not JOPLIN_TOKEN:
+            return
+        await create_joplin_notebook(JOPLIN_SUMMARY_NOTEBOOK)
+        _, children = await gary_notebooks()
+        folder = find_child_notebook(children, JOPLIN_SUMMARY_NOTEBOOK)
+        title = daily_summary_title(day)
+
+        listed = await joplin_items(f"/folders/{folder['id']}/notes?fields=id,title")
+        existing = next((n for n in listed if n["title"] == title), None)
+        if existing is None:
+            await joplin_request(
+                "POST", "/notes", {"title": title, "body": markdown, "parent_id": folder["id"]}
+            )
+            return
+
+        path = f"/notes/{urllib.parse.quote(existing['id'])}"
+        current = await joplin_request("GET", f"{path}?fields=body")
+        body = (current.get("body") or "").rstrip()
+        await joplin_request("PUT", path, {"body": f"{body}\n\n{markdown}" if body else markdown})
+
+
+class GoogleBusyCalendar:
+    """Busy intervals only: no titles, attendees, or descriptions."""
+
+    async def busy_intervals(self, start: str, end: str) -> list[dict]:
+        _, credentials = await credentials_for_active_user()
+        service = calendar_service(credentials)
+        intervals, page_token = [], None
+
+        for _ in range(10):
+            arguments = {
+                "calendarId": "primary",
+                "timeMin": start,
+                "timeMax": end,
+                "singleEvents": True,
+                "orderBy": "startTime",
+                "maxResults": 250,
+            }
+            if page_token:
+                arguments["pageToken"] = page_token
+            response = await asyncio.to_thread(
+                lambda: service.events().list(**arguments).execute()
+            )
+
+            for event in response.get("items", []):
+                event_start = event.get("start", {}).get("dateTime")
+                event_end = event.get("end", {}).get("dateTime")
+                declined = any(
+                    attendee.get("self") and attendee.get("responseStatus") == "declined"
+                    for attendee in event.get("attendees", [])
+                )
+                if (
+                    not event_start  # all-day events do not block time
+                    or event.get("transparency") == "transparent"
+                    or event.get("status") == "cancelled"
+                    or declined
+                ):
+                    continue
+                intervals.append(
+                    {
+                        "start": parse_timestamp(event_start, "start"),
+                        "end": parse_timestamp(event_end, "end"),
+                        "event_id": event.get("id"),
+                    }
+                )
+
+            page_token = response.get("nextPageToken")
+            if not page_token:
+                break
+        return intervals
+
+
+planning_cycle = PlanningCycle(
+    gary_ops,
+    OpenAIPlanner(OPENAI_API_KEY, PLANNING_MODEL),
+    JoplinPlanningNotebook(),
+    GoogleBusyCalendar(),
+    work_hours=WORK_HOURS,
+    work_days=PLANNING_WEEKDAYS,
+    max_actions=PLANNING_MAX_ACTIONS,
+)
+
+
+async def announce_to_voice(message: str) -> None:
+    for websocket in list(voice_connections):
+        try:
+            await websocket.send_text(
+                json.dumps({"type": "bridge.announce", "message": message})
+            )
+        except Exception:
+            voice_connections.discard(websocket)
+
+
+async def run_planning_scheduler() -> None:
+    timezone = ZoneInfo(LOCAL_TIMEZONE)
+    while True:
+        try:
+            now_local = dt.datetime.now(timezone)
+            started = await asyncio.to_thread(
+                gary_ops.planning.run_types_started_on, now_local.date(), timezone
+            )
+            for planning_type in due_planning_types(
+                now_local, PLANNING_SCHEDULE, PLANNING_WEEKDAYS, started
+            ):
+                try:
+                    result = await planning_cycle.run(planning_type)
+                except Exception:
+                    # Recorded as a failed planning run; not retried today.
+                    continue
+                briefing = result["briefing"]
+                if briefing and not in_quiet_hours(dt.datetime.now(timezone)):
+                    await announce_to_voice(briefing)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Planning scheduler check failed")
+        await asyncio.sleep(60)
+
+
 CREATE_CALENDAR_EVENT_TOOL = {
     "type": "function",
     "name": "create_calendar_event",
@@ -2676,6 +2892,7 @@ async def internal_voice(websocket: WebSocket):
         return
 
     await websocket.accept()
+    voice_connections.add(websocket)
 
     session: dict = {
         "event_ids": set(),
@@ -3089,6 +3306,8 @@ times and dates the way they are spoken, for example "two thirty PM".
             pass
 
     finally:
+        voice_connections.discard(websocket)
+
         for checker in (email_checker, operations_checker):
             if checker is None:
                 continue

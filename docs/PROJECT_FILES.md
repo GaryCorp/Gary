@@ -65,7 +65,7 @@ Backend Python dependencies.
 
 ### `backend/requirements-dev.txt`
 
-Test dependencies (pytest), used by `make test`.
+Test dependencies (pytest), used by `scripts/test.sh` and `make test`.
 
 ### `backend/gary/`
 
@@ -75,11 +75,13 @@ Chief of Staff operations package:
 - `policy.py` holds the action risk policy;
 - `timeutil.py` holds the timestamp rules;
 - `backup.py` makes SQLite backups;
+- `planner.py` makes the single OpenAI call for a scheduled planning run;
 - `db/` has the connection, migrations (`db/migrations/NNN_name.sql`), and
   repositories with all SQL;
 - `models/` has the Pydantic request models;
 - `services/` has business logic: tasks, projects, follow-ups, commitments,
-  planning and scoring, actions, and approvals;
+  planning and scoring, actions, approvals, and the scheduled planning cycle
+  (`planning_cycle.py`);
 - `tools/` has the function tools exposed to Gary.
 
 ### `backend/tests/`
@@ -104,6 +106,7 @@ Contains:
 - Joplin note and notebook tools;
 - Google Calendar and Gmail action handlers for the operations package;
 - the approvals web page;
+- the planning scheduler, Joplin planning notebook, and busy-calendar reader;
 - the hourly new email check.
 
 ## `voice/`
@@ -147,6 +150,10 @@ service using the stock `python:3.12-slim` image.
 ### `scripts/diagnose.sh`
 
 Checks Docker, host audio, configuration, and container audio visibility.
+
+### `scripts/test.sh`
+
+Runs the backend test suite in the backend Docker image. `make test` calls it.
 
 ### `scripts/check_python.sh`
 

@@ -58,8 +58,9 @@ Google OAuth credentials are stored locally in encrypted form.
 What you ask Gary to note is sent to OpenAI as part of the conversation, like
 any request, and saved to your local Joplin app. The names of notebooks inside
 Gary, and the titles of notes in them, are sent when Gary looks up where a note
-goes or which note to delete. Gary never reads the text of existing notes, and
-cannot see notebooks outside Gary.
+goes or which note to delete. In conversation Gary never reads the text of
+existing notes, and cannot see notebooks outside Gary. The one exception is the
+scheduled planning cycle below.
 
 ## Projects and tasks
 
@@ -68,6 +69,23 @@ backups in `data/backups`. When Gary uses the operations tools, the returned
 project, task, follow-up, commitment, approval, and action details are sent to
 OpenAI as part of the conversation. The periodic follow-up and overdue check
 runs in the backend only; Gary speaks the titles aloud.
+
+## Scheduled planning cycle
+
+Each scheduled run (by default 8:00, 12:30, and 17:30 on weekdays) makes one
+request to OpenAI (`PLANNING_MODEL`) containing:
+
+- the same operations state `planning_get_context` returns: projects, tasks,
+  deadlines, follow-ups, commitments, pending approvals, and recent actions;
+- your busy calendar times for the next 72 hours, as start and end times only,
+  with no event titles, attendees, or descriptions;
+- the text (up to 3000 characters each) of notes in **Gary › Planning** whose
+  title matches an active project name, and of Gary's previous daily summary
+  note. No other note is read.
+
+The request is sent with `store: false`. The daily summary is written to
+**Gary › Daily Summaries** in Joplin, and a short briefing may be spoken aloud.
+Set `PLANNING_TIMES` empty to turn scheduled runs off.
 
 ## OpenAI key
 

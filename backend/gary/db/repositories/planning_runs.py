@@ -52,6 +52,29 @@ class PlanningRunRepository:
         )
         return self.get(run_id)
 
+    def fail(self, run_id: str, error: str, now: str | None = None) -> dict:
+        self.conn.execute(
+            """
+            UPDATE planning_runs
+            SET status = 'failed', completed_at = ?, error_message = ?
+            WHERE id = ? AND status = 'running'
+            """,
+            (now or now_utc(), error, run_id),
+        )
+        return self.get(run_id)
+
+    def list_started_between(self, start: str, end: str) -> list[dict]:
+        return rows_to_dicts(
+            self.conn.execute(
+                """
+                SELECT * FROM planning_runs
+                WHERE started_at >= ? AND started_at < ?
+                ORDER BY started_at
+                """,
+                (start, end),
+            )
+        )
+
     def fail_stale(self, started_before: str, now: str | None = None) -> int:
         cursor = self.conn.execute(
             """

@@ -200,6 +200,64 @@ class PlanningService:
             )
         return run
 
+    def complete_cycle(self, run_id: str, plan: dict, actor: str = GARY_ACTOR) -> dict:
+        """Record the outcome of a scheduled planning cycle."""
+        now = clock_now(self.clock)
+        with self.db.transaction() as conn:
+            repos = Repositories.bind(conn)
+            run = repos.planning_runs.get(run_id)
+            if run is None:
+                raise NotFoundError(f"No planning run with id {run_id}")
+            if run["status"] != "running":
+                raise ValueError(f"Planning run is already {run['status']}")
+            run = repos.planning_runs.complete(run_id, plan, now)
+            repos.audit.write(
+                actor,
+                "planning_cycle_completed",
+                f"Completed {run['planning_type']} planning cycle",
+                "planning_run",
+                run_id,
+                {
+                    "results": [
+                        {
+                            "action_type": item["proposal"]["action_type"],
+                            "status": item["result"].get("status"),
+                        }
+                        for item in plan.get("results", [])
+                    ],
+                    "rejected": len(plan.get("rejected", [])),
+                },
+                now=now,
+            )
+        return run
+
+    def fail_run(self, run_id: str, error: str) -> dict:
+        now = clock_now(self.clock)
+        with self.db.transaction() as conn:
+            repos = Repositories.bind(conn)
+            run = repos.planning_runs.fail(run_id, error[:1000], now)
+            repos.audit.write(
+                SYSTEM_ACTOR,
+                "planning_cycle_failed",
+                f"Planning cycle failed: {error[:200]}",
+                "planning_run",
+                run_id,
+                {"error": error[:1000]},
+                now=now,
+            )
+        return run
+
+    def run_types_started_on(self, day: dt.date, timezone) -> set[str]:
+        """Planning types that already started on a local calendar day, in any
+        status, so a failed scheduled run is not retried in a loop."""
+        start = dt.datetime.combine(day, dt.time(), timezone)
+        end = start + dt.timedelta(days=1)
+        with self.db.read() as conn:
+            runs = Repositories.bind(conn).planning_runs.list_started_between(
+                format_utc(start), format_utc(end)
+            )
+        return {run["planning_type"] for run in runs}
+
     def find_overdue_tasks(self) -> list[dict]:
         now = clock_now(self.clock)
         with self.db.read() as conn:

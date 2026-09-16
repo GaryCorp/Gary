@@ -1,11 +1,11 @@
 {
   "project": "ai-calendar-assistant-complete",
-  "file_count": 83,
+  "file_count": 87,
   "files": [
     {
       "path": ".env.example",
-      "bytes": 5278,
-      "sha256": "f3625e65a848597c9ecf878f5690442bd0184ce721944f60e2a50c7b3a9f03e1"
+      "bytes": 5777,
+      "sha256": "5b4408d59136588f80710fef886bc348b1880bdd8e9c3c44c029c272084effd7"
     },
     {
       "path": ".gitignore",
@@ -14,13 +14,13 @@
     },
     {
       "path": "CHANGELOG.md",
-      "bytes": 6716,
-      "sha256": "bb0c139e4e6d10c8aedd6afa87b90f959efc52f03b9ad683b0432ae9172a2d70"
+      "bytes": 7783,
+      "sha256": "6f4d1480311047ca37880a7be61cb25f2899c267b223dd72fa5459f858890c8b"
     },
     {
       "path": "Makefile",
-      "bytes": 1107,
-      "sha256": "141380328f263ec2e66ab29151d9d4ebd9c6036f23d45b29fceb592b39369e83"
+      "bytes": 869,
+      "sha256": "a464341571479757cf30127a5c99c392c6e3a4eb97fbfea73d03e40adb1d390c"
     },
     {
       "path": "QUICKSTART.md",
@@ -44,8 +44,8 @@
     },
     {
       "path": "backend/app/main.py",
-      "bytes": 103835,
-      "sha256": "09aabf9b0ec7b2f94eea131924d5bc52d676dc89376f134ba4d3b20a1249decd"
+      "bytes": 112066,
+      "sha256": "1ce5bd1569c8a944ce36a48352ef4e3bd71326faa7bc70bbd82d3ee43182138a"
     },
     {
       "path": "backend/gary/__init__.py",
@@ -124,8 +124,8 @@
     },
     {
       "path": "backend/gary/db/repositories/planning_runs.py",
-      "bytes": 2066,
-      "sha256": "b342a9d48d71f59824a6f39e604111e39d5d4b34a0e6ca393140573e9997d7a2"
+      "bytes": 2811,
+      "sha256": "1b4d2b35fd46782f9ffd49f0548ff1d513700604d7377254f00ae0839fe2029c"
     },
     {
       "path": "backend/gary/db/repositories/projects.py",
@@ -178,6 +178,11 @@
       "sha256": "fcdf68dc586b37811e883e8ddba757c05fdbe189931702c31b294dfc52fb0bc6"
     },
     {
+      "path": "backend/gary/planner.py",
+      "bytes": 7414,
+      "sha256": "0ed1cb845b4d0d75ad67457f9b5b5299066940e1ae55ccf85203f30cd1229d6a"
+    },
+    {
       "path": "backend/gary/policy.py",
       "bytes": 1607,
       "sha256": "dbf6c1a109e91c3cb46272e14eee4fe5b27f996f2f9469e70f1cb6a1307d205f"
@@ -213,9 +218,14 @@
       "sha256": "cac3e9bc95c1c30801e90f7fbe5bd8d03320426dfe3cccf290fc4ef8fcc32525"
     },
     {
+      "path": "backend/gary/services/planning_cycle.py",
+      "bytes": 19313,
+      "sha256": "0b3df57f49fa8290c4a78dab455476dc04c636567cf07029d233a2d415c60671"
+    },
+    {
       "path": "backend/gary/services/planning_service.py",
-      "bytes": 10276,
-      "sha256": "2736998f8f1a0515eac7d6c1ec3b9625b9cfba6b7271b8e6f529161fca17a160"
+      "bytes": 12711,
+      "sha256": "314c2b6d0deaf9b1bfd4290a5706899afb9aaf21e7bc5beb56e41bb0f63f454a"
     },
     {
       "path": "backend/gary/services/project_service.py",
@@ -303,6 +313,11 @@
       "sha256": "fd339b6a6c258d82230cbc215efa31822e44fb8e1d2d044748d56d2954b4ad78"
     },
     {
+      "path": "backend/tests/test_planning_cycle.py",
+      "bytes": 17271,
+      "sha256": "434263eb0fa39ed8ace2ad4dd29128198ccef32abd32d5067b0d87ba0269ef79"
+    },
+    {
       "path": "backend/tests/test_projects_tasks.py",
       "bytes": 9276,
       "sha256": "992a6f9eb6b07a944409b88f8369a4c7112b3ddd5cfd68124db85defca0528bb"
@@ -319,8 +334,8 @@
     },
     {
       "path": "compose.yaml",
-      "bytes": 5412,
-      "sha256": "2bb02443ef7cc3e1ad2be1c82f6f575871064d83c8321496da3f234957a73fb6"
+      "bytes": 5793,
+      "sha256": "0bc799204778c25781a07545c3fa6ddf4a440349e0095407e2a5b743463fcbe7"
     },
     {
       "path": "data/.gitkeep",
@@ -329,13 +344,13 @@
     },
     {
       "path": "docs/ARCHITECTURE.md",
-      "bytes": 14074,
-      "sha256": "7ba0a5f445545f33ba7ea01b79424fd2b6fb6579cf89c224fd53f8136d80db67"
+      "bytes": 16319,
+      "sha256": "29366075d25c93303b5b697d286aeaad47f0686f5b37a8dca44dfb6d070f229b"
     },
     {
       "path": "docs/CONFIGURATION.md",
-      "bytes": 6676,
-      "sha256": "c2512e9c9ea04f81428d7550c2f08a6c8a0647adf93bc32b28a3d9730f72862c"
+      "bytes": 7938,
+      "sha256": "c17fa586cc21dffbd10bb4b5acdffb945278afbf8147360fa6834657cf435e03"
     },
     {
       "path": "docs/GOOGLE_OAUTH.md",
@@ -344,33 +359,33 @@
     },
     {
       "path": "docs/PRIVACY.md",
-      "bytes": 2894,
-      "sha256": "e0cdc509da652072301b4fdf186d7a73c8765941ba55547930e49e7e927542fd"
+      "bytes": 3808,
+      "sha256": "393972110b6ecaf11a25039ec6e8a7e86655f29b4eccb669f9cb01093c41e5e3"
     },
     {
       "path": "docs/PROJECT_FILES.md",
-      "bytes": 4086,
-      "sha256": "276d1b93758f99343cc9ace5fc3bdbd33ae8092dd0f737b36e333bfbc5392b15"
+      "bytes": 4417,
+      "sha256": "9b70ed00a3061f9a68526d12099f595e4a42305686c85b7aa870dcd59e854d25"
     },
     {
       "path": "docs/SECURITY.md",
-      "bytes": 6323,
-      "sha256": "4fe1519f5c409fac1329c3fd562c326bf10ee633ad5e0eb967aabafd644c6b8d"
+      "bytes": 6957,
+      "sha256": "3aeaedb59cfcedbd2510f316193c1613c80e6c5f32b03841d9b275f402517610"
     },
     {
       "path": "docs/SETUP.md",
-      "bytes": 3489,
-      "sha256": "fed650f8a654f16f7c11a6cc6848b74d29d0d6b0968194b30a992aa0b9d28552"
+      "bytes": 3857,
+      "sha256": "b873f6963f56b75635b18f5e051d04a8525b4e0b2e759411c267ad2197853e59"
     },
     {
       "path": "docs/TROUBLESHOOTING.md",
-      "bytes": 5717,
-      "sha256": "9c8b12d61c62b616d87ade5b158e589d168d0a907e70e3ea675f98c846e6d34b"
+      "bytes": 6968,
+      "sha256": "84f750ca02d119cfbf597e23781b3af7dfb3bd5a2d6c4c54708065bf94997312"
     },
     {
       "path": "docs/USAGE.md",
-      "bytes": 8817,
-      "sha256": "84502a1c6b433d519a3344288f94a52ded73a232114948cb04130ebeaffe903c"
+      "bytes": 9733,
+      "sha256": "008e5a0db38b6ee8282896228098aa200a2d0561fc5bfce3b4a4a525c4f7df6a"
     },
     {
       "path": "joplin_proxy/joplin_proxy.py",
@@ -391,6 +406,11 @@
       "path": "scripts/diagnose.sh",
       "bytes": 1121,
       "sha256": "6e17f9a92eb6674f4b26d597be0f39c46316cd381338fda53a5453ecdeb953d1"
+    },
+    {
+      "path": "scripts/test.sh",
+      "bytes": 437,
+      "sha256": "a03beda04cd60a2715f3d09de0f85a75769baf044cef1bfc694f4dc5ab15351e"
     },
     {
       "path": "setup.sh",

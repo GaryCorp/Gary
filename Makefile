@@ -39,9 +39,6 @@ rebuild:
 	docker compose build
 	docker compose up -d
 
-# Runs the SQLite backend tests in the backend image, against temporary databases.
+# Runs the backend tests in the backend image, against temporary databases.
 test:
-	docker compose build backend
-	docker compose run --rm --no-deps -T \
-		-v ./backend:/src:ro -w /src -e PYTHONDONTWRITEBYTECODE=1 \
-		backend sh -c "pip install --quiet --user -r requirements-dev.txt && python -m pytest -p no:cacheprovider -q tests"
+	./scripts/test.sh
