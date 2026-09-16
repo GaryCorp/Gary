@@ -8,6 +8,7 @@ A privacy-oriented Ubuntu voice assistant that uses:
 - **OpenAI Realtime** only after local wake-word activation.
 - **FastAPI** as the local backend.
 - **Google Calendar API** through constrained create and read tools.
+- **Joplin** notes in a Gary notebook, through the desktop app's Web Clipper API.
 - **Docker Compose** with separate `voice` and `backend` containers.
 
 ## Core privacy behavior
@@ -52,6 +53,9 @@ See [`docs/PROJECT_FILES.md`](docs/PROJECT_FILES.md) for the complete manifest.
 
 Or ask: **"Gary, what's on my calendar tomorrow?"** The assistant retrieves
 matching events and reads a concise chronological summary aloud.
+
+Or: **"Gary, make a note: call the plumber tomorrow."** Notes go into your
+Gary notebook in Joplin (see [`docs/USAGE.md`](docs/USAGE.md#notes-joplin)).
 
 ## Documentation
 

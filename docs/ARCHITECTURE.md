@@ -151,6 +151,39 @@ message, which Piper speaks. OpenAI is not involved and Gary does not wake.
 - The voice service holds announcements until an active conversation ends,
   and ignores the wake word while Gary is speaking.
 
+### 5. Joplin notes
+
+The backend has five note tools, also available only to the voice agent:
+
+```text
+list_joplin_notebooks
+create_joplin_notebook
+create_joplin_note
+list_joplin_notes
+delete_joplin_note
+```
+
+They call the Joplin desktop app's Web Clipper API through the `joplin-proxy`
+service. Joplin listens only on the host's `127.0.0.1:41184`; `joplin-proxy`
+runs on the host network, listens on the assistant network's gateway
+(`172.30.99.1:41184`), and accepts connections only from the assistant subnet.
+
+Note safeguards:
+
+- No tool reads note text. `list_joplin_notes` returns titles, notebook names,
+  and update times (up to 20, newest first), so note content never reaches
+  OpenAI. Notes cannot be edited or moved, and notebooks cannot be deleted.
+- `delete_joplin_note` deletes one note per call and requires
+  `confirmed: true`, after Gary reads the title and notebook aloud. Only
+  note IDs listed or created in the same voice session are accepted, and the
+  backend checks the note's current notebook is still inside Gary just before
+  deleting. Notes go to the Joplin trash, not permanent deletion.
+- Everything is confined to the `JOPLIN_NOTEBOOK` notebook (default `Gary`)
+  and its direct sub-notebooks. Other notebooks are never matched by name.
+- New notebooks are always created inside Gary, and an existing name is reused
+  rather than duplicated.
+- Titles are one line, up to 200 characters; bodies up to 20000 characters.
+
 ## Audio flow
 
 ### Sleeping state
@@ -241,3 +274,5 @@ Docker publishes:
 Only the local host can directly reach the published FastAPI port.
 
 The voice-to-backend connection uses the Docker bridge network.
+
+`joplin-proxy` listens only on the bridge gateway address, not on the LAN.

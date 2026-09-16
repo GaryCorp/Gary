@@ -219,6 +219,38 @@ Local hours, on a 24-hour clock, when Gary does not announce new email: `22-7`
 means 10 PM to 7 AM. Email that arrives then is announced at the first check
 afterwards. Leave empty to announce at any hour.
 
+## Joplin
+
+Gary uses the Joplin desktop app's Web Clipper API. In Joplin, open
+**Tools > Options > Web Clipper**, enable the service, and copy the
+authorization token.
+
+### `JOPLIN_TOKEN`
+
+Default: empty (notes are unavailable).
+
+The Web Clipper authorization token. Restart the backend after changing it:
+
+```bash
+docker compose up -d backend
+```
+
+### `JOPLIN_NOTEBOOK`
+
+Default:
+
+```text
+Gary
+```
+
+The top-level notebook Gary writes to. It is created if it does not exist. Gary
+can only create notes in it and in notebooks inside it.
+
+Joplin listens only on the host's `127.0.0.1:41184`, which containers cannot
+reach. The `joplin-proxy` service runs on the host network and forwards
+`ASSISTANT_GATEWAY:41184` to Joplin, accepting connections only from
+`ASSISTANT_SUBNET`.
+
 ## Docker network
 
 ### `ASSISTANT_SUBNET`
@@ -234,6 +266,17 @@ fixed so that a VPN allowlist entry keeps working when Docker recreates the
 network (see [Troubleshooting](TROUBLESHOOTING.md#nordvpn-or-another-vpn-is-connected)).
 Change it only if it overlaps another network, then run `docker compose down`
 and `docker compose up -d` so the network is recreated.
+
+### `ASSISTANT_GATEWAY`
+
+Default:
+
+```text
+172.30.99.1
+```
+
+The host's address on that network, where `joplin-proxy` listens. It must be
+inside `ASSISTANT_SUBNET`; change both together.
 
 ## Audio device
 

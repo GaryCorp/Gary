@@ -169,6 +169,59 @@ Say "Gary, read the one from Sam" to hear it. Gary stays quiet from 10 PM to
 7 AM and waits until you finish a conversation. Change the interval or quiet
 hours in `.env` (see [Configuration](CONFIGURATION.md#new-email-check)).
 
+### Notes (Joplin)
+
+Gary can make notes in your **Gary** notebook in Joplin, and create new
+notebooks inside it. The Joplin desktop app must be open with the Web Clipper
+service enabled (see [Configuration](CONFIGURATION.md#joplin)).
+
+```text
+Gary, make a note: call the plumber about the kitchen sink.
+```
+
+```text
+Gary, create a notebook called Groceries.
+```
+
+```text
+Gary, add a note to Groceries: eggs, milk, and coffee.
+```
+
+```text
+Gary, what notebooks do I have?
+```
+
+Notes go into Gary unless you name one of its notebooks. If that notebook
+doesn't exist, Gary asks whether to create it. New notebooks are always created
+inside Gary:
+
+```text
+Gary
+├── (notes)
+└── Groceries
+    └── (notes)
+```
+
+To delete a note:
+
+```text
+User: Gary, delete my note about the plumber.
+Assistant: I found Call the plumber in your Gary notebook. Should I delete it?
+User: Yes.
+Assistant: Done, I moved Call the plumber to the Joplin trash.
+```
+
+If several notes match, Gary asks which one. One note is deleted per
+confirmation, and it goes to the Joplin trash, so you can restore it from there
+in Joplin.
+
+```text
+Gary, what notes do I have in Groceries?
+```
+
+Gary can see note titles but not what notes say. He cannot edit or move notes,
+delete notebooks, or touch notebooks outside Gary.
+
 ## Follow-up behavior
 
 After an assistant response, a short follow-up period remains active.

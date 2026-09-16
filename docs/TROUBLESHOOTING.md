@@ -151,6 +151,30 @@ The subnet should be listed under **Allowlisted subnets**. The allowlist entry
 persists across VPN reconnects and reboots. For other VPNs, allow the same
 subnet as local or split-tunnel traffic.
 
+## Gary can't make notes
+
+Gary tells you the reason. Check:
+
+- The Joplin desktop app is open, and **Tools > Options > Web Clipper** shows
+  the service as enabled on port 41184.
+- `JOPLIN_TOKEN` in `.env` matches the token shown there. Restart the backend
+  after changing it: `docker compose up -d backend`.
+- The proxy is running:
+
+  ```bash
+  docker compose logs joplin-proxy
+  ```
+
+  Expected: `[joplin-proxy] forwarding 172.30.99.1:41184 to Joplin at
+  127.0.0.1:41184`. If it keeps saying `cannot listen`, run
+  `docker compose down` and `docker compose up -d`.
+
+Test the whole path from the backend:
+
+```bash
+docker compose exec backend python -c "import asyncio; from app.main import list_joplin_notebooks as f; print(asyncio.run(f()))"
+```
+
 ## Google login loops
 
 Confirm the Google OAuth redirect URI exactly matches:

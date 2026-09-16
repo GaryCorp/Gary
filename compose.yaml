@@ -22,6 +22,11 @@ services:
       EMAIL_CHECK_INTERVAL_MINUTES: "${EMAIL_CHECK_INTERVAL_MINUTES:-60}"
       EMAIL_CHECK_QUIET_HOURS: "${EMAIL_CHECK_QUIET_HOURS-22-7}"
 
+      # Joplin Web Clipper API, reached through the joplin-proxy service.
+      JOPLIN_TOKEN: "${JOPLIN_TOKEN:-}"
+      JOPLIN_API_URL: "http://${ASSISTANT_GATEWAY:-172.30.99.1}:41184"
+      JOPLIN_NOTEBOOK: "${JOPLIN_NOTEBOOK:-Gary}"
+
       CLIENT_SECRETS_FILE: /run/secrets/google_client_secret.json
       TOKEN_STORE_FILE: /data/token_store.enc
       REDIRECT_URI: http://localhost:8000/oauth2callback
@@ -130,6 +135,49 @@ services:
     mem_limit: 1400m
     cpus: 2.00
 
+  # Joplin desktop listens only on the host's 127.0.0.1. This forwards the
+  # assistant network's gateway address to it, for the backend only.
+  joplin-proxy:
+    image: python:3.12-slim
+
+    restart: unless-stopped
+
+    command: ["python", "/app/joplin_proxy.py"]
+
+    network_mode: host
+
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+
+    environment:
+      LISTEN_HOST: "${ASSISTANT_GATEWAY:-172.30.99.1}"
+      LISTEN_PORT: "41184"
+      JOPLIN_PORT: "41184"
+      ALLOWED_SUBNET: "${ASSISTANT_SUBNET:-172.30.99.0/24}"
+
+    volumes:
+      - type: bind
+        source: ./joplin_proxy/joplin_proxy.py
+        target: /app/joplin_proxy.py
+        read_only: true
+        bind:
+          create_host_path: false
+
+    # Starting after the backend guarantees the gateway address exists.
+    depends_on:
+      - backend
+
+    read_only: true
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    pids_limit: 32
+    mem_limit: 64m
+    cpus: 0.25
+
 networks:
   assistant_net:
     driver: bridge
@@ -138,3 +186,4 @@ networks:
     ipam:
       config:
         - subnet: "${ASSISTANT_SUBNET:-172.30.99.0/24}"
+          gateway: "${ASSISTANT_GATEWAY:-172.30.99.1}"

@@ -12,7 +12,7 @@ Shortest installation path.
 
 ### `compose.yaml`
 
-Defines the backend and local Whisper containers.
+Defines the backend, local Whisper voice, and Joplin proxy containers.
 
 ### `.env.example`
 
@@ -67,7 +67,9 @@ Contains:
 - encrypted token persistence;
 - Calendar API read/create helpers;
 - Realtime WebSocket bridge;
-- constrained calendar read and create function tools.
+- constrained calendar read and create function tools;
+- Gmail tools;
+- Joplin note and notebook tools.
 
 ## `voice/`
 
@@ -89,6 +91,14 @@ Contains:
 - pre-roll;
 - Realtime audio forwarding;
 - assistant audio playback.
+
+## `joplin_proxy/`
+
+### `joplin_proxy/joplin_proxy.py`
+
+Forwards the assistant network's gateway address to the Joplin desktop app's
+Web Clipper API on the host's `127.0.0.1:41184`. Runs in the `joplin-proxy`
+service using the stock `python:3.12-slim` image.
 
 ## `scripts/`
 

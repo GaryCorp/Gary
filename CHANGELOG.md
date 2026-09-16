@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.10.0 — Delete Joplin notes
+
+- Added `list_joplin_notes` (titles, notebooks, and update times only, never
+  note text) and `delete_joplin_note` voice-agent tools.
+- Deleting requires spoken confirmation and a `confirmed` flag, accepts only
+  notes listed or created in the current voice session, and rechecks that the
+  note is still inside the Gary notebook. Notes go to the Joplin trash.
+- `create_joplin_note` now returns the note's ID, so a note just created can be
+  deleted.
+
+## 1.9.0 — Joplin notes
+
+- Added `create_joplin_note`, `create_joplin_notebook`, and
+  `list_joplin_notebooks` voice-agent tools. Notes go in the Joplin notebook
+  `Gary` (`JOPLIN_NOTEBOOK`) or a notebook inside it; new notebooks are always
+  created inside Gary. The tools cannot read, edit, or delete notes.
+- New `joplin-proxy` service forwards the assistant network's gateway
+  (`ASSISTANT_GATEWAY`, default `172.30.99.1`) to the Joplin desktop app's Web
+  Clipper API on the host's `127.0.0.1:41184`.
+- New setting `JOPLIN_TOKEN`: the Web Clipper authorization token.
+
 ## 1.8.1 — Works with NordVPN
 
 - The Docker network between the voice and backend containers now uses a

@@ -25,9 +25,15 @@ It is not designed as an Internet-facing multi-user service.
 - OpenAI API key;
 - Google OAuth client file;
 - encrypted token storage;
-- bridge token.
+- bridge token;
+- Joplin Web Clipper token.
 
 The backend has no audio access.
+
+The Joplin token grants full access to Joplin, so it is given only to the
+backend, and the backend's note tools only list note titles, create notes and
+notebooks, and move single confirmed notes to the trash, all inside the Gary
+notebook. `joplin-proxy` receives no secrets.
 
 ## Host network exposure
 
@@ -39,6 +45,11 @@ The Compose file publishes FastAPI as:
 
 Do not change this to a public bind unless you deliberately build a production
 security layer around the service.
+
+`joplin-proxy` uses the host network so it can reach Joplin on `127.0.0.1`. It
+listens only on the assistant network's gateway address (`172.30.99.1:41184`),
+refuses connections from outside `ASSISTANT_SUBNET`, and forwards only to
+Joplin's port. It runs read-only as your user with all capabilities dropped.
 
 ## Container controls
 

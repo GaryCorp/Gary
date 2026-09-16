@@ -53,6 +53,14 @@ senders and subjects aloud, so anyone nearby can hear them. Set
 
 Google OAuth credentials are stored locally in encrypted form.
 
+## Joplin notes
+
+What you ask Gary to note is sent to OpenAI as part of the conversation, like
+any request, and saved to your local Joplin app. The names of notebooks inside
+Gary, and the titles of notes in them, are sent when Gary looks up where a note
+goes or which note to delete. Gary never reads the text of existing notes, and
+cannot see notebooks outside Gary.
+
 ## OpenAI key
 
 The API key is not placed in the voice container.
