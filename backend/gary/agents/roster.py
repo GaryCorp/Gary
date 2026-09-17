@@ -31,6 +31,7 @@ class AgentLimits:
     output_retries: int = 1
     max_tool_calls_per_run: int = 12
     max_web_searches_per_run: int = 4
+    max_notes_per_run: int = 3
     # One targeted follow-up question per management review.
     max_review_follow_ups: int = 1
 
@@ -57,7 +58,9 @@ SUSAN = GaryCorpAgentDefinition(
         "read_tasks",
         "read_relevant_notes",
         "read_previous_research",
+        "write_note",
     ),
+    notebook="Susan",
     role="Director of Research & Strategy at GaryCorp",
     goal=(
         "Help Gary understand opportunities, options, evidence, and tradeoffs, "
@@ -98,7 +101,9 @@ DAVE = GaryCorpAgentDefinition(
         "read_audit_events",
         "read_system_configuration_summary",
         "read_relevant_notes",
+        "write_note",
     ),
+    notebook="Dave",
     role="Director of Security at GaryCorp",
     goal=(
         "Find the safest practical way to accomplish each objective: identify "
@@ -142,7 +147,9 @@ LINDA = GaryCorpAgentDefinition(
         "read_commitments",
         "read_followups",
         "read_relevant_notes",
+        "write_note",
     ),
+    notebook="Linda",
     role="Director of Operations at GaryCorp",
     goal=(
         "Translate strategy into executable work: what needs to happen, in what "
@@ -195,6 +202,11 @@ class AgentRegistry:
             if definition.is_employee and definition.can_delegate:
                 # Only the manager delegates in this version.
                 raise ValueError(f"employee {definition.agent_id} cannot delegate")
+            if "write_note" in definition.allowed_tools and not definition.notebook:
+                raise ValueError(f"{definition.agent_id} has write_note but no notebook")
+        notebooks = [d.notebook.casefold() for d in self._definitions.values() if d.notebook]
+        if len(notebooks) != len(set(notebooks)):
+            raise ValueError("each agent needs its own notebook")
 
     def _apply_limits(self, definition: GaryCorpAgentDefinition) -> GaryCorpAgentDefinition:
         if not definition.is_employee:

@@ -125,7 +125,7 @@ section.
 
 Voice logs showing `OpenAI rate limit reached; retrying in ...` mean your
 OpenAI account hit its Realtime tokens-per-minute limit. Each model response
-carries Gary's prompt and tools (about 9,000 tokens), so a limit of 40,000 per
+carries Gary's prompt and tools (about 11,500 tokens), so a limit of 40,000 per
 minute can be reached during multi-step planning. Gary retries twice after the
 suggested wait; if the logs say `not retrying again`, ask again in a minute.
 Higher OpenAI usage tiers raise the limit
@@ -239,6 +239,15 @@ docker compose start backend
 - No daily summary note: Joplin must be open with the Web Clipper enabled.
 - No spoken briefing: the voice service must be connected, it is not quiet
   hours, and the model may return no briefing when nothing needs attention.
+
+## The backend build takes a long time
+
+The first backend build downloads CrewAI and its dependencies (the backend
+image is about 1.3 GB), which can take 20 minutes or more on a slow connection.
+Later builds reuse the download cache and only reinstall when
+`backend/requirements.txt` changes. If a build seems stuck with no network
+activity for several minutes, cancel it and run `docker compose build backend`
+again.
 
 ## A specialist assignment failed
 

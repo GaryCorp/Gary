@@ -14,8 +14,8 @@
     },
     {
       "path": "CHANGELOG.md",
-      "bytes": 12230,
-      "sha256": "b8ac8cac6a6e6828801c2a72d31444e6120bedcccb90874f7d2ff108b7bc2e72"
+      "bytes": 12936,
+      "sha256": "1b4a3b19452473d4ed0b7d9fb9dd92f5e52fd5261b0669a0ff27efe79b4f7fea"
     },
     {
       "path": "Makefile",
@@ -24,13 +24,13 @@
     },
     {
       "path": "QUICKSTART.md",
-      "bytes": 3763,
-      "sha256": "1da66442b423e8be695259fe6ea96c97f82a05ec6c9702d904e6de03829672ac"
+      "bytes": 4219,
+      "sha256": "a1eb4a7ccce200f3676bcfa9eac64c47d89926b02dcde941b018f7b7e68dbac9"
     },
     {
       "path": "README.md",
-      "bytes": 4680,
-      "sha256": "514864b89cc9a5a8f886faf85e387f61639b973bb50b4e408ab6db60594eab3f"
+      "bytes": 4718,
+      "sha256": "fd2e10ac7ce8d02a2911ac918a04a99d18cc288d6028bf6039574d1ab531a92d"
     },
     {
       "path": "backend/Dockerfile",
@@ -44,8 +44,8 @@
     },
     {
       "path": "backend/app/main.py",
-      "bytes": 131901,
-      "sha256": "c37e2626418002224c75f1755ce80082c8622996fab4f5f7dd92a42094b4f2e1"
+      "bytes": 133368,
+      "sha256": "570e26759b01a82b688e341392a462cd7bc4aefe8fd9ed3a6ce9dff6681c4aed"
     },
     {
       "path": "backend/app/team_cli.py",
@@ -79,23 +79,23 @@
     },
     {
       "path": "backend/gary/agents/gateway.py",
-      "bytes": 21628,
-      "sha256": "23571217c267abf94281d57749c999920ae9e90b2307b59ee2590ebb9413aa29"
+      "bytes": 23721,
+      "sha256": "856ae6f37129117c8eec6c56c28c298321d664fece3c2a48d6774d9258c39a4c"
     },
     {
       "path": "backend/gary/agents/models.py",
-      "bytes": 6577,
-      "sha256": "57e62a4a258c44faf29513754d8479a1d79c33c23d2c612d6532192772638bdb"
+      "bytes": 6750,
+      "sha256": "1e6d9e1b5ffd815879c305a1d639895cdce230b5b7034945072897324e7941ee"
     },
     {
       "path": "backend/gary/agents/roster.py",
-      "bytes": 9658,
-      "sha256": "950c84ec09a240376f35af08858c08704a36551b2678f4328f8b7d934ca1594e"
+      "bytes": 10205,
+      "sha256": "81e645d3aa308dc87426bf60052e69cb85fed65a5aa95122499b0024f47c84dd"
     },
     {
       "path": "backend/gary/agents/runner.py",
-      "bytes": 16878,
-      "sha256": "beabe7f0251e06690c7376c829f15c10485e43fcf9bd0d9dd771b1ae20522d2f"
+      "bytes": 17215,
+      "sha256": "985ebe05468d1adf314e2392de83b475a4300f6dc871f8a0a61621497c7e8b2c"
     },
     {
       "path": "backend/gary/agents/service.py",
@@ -384,8 +384,8 @@
     },
     {
       "path": "backend/tests/test_agents.py",
-      "bytes": 31504,
-      "sha256": "a265835439012382ac1c679a53bd54986df898c919e2bc7d1cd1cba6363334e5"
+      "bytes": 36072,
+      "sha256": "926093edd9665438e9d8cc9a26ab04542f87c9318355d9d0728c79d4a08800c2"
     },
     {
       "path": "backend/tests/test_chief_of_staff.py",
@@ -439,8 +439,8 @@
     },
     {
       "path": "docs/ARCHITECTURE.md",
-      "bytes": 21036,
-      "sha256": "fd3aef3c247aadd2387d234584e9c93db313590e8645e013891c9080b66ee958"
+      "bytes": 21496,
+      "sha256": "f9a2bd478316b2394bbe2c8c905aa6ccf681786696778cd3259abe4993086b2b"
     },
     {
       "path": "docs/CONFIGURATION.md",
@@ -454,38 +454,38 @@
     },
     {
       "path": "docs/PRIVACY.md",
-      "bytes": 5120,
-      "sha256": "d459d50b1821eba2c1ceecc851f55a635a1e01d0a0ef9cb6e0d9a7034319a03e"
+      "bytes": 5211,
+      "sha256": "57dbfacd7972de7a3e56c656d15b51cdb31e3f815d8cc2550fc18a491c895eb0"
     },
     {
       "path": "docs/PROJECT_FILES.md",
-      "bytes": 5561,
-      "sha256": "cac9cda2a09a1b2ad2735f84313a1bd203f198466d85edb60862c84b87d97948"
+      "bytes": 5991,
+      "sha256": "9b2a4db3fd942e4a375558b9a81651d3f5594378283bd3f7a4940e50d16de86b"
     },
     {
       "path": "docs/SECURITY.md",
-      "bytes": 9352,
-      "sha256": "1f94b279e94e5ff3110e73b344267065414c0ff22a9ea832a79834f01c3c3862"
+      "bytes": 9827,
+      "sha256": "27646dd6158b8056a8ac03104d136747f46fd1b88e5afe4032db4dd7e1481570"
     },
     {
       "path": "docs/SETUP.md",
-      "bytes": 3857,
-      "sha256": "b873f6963f56b75635b18f5e051d04a8525b4e0b2e759411c267ad2197853e59"
+      "bytes": 4445,
+      "sha256": "d5010054f8251ceb61f7631ff6255731ca2cf770fc2bf51ede04fefafad712a2"
     },
     {
       "path": "docs/TEAM.md",
-      "bytes": 10369,
-      "sha256": "20035e78992589eca765e1646f210242d1d542c3634f360870c5990bfcaa77e7"
+      "bytes": 11539,
+      "sha256": "a2de7527cfc2644317dcf489f0dd92cf43c4c26dcb9687bd098fc6d935676cc0"
     },
     {
       "path": "docs/TROUBLESHOOTING.md",
-      "bytes": 8631,
-      "sha256": "399a24c7d3ec82935b0f15f62b7c7e026cfa8ec61680a71f19ad3d93026adc62"
+      "bytes": 9051,
+      "sha256": "371b8d2a7441944da12f74eaf344cd25b28e1271b6a80aaf17c1125b5bbeb636"
     },
     {
       "path": "docs/USAGE.md",
-      "bytes": 13319,
-      "sha256": "7293a87187d6b787957047ac6a2ce80b21ec4c8a6d107cb21aee2c589782fe9b"
+      "bytes": 13553,
+      "sha256": "a6f899905be0afd21ffd278e93e70b2475a25d420b291fbdf0a005cf33c6d51c"
     },
     {
       "path": "joplin_proxy/joplin_proxy.py",

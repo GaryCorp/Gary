@@ -57,11 +57,13 @@ You must add it yourself.
 
 ### `backend/Dockerfile`
 
-Builds the FastAPI service.
+Builds the FastAPI service. Dependencies are installed with `uv`, using a
+BuildKit cache so rebuilds do not download CrewAI again.
 
 ### `backend/requirements.txt`
 
-Backend Python dependencies.
+Backend Python dependencies, including `crewai==1.15.22` (pinned: the adapter
+in `gary/agents/crew.py` targets that release).
 
 ### `backend/requirements-dev.txt`
 
@@ -108,7 +110,10 @@ container.
 
 ### `backend/tests/`
 
-pytest suite for the operations package, using temporary databases.
+pytest suite using temporary databases and fakes for Google, Joplin, OpenAI, and
+the agent framework: operations, planning, Chief of Staff behavior, tools, the
+specialist team (`test_agents.py`), and the CrewAI adapter (`test_crew.py`,
+including an opt-in live test with `GARY_LIVE_AGENT_TEST=1`).
 
 ### `backend/app/__init__.py`
 

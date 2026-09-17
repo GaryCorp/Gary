@@ -105,7 +105,9 @@ for that project, and depending on the specialist, commitments, follow-ups,
 free calendar blocks (without event titles), the permission and policy
 configuration, and recent audit summaries. No email content or credentials are
 included. Susan's web searches send the search query to OpenAI's web search
-(`AGENT_WEB_SEARCH_MODEL`). Reports are stored locally in `data/gary.db`.
+(`AGENT_WEB_SEARCH_MODEL`). Reports are stored locally in `data/gary.db`, and
+notes the specialists write are saved in their own notebooks in your local
+Joplin app.
 CrewAI telemetry and hosted tracing are disabled.
 
 ## OpenAI key

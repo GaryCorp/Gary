@@ -38,6 +38,10 @@ class GaryCorpAgentDefinition(BaseModel):
     can_delegate: bool = False
     is_employee: bool = True
 
+    # The agent's own top-level Joplin notebook. write_note always targets this
+    # notebook; the notebook is never taken from the model.
+    notebook: str | None = None
+
     # Prompt identity (CrewAI role, goal, backstory).
     role: str = ""
     goal: str = ""

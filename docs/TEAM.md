@@ -50,7 +50,8 @@ not confused.
 | Answers | Options, evidence, tradeoffs, alternatives, what is missing | Attack surface, permissions, trust boundaries, blast radius, controls | Tasks, order, dependencies, estimates, blockers, schedule, deadline realism |
 | Report | `ResearchReport` | `SecurityReport` | `OperationsReport` |
 | Key fields | findings, options, recommendation, assumptions, uncertainties, sources, confidence | risk_level, attack_surfaces, required and recommended controls, recommendation (approve … reject), confidence | proposed_tasks, dependencies, estimated_total_minutes, blockers, deadline_assessment, decisions_needed, confidence |
-| Tools | `web_search`, `read_project`, `read_tasks`, `read_relevant_notes`, `read_previous_research` | `read_project`, `read_tasks`, `read_agent_permissions`, `read_action_policy`, `read_audit_events`, `read_system_configuration_summary`, `read_relevant_notes` | `read_projects`, `read_project`, `read_tasks`, `read_dependencies`, `read_calendar_availability`, `read_commitments`, `read_followups`, `read_relevant_notes` |
+| Tools | `web_search`, `read_project`, `read_tasks`, `read_relevant_notes`, `read_previous_research`, `write_note` | `read_project`, `read_tasks`, `read_agent_permissions`, `read_action_policy`, `read_audit_events`, `read_system_configuration_summary`, `read_relevant_notes`, `write_note` | `read_projects`, `read_project`, `read_tasks`, `read_dependencies`, `read_calendar_availability`, `read_commitments`, `read_followups`, `read_relevant_notes`, `write_note` |
+| Joplin notebook | Susan | Dave | Linda |
 | Context package | assignment, project and tasks, planning notes | assignment, project and tasks, all agents' permissions, action policy, deployment summary, recent security-relevant audit events | assignment, project and tasks, active projects, commitments, follow-ups, calendar availability, planning notes |
 
 Personalities are deliberately subtle: Susan is curious and evidence-oriented,
@@ -74,9 +75,16 @@ Permissions are enforced in code, not only by prompts:
   are validated, per-run limits apply (12 tool calls, 4 web searches), a run
   that timed out cannot make further calls, and every call and denial is
   audited as `agent_tool_called` or `agent_tool_denied`.
-- **All specialist tools are read-only** and return filtered data: no
-  credentials, no email content, no audit details, busy calendar time without
-  titles, and only Gary's planning notes (never the whole notebook).
+- **Specialist tools are read-only except `write_note`**, and return filtered
+  data: no credentials, no email content, no audit details, busy calendar time
+  without titles, and only Gary's planning notes (never the whole notebook).
+- **Notes go only to the agent's own notebook.** `write_note` takes a title
+  and Markdown body; the notebook comes from the roster (Susan, Dave, Linda),
+  never from the model, and must already exist as a top-level Joplin notebook.
+  Agents cannot read, edit, move, or delete notes, or write anywhere else. At
+  most 3 notes per assignment; each note ends with who wrote it, when, and for
+  which assignment, and each write is audited (long bodies shortened in the
+  audit log).
 - **Forbidden tools** (sending email, calendar changes, money, permissions,
   shell, SQL, security policy, account creation, deletion, delegation) cannot
   be granted: a roster listing one fails at startup.
@@ -94,6 +102,20 @@ Employees are advisory in this version: Dave's controls are recommendations,
 Linda's tasks are proposals Gary adds only with your agreement. Because
 permissions are per-agent capabilities, a future agent (such as a CFO) can be
 granted different authority without changing the others.
+
+## Notes
+
+Each specialist keeps notes in their own Joplin notebook: **Susan**, **Dave**,
+and **Linda** (top-level notebooks, next to **Gary**). They write a note when
+the assignment asks for one, or for a concise record worth keeping beyond the
+report; the structured report is still required. To ask for a write-up:
+
+```text
+Gary, have Dave threat-model the approvals page and write up his findings in his notebook.
+```
+
+The notebooks must exist; if one is missing, the note is refused rather than
+created elsewhere. Gary's own Joplin tools stay limited to the Gary notebook.
 
 ## Management reviews
 
@@ -119,8 +141,8 @@ failed, and `failed` if all did.
 | `MAX_ASSIGNMENTS_PER_GARY_PLAN` | 4 | Assignments Gary may create in one conversation or review |
 | `MAX_ACTIVE_AGENT_ASSIGNMENTS` | 6 | Queued plus running assignments across the company |
 
-Also fixed in code: one output retry, 12 tool calls and 4 web searches per
-run, one follow-up per review.
+Also fixed in code: one output retry, 12 tool calls, 4 web searches, and 3
+notes per run, one follow-up per review.
 
 ## Persistence and audit
 

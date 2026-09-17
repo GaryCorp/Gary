@@ -88,7 +88,10 @@ The project constrains:
 - memory
 - process count
 
-These values are starting points and may need tuning on your laptop.
+These values are starting points and may need tuning on your laptop. The
+backend has 1.5 GB of memory for CrewAI and up to `MAX_CONCURRENT_AGENT_RUNS`
+specialist runs; specialist runs are also limited in time, iterations, tool
+calls, and number (see [Team](TEAM.md#limits)).
 
 ## Google token storage
 
@@ -208,9 +211,11 @@ privilege (details in [Team](TEAM.md#permissions)):
 - each agent is built with only its granted tools, and the gateway re-checks
   every call, validates arguments, applies per-run limits, and audits calls and
   denials;
-- every specialist tool is read-only and filtered: no credentials, email
+- every specialist tool is read-only and filtered (no credentials, email
   content, audit details, calendar titles, or notes outside Gary's planning
-  notes;
+  notes), except `write_note`, which only creates notes in the agent's own
+  top-level Joplin notebook (fixed in the roster, never chosen by the model),
+  at most 3 per assignment, each stamped and audited;
 - sending email, calendar changes, money, permissions, shell, SQL, deletion,
   and delegation cannot be granted to any specialist;
 - CrewAI delegation, code execution, memory, planning, telemetry, and tracing
@@ -222,7 +227,8 @@ privilege (details in [Team](TEAM.md#permissions)):
 
 Web pages and notes a specialist reads are untrusted: the task prompt labels
 them as data, and the worst an injected instruction could do is distort a
-report that Gary and Alex then weigh.
+report that Gary and Alex then weigh, or add up to three misleading notes to
+that specialist's own notebook.
 
 ## Joplin tools
 

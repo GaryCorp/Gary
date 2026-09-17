@@ -36,6 +36,7 @@ Responsibilities:
 - Calendar, Gmail, and Joplin API execution.
 - Chief of Staff operations database (SQLite), approvals page, and backups.
 - Scheduled planning cycle (morning, midday, evening).
+- The specialist team (Susan, Dave, Linda) through CrewAI, and its `/team` page.
 - Hourly new email check, and follow-up and overdue alerts.
 - Input validation.
 
@@ -358,7 +359,8 @@ Gary tool (delegate_to_agent, run_management_review, ...)
   -> AgentService      roster and limit checks, persisted assignment, audit
   -> GaryCorpAgentRunner
        context package  (per department, least privilege)
-       ToolGateway      (granted, read-only tools; every call checked and audited)
+       ToolGateway      (granted tools: read-only, plus notes in the agent's own
+                         Joplin notebook; every call checked and audited)
        CrewAIExecutor   (separate single-agent crew per assignment)
   -> validated ResearchReport / SecurityReport / OperationsReport
   -> agent_assignments, agent_runs, audit_log; voice announcement
@@ -455,7 +457,7 @@ follow-up response after `response.done`. A response that fails on OpenAI's
 tokens-per-minute limit is retried after the suggested wait (at most 30
 seconds, twice in a row), with a `bridge.notice` in the voice logs.
 
-Each response carries the prompt and about 40 tool schemas (roughly 9,000
+Each response carries the prompt and 48 tool schemas (roughly 11,500
 tokens), so an OpenAI account with a 40,000 tokens-per-minute Realtime limit
 can hit it during multi-step planning; the retry keeps the conversation going.
 
@@ -490,6 +492,11 @@ The backend can remain isolated from direct audio-device access.
 Only the small `joplin-proxy` needs the host network, so the backend and voice
 services stay on the isolated bridge network.
 
+The specialists run inside the backend process, not in separate containers:
+their isolation comes from the tool gateway and context packages (see
+[Team](TEAM.md#permissions)), and they never receive the credentials the backend
+holds.
+
 ## Host exposure
 
 Docker publishes:
@@ -506,6 +513,7 @@ serves:
 /login, /oauth2callback, /logout   Google sign-in
 /events         upcoming calendar events
 /approvals      pending approvals (GET) and decisions (POST, CSRF-protected)
+/team           org chart, specialist assignment history, management reviews
 /health         container health check
 /internal/voice voice bridge WebSocket (bridge token required)
 ```

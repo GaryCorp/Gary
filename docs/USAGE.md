@@ -385,6 +385,13 @@ a report or review is ready. When several review the same question, they work
 independently and Gary tells you where they disagree before recommending. See
 [Team](TEAM.md) for details, limits, and the manual CLI.
 
+Each specialist can also keep notes in their own Joplin notebook (**Susan**,
+**Dave**, **Linda**). Ask for a write-up as part of the assignment:
+
+```text
+Gary, have Linda plan the prototype and write the plan up in her notebook.
+```
+
 ## Follow-up behavior
 
 After an assistant response, a short follow-up period remains active.

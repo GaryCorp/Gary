@@ -93,6 +93,12 @@ daily summary to **Gary › Daily Summaries** and read planning notes you put in
 **Gary › Planning**, titled like a project. Change or turn off the schedule
 with `PLANNING_TIMES` in `.env`.
 
+### Specialist team notebooks
+
+Susan, Dave, and Linda write notes into top-level Joplin notebooks named
+**Susan**, **Dave**, and **Linda**. Create those three notebooks in Joplin (next
+to **Gary**, not inside it); they are never created automatically.
+
 ## G. VPN
 
 With NordVPN connected, its firewall drops traffic to Docker networks that are
@@ -114,8 +120,9 @@ docker compose build
 ```
 
 The selected Whisper model and Piper voice are pre-downloaded into the voice
-image. For an NVIDIA GPU, see
-[Configuration](CONFIGURATION.md#gpu-nvidia).
+image, and the backend image installs CrewAI with `uv`. The first build can take
+20 minutes or more; later builds reuse the download cache. For an NVIDIA GPU,
+see [Configuration](CONFIGURATION.md#gpu-nvidia).
 
 ## I. Start
 
@@ -180,6 +187,15 @@ Run the backend tests (uses Docker, no local Python setup needed):
 ```bash
 ./scripts/test.sh
 ```
+
+Check the specialist team:
+
+```bash
+docker compose exec backend python -m app.team_cli team
+```
+
+It lists Gary, Susan, Dave, and Linda as active. See [Team](TEAM.md) to run a
+first assignment by hand.
 
 ## M. Restart
 

@@ -53,6 +53,10 @@ class BusyCalendar(Protocol):
     async def busy_intervals(self, start: str, end: str) -> list[dict]: ...
 
 
+class AgentNotebooks(Protocol):
+    async def create_note(self, notebook: str, title: str, body: str) -> dict: ...
+
+
 @dataclass
 class AgentServices:
     """What tools may use. Integrations are optional; a tool whose
@@ -63,6 +67,8 @@ class AgentServices:
     web: WebResearch | None = None
     notes: PlanningNotes | None = None
     calendar: BusyCalendar | None = None
+    # Writes notes into an agent's own Joplin notebook.
+    notebooks: AgentNotebooks | None = None
     # Returns a non-secret summary of the deployment for Dave.
     system_summary: Callable[[], dict] | None = None
     # Names of Gary's own tools, for permission reviews.
@@ -179,6 +185,15 @@ class AvailabilityArgs(RequestModel):
 
 class CommitmentsArgs(RequestModel):
     status: Literal["open", "all"] = "open"
+
+
+NOTE_TITLE_LIMIT = 200
+NOTE_BODY_LIMIT = 20_000
+
+
+class WriteNoteArgs(RequestModel):
+    title: str = Field(min_length=1, max_length=NOTE_TITLE_LIMIT)
+    body: str = Field(min_length=1, max_length=NOTE_BODY_LIMIT)
 
 
 # ------------------------------------------------------------------ handlers
@@ -413,6 +428,32 @@ def _read_followups(call: ToolCall):
     }
 
 
+async def write_note(call: ToolCall):
+    agent = call.agent
+    if not agent.notebook:
+        raise ValueError(f"{agent.name} has no notebook")
+    if call.services.notebooks is None:
+        raise ValueError("Joplin is not available right now")
+    title = " ".join(call.args.title.split())
+    stamp = datetime_stamp(call)
+    body = (
+        f"{call.args.body.rstrip()}\n\n---\n"
+        f"Written by {agent.name}, {agent.title}, on {stamp} "
+        f"(GaryCorp assignment {call.state.assignment_id})."
+    )
+    created = await call.services.notebooks.create_note(agent.notebook, title, body)
+    return {
+        "created": True,
+        "notebook": agent.notebook,
+        "title": title,
+        "note_id": created.get("note_id"),
+    }
+
+
+def datetime_stamp(call: ToolCall) -> str:
+    return dt.datetime.now(call.services.gary.timezone).strftime("%Y-%m-%d %H:%M %Z")
+
+
 def _sync(function):
     import asyncio
 
@@ -485,6 +526,14 @@ TOOL_CATALOG: dict[str, ToolSpec] = {
         ),
         ToolSpec("read_commitments", "Read commitments made to other people.", CommitmentsArgs, _sync(_read_commitments)),
         ToolSpec("read_followups", "Read pending follow-ups.", NoArgs, _sync(_read_followups)),
+        ToolSpec(
+            "write_note",
+            "Create a note in your own Joplin notebook (Markdown body). Use for findings, "
+            "decisions, or context worth keeping beyond this report. You cannot read, "
+            "edit, or delete notes, or write to any other notebook.",
+            WriteNoteArgs,
+            write_note,
+        ),
     )
 }
 
@@ -516,6 +565,14 @@ def validate_roster_tools(registry: AgentRegistry) -> None:
                 raise ValueError(f"{definition.agent_id} may not be granted {tool}")
             if tool not in TOOL_CATALOG:
                 raise ValueError(f"{definition.agent_id} lists unknown tool {tool}")
+
+
+def _audit_arguments(arguments: dict) -> dict:
+    """Long text (such as a note body) is shortened in the audit log."""
+    return {
+        key: (value[:300] + f"... [{len(value)} characters]" if isinstance(value, str) and len(value) > 300 else value)
+        for key, value in arguments.items()
+    }
 
 
 def _truncate(result: Any) -> Any:
@@ -574,6 +631,8 @@ class ToolGateway:
         per_tool_limit = spec.max_calls_per_run
         if tool_name == "web_search":
             per_tool_limit = self.limits.max_web_searches_per_run
+        elif tool_name == "write_note":
+            per_tool_limit = self.limits.max_notes_per_run
         if per_tool_limit is not None and self.state.calls_by_tool.get(tool_name, 0) >= per_tool_limit:
             raise ToolDenied(f"{tool_name} may be used at most {per_tool_limit} times per assignment")
 
@@ -599,7 +658,7 @@ class ToolGateway:
             f"{self.agent.name} used {tool_name}",
             {
                 "tool": tool_name,
-                "arguments": json.loads(args.model_dump_json()),
+                "arguments": _audit_arguments(json.loads(args.model_dump_json())),
                 "ok": ok,
                 "error": error,
             },

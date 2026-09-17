@@ -97,6 +97,15 @@ class FakeExecutor:
         return ExecutionResult(output=behavior, model=request.model, usage={"total_tokens": 1234, "prompt_tokens": 1000, "completion_tokens": 234})
 
 
+class FakeNotebooks:
+    def __init__(self):
+        self.notes = []
+
+    async def create_note(self, notebook, title, body):
+        self.notes.append({"notebook": notebook, "title": title, "body": body})
+        return {"note_id": f"note-{len(self.notes)}"}
+
+
 class FakeWeb:
     def __init__(self):
         self.queries = []
@@ -116,6 +125,7 @@ def build_team(gary, executor=None, limits=None, finished=None):
         web=FakeWeb(),
         notes=FakeNotebook(notes=[{"source": "Planning note", "title": "Preferences", "text": "Mornings."}]),
         calendar=FakeCalendar(),
+        notebooks=FakeNotebooks(),
         system_summary=lambda: {"backend_exposure": "127.0.0.1:8000 only"},
         manager_tools=("delegate_to_agent",),
     )
@@ -192,13 +202,17 @@ def test_roster_cannot_grant_forbidden_or_unknown_tools():
 def test_each_employee_has_exactly_its_approved_tools():
     registry = AgentRegistry()
     assert set(registry.get("susan").allowed_tools) == {
-        "web_search", "read_project", "read_tasks", "read_relevant_notes", "read_previous_research"}
+        "web_search", "read_project", "read_tasks", "read_relevant_notes", "read_previous_research",
+        "write_note"}
     assert set(registry.get("dave").allowed_tools) == {
         "read_project", "read_tasks", "read_agent_permissions", "read_action_policy",
-        "read_audit_events", "read_system_configuration_summary", "read_relevant_notes"}
+        "read_audit_events", "read_system_configuration_summary", "read_relevant_notes", "write_note"}
     assert set(registry.get("linda").allowed_tools) == {
         "read_projects", "read_project", "read_tasks", "read_dependencies",
-        "read_calendar_availability", "read_commitments", "read_followups", "read_relevant_notes"}
+        "read_calendar_availability", "read_commitments", "read_followups", "read_relevant_notes",
+        "write_note"}
+    assert {d.agent_id: d.notebook for d in registry.employees()} == {
+        "susan": "Susan", "dave": "Dave", "linda": "Linda"}
     assert "web_search" not in registry.get("dave").allowed_tools
     assert "web_search" not in registry.get("linda").allowed_tools
 
@@ -658,3 +672,82 @@ def test_find_assignment_by_topic(gary):
     ctx = ToolContext(gary, {}, {"agents": service})
     result = call(ctx, "agent_assignment_get", agent_id="susan", about="browser automation")
     assert result["assignment"]["objective"].startswith("Evaluate browser automation")
+
+
+# ------------------------------------------------------------------ notes
+
+@pytest.mark.parametrize("agent_id, notebook", [("susan", "Susan"), ("dave", "Dave"), ("linda", "Linda")])
+def test_each_agent_writes_only_to_its_own_notebook(gary, agent_id, notebook):
+    service = build_team(gary)
+    notebooks = service.runner.services.notebooks
+    agent = service.registry.get(agent_id)
+    state = RunState("assign-notes", agent_id)
+    gateway = ToolGateway(service.runner.services, agent, state, service.registry.limits)
+
+    async def scenario():
+        result = await gateway.call("write_note", {"title": "  Browser   automation findings ", "body": "Read-only first."})
+        with pytest.raises(ValueError, match="Extra inputs"):
+            await gateway.call("write_note", {"title": "Sneaky", "body": "x", "notebook": "Gary"})
+        return result
+    result = run(scenario())
+    assert result == {"created": True, "notebook": notebook, "title": "Browser automation findings", "note_id": "note-1"}
+    assert [n["notebook"] for n in notebooks.notes] == [notebook]
+    body = notebooks.notes[0]["body"]
+    assert body.startswith("Read-only first.")
+    assert f"Written by {agent.name}, {agent.title}" in body and "assignment assign-notes" in body
+
+
+def test_note_limit_and_audit_truncation(gary):
+    service = build_team(gary, limits=AgentLimits(max_notes_per_run=2, max_execution_seconds=5))
+    state = RunState("assign-limit", "linda")
+    gateway = ToolGateway(service.runner.services, service.registry.get("linda"), state, service.registry.limits)
+    long_body = "Plan details. " * 200
+
+    async def scenario():
+        with pytest.raises(ValueError, match="body"):
+            await gateway.call("write_note", {"title": "Empty", "body": ""})
+        await gateway.call("write_note", {"title": "One", "body": long_body})
+        await gateway.call("write_note", {"title": "Two", "body": "Short."})
+        with pytest.raises(ToolDenied, match="at most 2 times"):
+            await gateway.call("write_note", {"title": "Three", "body": "Too many."})
+    run(scenario())
+
+    with gary.db.read() as conn:
+        details = json.loads(conn.execute(
+            "SELECT details_json FROM audit_log WHERE event_type = 'agent_tool_called' ORDER BY id LIMIT 1"
+        ).fetchone()["details_json"])
+    assert details["tool"] == "write_note"
+    assert details["arguments"]["body"].endswith(f"[{len(long_body.strip())} characters]")
+    assert len(details["arguments"]["body"]) < 400
+
+
+def test_note_writing_without_joplin_reports_unavailable(gary):
+    service = build_team(gary)
+    service.runner.services.notebooks = None
+    gateway = ToolGateway(service.runner.services, service.registry.get("dave"),
+                          RunState("assign-x", "dave"), service.registry.limits)
+    result = run(gateway.call("write_note", {"title": "Threat model", "body": "Notes."}))
+    assert result == {"error": "Joplin is not available right now"}
+
+
+def test_roster_requires_distinct_notebooks_for_note_writers():
+    base = AgentRegistry()
+    no_notebook = base.get("susan").model_copy(update={"notebook": None})
+    with pytest.raises(ValueError, match="no notebook"):
+        AgentRegistry((base.manager(), no_notebook))
+    shared = base.get("dave").model_copy(update={"notebook": "susan"})
+    with pytest.raises(ValueError, match="own notebook"):
+        AgentRegistry((base.manager(), base.get("susan"), shared))
+
+
+def test_note_written_during_assignment(gary):
+    def writes_note(request):
+        tools = {t.name: t for t in request.tools}
+        assert tools["write_note"].invoke({"title": "Experiment ideas", "body": "Idea one."})["created"] is True
+        assert "own Joplin notebook (Susan)" in request.task_description
+        return RESEARCH
+
+    service = build_team(gary, FakeExecutor({"susan": [writes_note]}))
+    result = run(delegate_and_wait(service, agent_id="susan", objective="Research ideas and keep a note of them."))
+    assert result["status"] == "completed"
+    assert service.runner.services.notebooks.notes[0]["notebook"] == "Susan"

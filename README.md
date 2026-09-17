@@ -24,7 +24,8 @@ projects and tasks. It uses:
   for your approval, by voice or at `http://localhost:8000/approvals`.
 - **A specialist team** managed by Gary, built with CrewAI: Susan (Research &
   Strategy), Dave (Security), and Linda (Operations), each a separate,
-  read-only, permission-limited agent returning structured reports.
+  permission-limited agent returning structured reports and keeping notes in
+  their own Joplin notebook.
 - **Docker Compose** with separate `voice`, `backend`, and `joplin-proxy`
   services.
 

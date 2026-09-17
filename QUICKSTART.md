@@ -99,7 +99,8 @@ docker compose build
 ```
 
 The selected faster-whisper model and Piper voice are downloaded during the
-voice image build.
+voice image build, and CrewAI (for Gary's specialist team) during the backend
+build. The first build can take 20 minutes or more.
 
 ## 8. Start
 
@@ -155,7 +156,13 @@ Or set up some work:
 Gary, I need to publish the Chief of Staff video by Friday. What should I work on first?
 ```
 
-More examples are in `docs/USAGE.md`.
+Or ask the team:
+
+```text
+Gary, have Susan research three ideas for the next experiment.
+```
+
+More examples are in `docs/USAGE.md` and `docs/TEAM.md`.
 
 ## 11. Know what runs on its own
 
@@ -172,6 +179,9 @@ More examples are in `docs/USAGE.md`.
 - **Approvals**: anything that needs your OK waits at
   `http://localhost:8000/approvals`, or answer Gary by voice.
 - **Backups** of `data/gary.db` go to `data/backups` daily.
+- **The team**: Susan, Dave, and Linda only work when Gary (or you, through the
+  CLI) gives them an assignment. Gary announces when their reports are ready;
+  see them at `http://localhost:8000/team` and in their Joplin notebooks.
 
 ## 12. Stop
 

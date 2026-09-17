@@ -1978,6 +1978,32 @@ class JoplinPlanningNotebook:
         await joplin_request("PUT", path, {"body": f"{body}\n\n{markdown}" if body else markdown})
 
 
+class JoplinAgentNotebooks:
+    """Create-only access to each specialist's own top-level notebook
+    (Susan, Dave, Linda). The notebook must already exist; it is never created,
+    and nested notebooks with the same name are never matched."""
+
+    async def create_note(self, notebook: str, title: str, body: str) -> dict:
+        if not JOPLIN_TOKEN:
+            raise ValueError("Joplin is not set up")
+        folders = await joplin_items("/folders?fields=id,title,parent_id")
+        matches = [
+            f for f in folders
+            if not f.get("parent_id") and notebook_key(f["title"]) == notebook_key(notebook)
+        ]
+        if len(matches) != 1:
+            raise ValueError(
+                f"The top-level Joplin notebook {notebook!r} was not found"
+                if not matches else f"There are several top-level notebooks named {notebook!r}"
+            )
+        created = await joplin_request(
+            "POST", "/notes",
+            {"title": title[:JOPLIN_NOTE_TITLE_LIMIT], "body": body[:JOPLIN_NOTE_BODY_LIMIT],
+             "parent_id": matches[0]["id"]},
+        )
+        return {"note_id": created.get("id")}
+
+
 class GoogleBusyCalendar:
     """Busy intervals only: no titles, attendees, or descriptions."""
 
@@ -2090,7 +2116,10 @@ def system_configuration_summary() -> dict:
         "web_pages": ["/", "/login", "/events", "/approvals (CSRF-protected approve/reject)", "/team", "/health"],
         "web_authentication": "none; relies on loopback-only binding",
         "google_scopes": SCOPES,
-        "joplin_access": f"notes and notebooks inside the {JOPLIN_NOTEBOOK} notebook only",
+        "joplin_access": (
+            f"Gary: notes and notebooks inside the {JOPLIN_NOTEBOOK} notebook only; "
+            "Susan, Dave, Linda: create-only notes in their own top-level notebook"
+        ),
         "openai_usage": {
             "voice": OPENAI_REALTIME_MODEL,
             "planning": PLANNING_MODEL,
@@ -2113,6 +2142,7 @@ agent_services = AgentServices(
     web=OpenAIWebResearch(OPENAI_API_KEY, AGENT_WEB_SEARCH_MODEL),
     notes=planning_notebook,
     calendar=planning_calendar,
+    notebooks=JoplinAgentNotebooks(),
     system_summary=system_configuration_summary,
     manager_tools=tuple(sorted(GARY_TOOL_NAMES)),
 )
@@ -3408,8 +3438,10 @@ Map requests to tools:
   work from a different report, and if the match is wrong or missing, say so.
 - Show me the management review: management_review_get.
 - Who is on the team, what are they working on: team_list.
-Assignments run in the background: say who is working on what, and that you
-will report back. Never invent or role-play a specialist's findings; only
+Each specialist can write notes in their own Joplin notebook (Susan, Dave,
+Linda); when {PRINCIPAL_NAME} wants their work written up, include that in the
+objective. Assignments run in the background: say who is working on what, and
+that you will report back. Never invent or role-play a specialist's findings; only
 report what their report says, and say if it is not ready yet.
 
 When reports are in, synthesize them. Say where specialists agree and where

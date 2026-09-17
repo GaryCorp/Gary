@@ -230,6 +230,10 @@ class GaryCorpAgentRunner:
             "",
             "Use your tools only when they add information you need. Do not attempt "
             "actions you have no tool for; recommend them instead.",
+            f"You may keep notes in your own Joplin notebook ({agent.notebook}) with "
+            "write_note: do so when the objective asks for notes, or for a concise "
+            "record worth keeping beyond this report. Your report is still required."
+            if "write_note" in agent.allowed_tools and agent.notebook else "",
             REPORT_GUIDANCE[agent.report_kind],
         ]
         if feedback:

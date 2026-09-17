@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.15.0 — Specialist notes in Joplin
+
+- Susan, Dave, and Linda can write notes with the new `write_note` tool, each
+  only into their own top-level Joplin notebook (Susan, Dave, Linda). The
+  notebook is fixed in the roster, never chosen by the model, and must already
+  exist. Create-only, at most 3 notes per assignment, each stamped with the
+  author, time, and assignment, and audited with long bodies shortened.
+- Gary can ask for a specialist's work to be written up in their notebook.
+- Verified in real Joplin: each agent's note landed in its own notebook, a
+  redirect to another notebook was rejected, and Linda wrote a note during a
+  real assignment. Test notes were removed.
+- 161 tests.
+
 ## 1.14.0 — GaryCorp team: Susan, Dave, and Linda
 
 - Gary now manages three specialist AI employees built with CrewAI 1.15.22:
