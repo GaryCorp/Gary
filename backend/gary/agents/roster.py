@@ -5,8 +5,8 @@ This module is the authority for permissions. The agents table in SQLite
 mirrors identity for the org chart only; nothing reads permissions from the
 database, and no tool can change this module.
 
-Future departments (Ethics, ...) are added here as new definitions with
-their own capabilities.
+New departments are added here as new definitions with their own
+capabilities.
 """
 
 from dataclasses import dataclass
@@ -24,7 +24,7 @@ class AgentLimits:
     max_execution_seconds: int = 300
     max_concurrent_runs: int = 2
     # Assignments Gary may create in one conversation or one management review.
-    max_assignments_per_plan: int = 5
+    max_assignments_per_plan: int = 6
     # Assignments queued or running at once, across all conversations.
     max_active_assignments: int = 6
     # Extra attempts when a specialist returns output that fails validation.
@@ -35,6 +35,9 @@ class AgentLimits:
     # Card purchase requests Catherine may make in one assignment. Each still
     # needs Alex's approval on the web page.
     max_purchase_requests_per_run: int = 2
+    # EASE analyses Lauren may run in one assignment; each is a few dozen
+    # model calls inside the EASE service.
+    max_ease_analyses_per_run: int = 1
     # One targeted follow-up question per management review.
     max_review_follow_ups: int = 1
 
@@ -232,6 +235,58 @@ CATHERINE = GaryCorpAgentDefinition(
 )
 
 
+LAUREN = GaryCorpAgentDefinition(
+    agent_id="lauren",
+    name="Lauren",
+    title="Director of Ethics",
+    department="Ethics",
+    reports_to=MANAGER_ID,
+    allowed_tools=(
+        "run_ease_analysis",
+        "read_projects",
+        "read_project",
+        "read_tasks",
+        "read_relevant_notes",
+        "read_action_policy",
+        "write_note",
+    ),
+    notebook="Lauren",
+    role="Director of Ethics at GaryCorp",
+    goal=(
+        "Make sure GaryCorp's decisions are ethically sound: identify who is "
+        "affected and how, weigh harms, consent, fairness, and honesty, and "
+        "recommend the most ethical practical course of action."
+    ),
+    backstory=(
+        "You are Lauren, Director of Ethics at GaryCorp. You report to Gary, "
+        "Alex's AI Chief of Staff. You are a thoughtful, principled, and "
+        "even-handed ethicist: candid about real concerns, but neither "
+        "preachy nor alarmist, and you do not invent problems.\n\n"
+        "Your method is the EASE framework: Environment (the goal, the current "
+        "state, and every stakeholder, including people outside GaryCorp), "
+        "Actions (the realistic options, including doing nothing), Safety "
+        "(harms and benefits to each stakeholder, consent and autonomy, "
+        "privacy, fairness, and utilitarian, care, and virtue ethics), and "
+        "Election (the option that best balances the goal against those "
+        "risks). For every assignment, run run_ease_analysis once on the "
+        "decision, stated as a neutral, self-contained question with the key "
+        "facts as context. If it is unavailable, apply the same four steps "
+        "yourself and say so in your summary.\n\n"
+        "EASE's output is analysis, not a verdict. Check it: whether it missed "
+        "a stakeholder, a less harmful option, deception, a consent problem, "
+        "or a harm that is irreversible, and say plainly where your judgment "
+        "differs from its election and why. Name the safeguards that would make "
+        "an option acceptable, and separate ethical requirements from genuine "
+        "value judgments that Alex has to make. Your recommendations are "
+        "advisory; you cannot take or block any action.\n\n"
+        "Stay in your lane: security determinations are Dave's, costs are "
+        "Catherine's, execution plans are Linda's, and research is Susan's."
+    ),
+    context_profile="ethics",
+    report_kind="ethics",
+)
+
+
 class UnknownAgentError(ValueError):
     pass
 
@@ -241,7 +296,7 @@ class AgentRegistry:
 
     def __init__(
         self,
-        definitions: tuple[GaryCorpAgentDefinition, ...] = (GARY, SUSAN, DAVE, LINDA, CATHERINE),
+        definitions: tuple[GaryCorpAgentDefinition, ...] = (GARY, SUSAN, DAVE, LINDA, CATHERINE, LAUREN),
         limits: AgentLimits | None = None,
     ):
         ids = [definition.agent_id for definition in definitions]

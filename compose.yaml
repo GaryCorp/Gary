@@ -45,16 +45,19 @@ services:
       PLANNING_EMAIL: "${PLANNING_EMAIL:-snippets}"
       PRINCIPAL_NAME: "${PRINCIPAL_NAME:-Alex}"
 
-      # GaryCorp specialists (Susan, Dave, Linda, Catherine). Empty model = PLANNING_MODEL.
+      # GaryCorp specialists (Susan, Dave, Linda, Catherine, Lauren). Empty model = PLANNING_MODEL.
       GARY_EMPLOYEE_MODEL: "${GARY_EMPLOYEE_MODEL:-}"
       AGENT_WEB_SEARCH_MODEL: "${AGENT_WEB_SEARCH_MODEL:-gpt-5.4-mini}"
       MAX_AGENT_ITERATIONS: "${MAX_AGENT_ITERATIONS:-8}"
       MAX_AGENT_EXECUTION_SECONDS: "${MAX_AGENT_EXECUTION_SECONDS:-300}"
       MAX_CONCURRENT_AGENT_RUNS: "${MAX_CONCURRENT_AGENT_RUNS:-2}"
-      MAX_ASSIGNMENTS_PER_GARY_PLAN: "${MAX_ASSIGNMENTS_PER_GARY_PLAN:-5}"
+      MAX_ASSIGNMENTS_PER_GARY_PLAN: "${MAX_ASSIGNMENTS_PER_GARY_PLAN:-6}"
       MAX_ACTIVE_AGENT_ASSIGNMENTS: "${MAX_ACTIVE_AGENT_ASSIGNMENTS:-6}"
       CFO_PER_PURCHASE_LIMIT_USD: "${CFO_PER_PURCHASE_LIMIT_USD:-50}"
       CFO_MONTHLY_LIMIT_USD: "${CFO_MONTHLY_LIMIT_USD:-200}"
+      # Lauren's EASE ethics framework (the ease-api service below).
+      EASE_API_URL: "${EASE_API_URL-http://ease-api:8000}"
+      EASE_API_KEY: "${EASE_API_KEY:-}"
       # CrewAI: no telemetry or hosted tracing; its scratch storage stays in
       # the container and is not part of GaryCorp's records.
       CREWAI_DISABLE_TELEMETRY: "true"
@@ -216,6 +219,108 @@ services:
     pids_limit: 32
     mem_limit: 64m
     cpus: 0.25
+
+  # EASE ethical decision-making API (EASE/). Reachable from the host at
+  # http://localhost:8001 and from other services at http://ease-api:8000.
+  ease-api:
+    build:
+      context: ./EASE
+      dockerfile: Dockerfile.prod
+
+    restart: unless-stopped
+
+    command: ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+
+    depends_on:
+      ease-redis:
+        condition: service_healthy
+
+    environment: &ease_env
+      # Defaults to OpenAI with the key Gary already uses. For Anthropic or
+      # Google set EASE_LLM_PROVIDER, EASE_LLM_API_KEY and EASE_LLM_MODEL.
+      LLM_PROVIDER: "${EASE_LLM_PROVIDER:-openai}"
+      LLM_API_KEY: "${EASE_LLM_API_KEY:-${OPENAI_API_KEY}}"
+      LLM_MODEL: "${EASE_LLM_MODEL:-gpt-5.4-mini}"
+      # Empty = no auth. Set it if anything beyond localhost can reach the API.
+      API_KEY: "${EASE_API_KEY:-}"
+      REDIS_URL: redis://ease-redis:6379/0
+
+    ports:
+      - "127.0.0.1:8001:8000"
+
+    networks:
+      - assistant_net
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    pids_limit: 128
+    mem_limit: 768m
+    cpus: 1.00
+
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # Runs pipelines submitted to /api/v1/ease/submit.
+  ease-worker:
+    build:
+      context: ./EASE
+      dockerfile: Dockerfile.worker
+
+    restart: unless-stopped
+
+    command: ["celery", "-A", "src.workers.celery_app", "worker", "--loglevel=info", "--concurrency=2"]
+
+    depends_on:
+      ease-redis:
+        condition: service_healthy
+
+    environment: *ease_env
+
+    networks:
+      - assistant_net
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    pids_limit: 128
+    mem_limit: 768m
+    cpus: 1.00
+
+  ease-redis:
+    image: redis:7-alpine
+
+    restart: unless-stopped
+
+    networks:
+      - assistant_net
+
+    security_opt:
+      - no-new-privileges:true
+
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.25
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
 networks:
   assistant_net:

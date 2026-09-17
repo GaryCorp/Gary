@@ -34,6 +34,7 @@ from gary.agents.gateway import AgentServices, validate_roster_tools
 from gary.agents.roster import AgentLimits, AgentRegistry
 from gary.agents.runner import GaryCorpAgentRunner
 from gary.agents.service import AgentService
+from gary.agents.ease import EaseFramework
 from gary.agents.web import OpenAIWebResearch
 from gary.backup import backup_daily
 from gary.finance import cards as finance_cards
@@ -112,6 +113,10 @@ REALTIME_RATE_LIMIT_MAX_WAIT = 30
 # GaryCorp specialist team (Susan, Dave, Linda).
 GARY_EMPLOYEE_MODEL = os.getenv("GARY_EMPLOYEE_MODEL", "").strip() or PLANNING_MODEL
 AGENT_WEB_SEARCH_MODEL = os.getenv("AGENT_WEB_SEARCH_MODEL", "gpt-5.4-mini").strip()
+# Lauren's EASE ethical decision-making service (the ease-api container).
+# Empty URL = Lauren applies the framework without the service.
+EASE_API_URL = os.getenv("EASE_API_URL", "").strip()
+EASE_API_KEY = os.getenv("EASE_API_KEY", "").strip()
 
 
 def env_int(name: str, default: int, low: int, high: int) -> int:
@@ -125,7 +130,7 @@ AGENT_LIMITS = AgentLimits(
     max_iterations=env_int("MAX_AGENT_ITERATIONS", 8, 1, 25),
     max_execution_seconds=env_int("MAX_AGENT_EXECUTION_SECONDS", 300, 30, 1800),
     max_concurrent_runs=env_int("MAX_CONCURRENT_AGENT_RUNS", 2, 1, 6),
-    max_assignments_per_plan=env_int("MAX_ASSIGNMENTS_PER_GARY_PLAN", 5, 1, 10),
+    max_assignments_per_plan=env_int("MAX_ASSIGNMENTS_PER_GARY_PLAN", 6, 1, 10),
     max_active_assignments=env_int("MAX_ACTIVE_AGENT_ASSIGNMENTS", 6, 1, 20),
 )
 # Catherine's debit card. The card number is encrypted in its own vault file
@@ -2126,6 +2131,9 @@ def system_configuration_summary() -> dict:
             "backend": "FastAPI on 127.0.0.1:8000 (loopback only); holds the OpenAI key, Google OAuth tokens (encrypted at rest), and the Joplin token",
             "voice": "local microphone and wake word; holds only the voice bridge token",
             "joplin-proxy": "host network, listens only on the Docker network gateway, forwards to Joplin's local API",
+            "ease-api": "EASE ethical decision-making API for Lauren, on the assistant network and host 127.0.0.1:8001; "
+                        "holds its own LLM key; stateless (no database)",
+            "ease-worker and ease-redis": "EASE background job runner and its queue; not used by Gary",
         },
         "web_pages": ["/", "/login", "/events", "/approvals (CSRF-protected approve/reject)", "/team",
                       "/finance (CSRF-protected: add, freeze, or remove Catherine's card)", "/health"],
@@ -2133,7 +2141,7 @@ def system_configuration_summary() -> dict:
         "google_scopes": SCOPES,
         "joplin_access": (
             f"Gary: notes and notebooks inside the {JOPLIN_NOTEBOOK} notebook only; "
-            "Susan, Dave, Linda, Catherine: create-only notes in their own top-level notebook"
+            "Susan, Dave, Linda, Catherine, Lauren: create-only notes in their own top-level notebook"
         ),
         "openai_usage": {
             "voice": OPENAI_REALTIME_MODEL,
@@ -2155,6 +2163,13 @@ def system_configuration_summary() -> dict:
             "monthly_limit": format_cents(SPENDING_LIMITS.monthly_cents),
         },
         "crewai": "telemetry and tracing disabled; memory, planning, and code execution off",
+        "ease": {
+            "configured": bool(EASE_API_URL),
+            "url": EASE_API_URL or None,
+            "api_key_configured": bool(EASE_API_KEY),
+            "use": "Lauren's run_ease_analysis sends the decision question and context she chooses "
+                    "to EASE, which sends them to its LLM provider; at most one analysis per assignment",
+        },
     }
 
 
@@ -2170,6 +2185,7 @@ agent_services = AgentServices(
     system_summary=system_configuration_summary,
     manager_tools=tuple(sorted(GARY_TOOL_NAMES)),
     spending_limits=SPENDING_LIMITS,
+    ease=EaseFramework(EASE_API_URL, EASE_API_KEY) if EASE_API_URL else None,
 )
 
 
@@ -3036,6 +3052,9 @@ async def team_page(request: Request):
         if "budget_assessment" in report:
             requested = len(report.get("purchase_request_ids", []))
             return f"Budget: {report['budget_assessment']}, purchase requests: {requested}"
+        if "ethical_assessment" in report:
+            ease = "EASE used" if report.get("ease_analyses") else "EASE not used"
+            return f"Ethics: {report['ethical_assessment'].replace('_', ' ')}, {ease}"
         if "confidence" in report:
             return f"Confidence: {report['confidence']:.0%}"
         return item["error"] or ""
@@ -3570,7 +3589,7 @@ behave badly for humor; the humor comes from being an extremely serious Chief
 of Staff.
 
 GaryCorp team:
-You manage four specialist employees, each a separate AI that works in the
+You manage five specialist employees, each a separate AI that works in the
 background and returns a structured report:
 - Susan, Director of Research & Strategy: research, options, evidence, strategic
   analysis.
@@ -3580,6 +3599,8 @@ background and returns a structured report:
   breakdown, dependencies, scheduling implications.
 - Catherine, Chief Financial Officer: costs, budgets, subscriptions, AI
   spending, and purchases on GaryCorp's debit card.
+- Lauren, Director of Ethics: ethical review of decisions with the EASE
+  framework: who is affected, harms, consent, fairness, and safeguards.
 
 Use them when their specialization would materially improve a decision or
 reduce your uncertainty. Do not delegate trivial tasks, and do not delegate to
@@ -3598,6 +3619,9 @@ Map requests to tools:
   work from a different report, and if the match is wrong or missing, say so.
 - What would this cost, can we afford it, what are we spending on AI: delegate
   to Catherine.
+- Is this ethical, is this the right thing to do, who could this hurt, run it
+  through EASE: delegate to Lauren with the decision and the relevant facts.
+  Her assessment is advice, like Dave's controls.
 - Buy something: delegate to Catherine with exactly what to buy and any budget.
   She can only request a purchase within the spending limits. Nothing is
   charged: {PRINCIPAL_NAME} must approve every card purchase on the approvals
@@ -3607,7 +3631,7 @@ Map requests to tools:
 - Show me the management review: management_review_get.
 - Who is on the team, what are they working on: team_list.
 Each specialist can write notes in their own Joplin notebook (Susan, Dave,
-Linda, Catherine); when {PRINCIPAL_NAME} wants their work written up, include that in the
+Linda, Catherine, Lauren); when {PRINCIPAL_NAME} wants their work written up, include that in the
 objective. Assignments run in the background: say who is working on what, and
 that you will report back. Never invent or role-play a specialist's findings; only
 report what their report says, and say if it is not ready yet.

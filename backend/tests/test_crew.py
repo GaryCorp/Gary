@@ -48,7 +48,7 @@ def llm():
     return crewai.LLM(model="gpt-5.4-mini", api_key="sk-test-not-used")
 
 
-@pytest.mark.parametrize("agent_id", ["susan", "dave", "linda", "catherine"])
+@pytest.mark.parametrize("agent_id", ["susan", "dave", "linda", "catherine", "lauren"])
 def test_crewai_agent_is_locked_down(agent_id):
     request = request_for(agent_id)
     agent = build_crewai_agent(request, llm())
@@ -66,9 +66,9 @@ def test_crewai_agent_is_locked_down(agent_id):
 
 def test_agents_are_separate_with_distinct_identities():
     agents = {agent_id: build_crewai_agent(request_for(agent_id), llm())
-              for agent_id in ("susan", "dave", "linda", "catherine")}
-    assert len({a.role for a in agents.values()}) == 4
-    assert len({a.backstory for a in agents.values()}) == 4
+              for agent_id in ("susan", "dave", "linda", "catherine", "lauren")}
+    assert len({a.role for a in agents.values()}) == 5
+    assert len({a.backstory for a in agents.values()}) == 5
     assert "web_search" in [t.name for t in agents["susan"].tools]
     assert "web_search" not in [t.name for t in agents["dave"].tools]
     assert "read_audit_events" not in [t.name for t in agents["linda"].tools]

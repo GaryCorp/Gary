@@ -95,8 +95,8 @@ with `PLANNING_TIMES` in `.env`.
 
 ### Specialist team notebooks
 
-Susan, Dave, Linda, and Catherine write notes into top-level Joplin notebooks
-named **Susan**, **Dave**, **Linda**, and **Catherine**. Create those four
+Susan, Dave, Linda, Catherine, and Lauren write notes into top-level Joplin notebooks
+named **Susan**, **Dave**, **Linda**, **Catherine**, and **Lauren**. Create those five
 notebooks in Joplin (next to **Gary**, not inside it); they are never created
 automatically.
 
@@ -195,7 +195,7 @@ Check the specialist team:
 docker compose exec backend python -m app.team_cli team
 ```
 
-It lists Gary, Susan, Dave, Linda, and Catherine as active. See [Team](TEAM.md)
+It lists Gary, Susan, Dave, Linda, Catherine, and Lauren as active. See [Team](TEAM.md)
 to run a first assignment by hand.
 
 To give Catherine a debit card, open `http://localhost:8000/finance` (this needs

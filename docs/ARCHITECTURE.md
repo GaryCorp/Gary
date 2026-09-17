@@ -36,7 +36,8 @@ Responsibilities:
 - Calendar, Gmail, and Joplin API execution.
 - Chief of Staff operations database (SQLite), approvals page, and backups.
 - Scheduled planning cycle (morning, midday, evening).
-- The specialist team (Susan, Dave, Linda, Catherine) through CrewAI, and its `/team` page.
+- The specialist team (Susan, Dave, Linda, Catherine, Lauren) through CrewAI, and its `/team` page.
+- Lauren's EASE client, which calls the `ease-api` service.
 - Catherine's encrypted debit card vault and the `/finance` page.
 - Hourly new email check, and follow-up and overdue alerts.
 - Input validation.
@@ -353,7 +354,7 @@ Action handlers:
 
 ### 7. GaryCorp specialist team
 
-`backend/gary/agents/` adds four CrewAI specialists that Gary manages (see
+`backend/gary/agents/` adds five CrewAI specialists that Gary manages (see
 [Team](TEAM.md)):
 
 ```text
@@ -362,10 +363,11 @@ Gary tool (delegate_to_agent, run_management_review, ...)
   -> GaryCorpAgentRunner
        context package  (per department, least privilege)
        ToolGateway      (granted tools: read-only, plus notes in the agent's own
-                         Joplin notebook and Catherine's purchase requests;
+                         Joplin notebook, Catherine's purchase requests, and
+                         Lauren's EASE analyses via ease-api;
                          every call checked and audited)
        CrewAIExecutor   (separate single-agent crew per assignment)
-  -> validated ResearchReport / SecurityReport / OperationsReport / FinanceReport
+  -> validated Research / Security / Operations / Finance / Ethics report
   -> agent_assignments, agent_runs, audit_log; voice announcement
 ```
 

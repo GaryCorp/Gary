@@ -233,7 +233,7 @@ emails.
 
 ## Specialist team
 
-Susan, Dave, Linda, and Catherine are separate CrewAI agents with
+Susan, Dave, Linda, Catherine, and Lauren are separate CrewAI agents with
 code-enforced least privilege (details in [Team](TEAM.md#permissions)):
 
 - permissions live in frozen roster definitions, not the database or prompts;
@@ -246,7 +246,9 @@ code-enforced least privilege (details in [Team](TEAM.md#permissions)):
   agent's own top-level Joplin notebook (fixed in the roster, never chosen by
   the model), at most 3 per assignment, each stamped and audited, and
   Catherine's `request_card_purchase`, which only creates a purchase request
-  you approve on the web page (see [Catherine's debit card](#catherines-debit-card));
+  you approve on the web page (see [Catherine's debit card](#catherines-debit-card)),
+  and Lauren's `run_ease_analysis`, which sends a question to the local EASE
+  service (once per assignment) and changes nothing;
 - sending email, calendar changes, charging a card or spending money directly,
   reading the card number, permissions, shell, SQL, deletion, and delegation
   cannot be granted to any specialist;
@@ -263,6 +265,11 @@ them as data, and the worst an injected instruction could do is distort a
 report that Gary and Alex then weigh, add up to three misleading notes to
 that specialist's own notebook, or, for Catherine, create up to two purchase
 requests within the limits that wait for Alex on the approvals page.
+
+EASE (`ease-api`) listens on host loopback (`127.0.0.1:8001`) and the assistant
+Docker network, with no API key by default, so any process on this machine can
+use it and spend its model key; set `EASE_API_KEY` to require a key. It holds
+its own copy of the model key and runs with all capabilities dropped.
 
 ## Joplin tools
 

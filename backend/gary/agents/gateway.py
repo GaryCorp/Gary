@@ -6,7 +6,8 @@
 Every tool returns filtered data: no credentials, no card number, no email
 content, no notes outside Gary's planning notes, no raw SQL, no shell. Tools
 are read-only except write_note (the agent's own notebook) and
-request_card_purchase (creates an approval request; it cannot charge). A tool
+request_card_purchase (creates an approval request; it cannot charge).
+run_ease_analysis sends the question to the local EASE service. A tool
 is only callable by agents whose roster entry lists it, and the gateway checks
 that on every call, independent of which tools CrewAI was given.
 """
@@ -20,8 +21,9 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Literal, Protocol
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
+from gary.agents.ease import EaseError
 from gary.agents.models import GaryCorpAgentDefinition
 from gary.agents.roster import AgentLimits, AgentRegistry
 from gary.container import Gary
@@ -68,6 +70,10 @@ class BusyCalendar(Protocol):
     async def busy_intervals(self, start: str, end: str) -> list[dict]: ...
 
 
+class EthicsFramework(Protocol):
+    async def analyze(self, question: str, context: dict[str, str] | None, min_actions: int) -> dict: ...
+
+
 class AgentNotebooks(Protocol):
     async def create_note(self, notebook: str, title: str, body: str) -> dict: ...
 
@@ -90,6 +96,8 @@ class AgentServices:
     manager_tools: tuple[str, ...] = ()
     # Catherine's card spending caps; None when finance is not configured.
     spending_limits: SpendingLimits | None = None
+    # The EASE ethical decision-making service, for Lauren.
+    ease: EthicsFramework | None = None
 
 
 @dataclass
@@ -103,6 +111,8 @@ class RunState:
     tool_usage: dict[str, int] = field(default_factory=dict)
     # Card purchase requests this run created (Catherine only).
     purchase_request_ids: list[str] = field(default_factory=list)
+    # Completed EASE analyses in this run (Lauren only).
+    ease_analyses: int = 0
 
 
 @dataclass(frozen=True)
@@ -113,6 +123,8 @@ class ToolSpec:
     handler: Callable[["ToolCall"], Awaitable[Any]]
     # Extra per-run cap for costly tools.
     max_calls_per_run: int | None = None
+    # How long the executor waits for one call.
+    timeout_seconds: int = 120
 
 
 @dataclass
@@ -213,6 +225,19 @@ NOTE_BODY_LIMIT = 20_000
 class WriteNoteArgs(RequestModel):
     title: str = Field(min_length=1, max_length=NOTE_TITLE_LIMIT)
     body: str = Field(min_length=1, max_length=NOTE_BODY_LIMIT)
+
+
+class EaseArgs(RequestModel):
+    question: str = Field(min_length=20, max_length=2000)
+    context: dict[str, str] | None = None
+    min_actions: int = Field(default=4, strict=True, ge=3, le=5)
+
+    @field_validator("context")
+    @classmethod
+    def bounded_context(cls, value):
+        if value is not None and (len(value) > 10 or len(json.dumps(value)) > 4000):
+            raise ValueError("context allows at most 10 entries and 4000 characters")
+        return value
 
 
 class PurchasesArgs(RequestModel):
@@ -350,6 +375,8 @@ def _read_agent_permissions(call: ToolCall):
             "Specialist tools are read-only except write_note (the agent's own notebook) "
             "and request_card_purchase (Catherine only: creates a purchase request that "
             "Alex must approve on the web page; it cannot charge the card).",
+            "run_ease_analysis (Lauren only) sends a decision question and context to the "
+            "local EASE service, which calls its own LLM provider; it changes nothing.",
         ],
     }
 
@@ -581,6 +608,17 @@ async def request_card_purchase(call: ToolCall):
     }
 
 
+async def run_ease_analysis(call: ToolCall):
+    if call.services.ease is None:
+        raise ValueError("The EASE service is not configured")
+    try:
+        result = await call.services.ease.analyze(call.args.question, call.args.context, call.args.min_actions)
+    except EaseError as exc:
+        raise ValueError(str(exc)) from exc
+    call.state.ease_analyses += 1
+    return result
+
+
 def datetime_stamp(call: ToolCall) -> str:
     return dt.datetime.now(call.services.gary.timezone).strftime("%Y-%m-%d %H:%M %Z")
 
@@ -693,6 +731,17 @@ TOOL_CATALOG: dict[str, ToolSpec] = {
             PurchaseRequestArgs,
             request_card_purchase,
         ),
+        ToolSpec(
+            "run_ease_analysis",
+            "Run the EASE ethical decision-making framework on a decision: it defines the goal and "
+            "stakeholders, generates options (including doing nothing), evaluates each for "
+            "stakeholder harms, consent, risks, and utilitarian, care, and virtue ethics (0-10), "
+            "and elects the best option with a weighted decision matrix. State the decision as a "
+            "neutral, self-contained question; pass key facts as context. Takes one to two minutes.",
+            EaseArgs,
+            run_ease_analysis,
+            timeout_seconds=240,
+        ),
     )
 }
 
@@ -796,6 +845,8 @@ class ToolGateway:
             per_tool_limit = self.limits.max_notes_per_run
         elif tool_name == "request_card_purchase":
             per_tool_limit = self.limits.max_purchase_requests_per_run
+        elif tool_name == "run_ease_analysis":
+            per_tool_limit = self.limits.max_ease_analyses_per_run
         if per_tool_limit is not None and self.state.calls_by_tool.get(tool_name, 0) >= per_tool_limit:
             raise ToolDenied(f"{tool_name} may be used at most {per_tool_limit} times per assignment")
 

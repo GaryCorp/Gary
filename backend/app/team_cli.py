@@ -2,7 +2,7 @@
 
     docker compose exec backend python -m app.team_cli team
     docker compose exec backend python -m app.team_cli assign susan "Research three ideas for the next experiment"
-    docker compose exec backend python -m app.team_cli review "Give GaryCorp browser automation" --agents susan,dave,linda,catherine
+    docker compose exec backend python -m app.team_cli review "Give GaryCorp browser automation" --agents susan,dave,linda,catherine,lauren
     docker compose exec backend python -m app.team_cli show <assignment_id>
     docker compose exec backend python -m app.team_cli show-review [review_id]
 
@@ -28,7 +28,7 @@ async def main(argv: list[str]) -> int:
     commands.add_parser("team", help="show the team and recent work")
 
     assign = commands.add_parser("assign", help="give one specialist an assignment and wait")
-    assign.add_argument("agent", choices=["susan", "dave", "linda", "catherine"])
+    assign.add_argument("agent", choices=["susan", "dave", "linda", "catherine", "lauren"])
     assign.add_argument("objective")
     assign.add_argument("--project", help="project_id")
     assign.add_argument("--priority", type=int, default=5)
@@ -36,7 +36,7 @@ async def main(argv: list[str]) -> int:
 
     review = commands.add_parser("review", help="run an independent management review and wait")
     review.add_argument("topic")
-    review.add_argument("--agents", default="susan,dave,linda,catherine")
+    review.add_argument("--agents", default="susan,dave,linda,catherine,lauren")
     review.add_argument("--project", help="project_id")
 
     show = commands.add_parser("show", help="show an assignment and its report")

@@ -89,7 +89,20 @@ FINANCE = {
     "recommendation": "Affordable; cap the token spend.",
     "confidence": 0.6,
 }
-OUTPUTS = {"susan": RESEARCH, "dave": SECURITY, "linda": OPERATIONS, "catherine": FINANCE}
+ETHICS = {
+    "summary": "Acceptable if GaryCorp tells site owners what it collects and respects robots.txt.",
+    "ethical_assessment": "acceptable_with_safeguards",
+    "stakeholders": ["Alex", "Website owners", "People named on scraped pages"],
+    "ethical_concerns": ["Collecting personal data without consent"],
+    "options_considered": ["A1 Read-only retrieval (safety 8.0)", "A0 Do nothing (safety 9.0)"],
+    "recommended_option": "Read-only retrieval with a personal-data filter.",
+    "safeguards": ["Respect robots.txt", "Do not store personal data"],
+    "where_you_differ_from_ease": [],
+    "value_judgments_for_alex": ["How much convenience justifies automated traffic"],
+    "uncertainties": ["Which sites forbid automated access"],
+    "confidence": 0.7,
+}
+OUTPUTS = {"susan": RESEARCH, "dave": SECURITY, "linda": OPERATIONS, "catherine": FINANCE, "lauren": ETHICS}
 
 
 class FakeExecutor:
@@ -110,6 +123,19 @@ class FakeExecutor:
         if callable(behavior):
             behavior = behavior(request)
         return ExecutionResult(output=behavior, model=request.model, usage={"total_tokens": 1234, "prompt_tokens": 1000, "completion_tokens": 234})
+
+
+class FakeEase:
+    def __init__(self, error=None):
+        self.requests = []
+        self.error = error
+
+    async def analyze(self, question, context, min_actions):
+        self.requests.append({"question": question, "context": context, "min_actions": min_actions})
+        if self.error:
+            raise self.error
+        return {"framework": "EASE", "options": [{"id": "A1", "safety_rating_0_10": 8.0}],
+                "election": {"elected_option_id": "A1"}}
 
 
 class FakeNotebooks:
@@ -143,6 +169,7 @@ def build_team(gary, executor=None, limits=None, finished=None):
         notebooks=FakeNotebooks(),
         system_summary=lambda: {"backend_exposure": "127.0.0.1:8000 only"},
         manager_tools=("delegate_to_agent",),
+        ease=FakeEase(),
     )
 
     async def on_finished(assignment):
@@ -173,14 +200,15 @@ def audit_types(gary, entity_id):
 
 # ------------------------------------------------------------------ registry
 
-def test_registry_loads_four_employees_and_gary():
+def test_registry_loads_five_employees_and_gary():
     registry = AgentRegistry()
-    assert registry.employee_ids() == ["susan", "dave", "linda", "catherine"]
+    assert registry.employee_ids() == ["susan", "dave", "linda", "catherine", "lauren"]
     assert [(d.name, d.title) for d in registry.employees()] == [
         ("Susan", "Director of Research & Strategy"),
         ("Dave", "Director of Security"),
         ("Linda", "Director of Operations"),
         ("Catherine", "Chief Financial Officer"),
+        ("Lauren", "Director of Ethics"),
     ]
     assert all(d.reports_to == "gary" for d in registry.employees())
     assert registry.manager().can_delegate is True
@@ -230,8 +258,12 @@ def test_each_employee_has_exactly_its_approved_tools():
     assert set(registry.get("catherine").allowed_tools) == {
         "read_finance_status", "read_purchases", "read_ai_usage", "read_projects", "read_project",
         "read_tasks", "read_relevant_notes", "web_search", "request_card_purchase", "write_note"}
+    assert set(registry.get("lauren").allowed_tools) == {
+        "run_ease_analysis", "read_projects", "read_project", "read_tasks", "read_relevant_notes",
+        "read_action_policy", "write_note"}
     assert {d.agent_id: d.notebook for d in registry.employees()} == {
-        "susan": "Susan", "dave": "Dave", "linda": "Linda", "catherine": "Catherine"}
+        "susan": "Susan", "dave": "Dave", "linda": "Linda", "catherine": "Catherine", "lauren": "Lauren"}
+    assert [d.agent_id for d in registry.employees() if "run_ease_analysis" in d.allowed_tools] == ["lauren"]
     assert "web_search" not in registry.get("dave").allowed_tools
     assert "web_search" not in registry.get("linda").allowed_tools
     # Spending authority belongs to Catherine alone.
@@ -329,7 +361,7 @@ def test_gateway_tools_filter_sensitive_data(gary):
         audit = await gateway.call("read_audit_events", {"limit": 5})
         return permissions, policy, audit
     permissions, policy, audit = run(scenario())
-    assert {a["agent_id"] for a in permissions["agents"]} == {"gary", "susan", "dave", "linda", "catherine"}
+    assert {a["agent_id"] for a in permissions["agents"]} == {"gary", "susan", "dave", "linda", "catherine", "lauren"}
     assert policy["action_policies"]["spend_money"] == "red"
     assert policy["action_policies"]["card_purchase"] == "yellow"
     assert policy["web_only_approval_actions"] == ["card_purchase"]
@@ -339,7 +371,7 @@ def test_gateway_tools_filter_sensitive_data(gary):
 # -------------------------------------------------------------------- runner
 
 @pytest.mark.parametrize("agent_id, kind", [("susan", "research"), ("dave", "security"), ("linda", "operations"),
-                                            ("catherine", "finance")])
+                                            ("catherine", "finance"), ("lauren", "ethics")])
 def test_gary_can_delegate_to_each_employee(gary, agent_id, kind):
     executor = FakeExecutor()
     finished = []
@@ -357,7 +389,8 @@ def test_gary_can_delegate_to_each_employee(gary, agent_id, kind):
     assert request.agent.agent_id == agent_id
     assert [t.name for t in request.tools] == list(service.registry.get(agent_id).allowed_tools)
     assert request.output_model.__name__ == {"research": "ResearchFindings", "security": "SecurityFindings",
-                                             "operations": "OperationsFindings", "finance": "FinanceFindings"}[kind]
+                                             "operations": "OperationsFindings", "finance": "FinanceFindings",
+                                             "ethics": "EthicsFindings"}[kind]
     assert audit_types(gary, result["assignment_id"])[:3] == [
         "agent_assignment_delegated", "agent_assignment_started", "agent_assignment_completed"]
 
@@ -369,7 +402,7 @@ def test_context_packages_are_isolated(gary):
     make_task(gary, title="Film", project_id=project["id"])
 
     async def scenario():
-        for agent_id in ("susan", "dave", "linda", "catherine"):
+        for agent_id in ("susan", "dave", "linda", "catherine", "lauren"):
             await delegate_and_wait(service, agent_id=agent_id, project_id=project["id"],
                                     objective="Review the launch plan carefully.")
     run(scenario())
@@ -382,7 +415,9 @@ def test_context_packages_are_isolated(gary):
     assert "agent_permissions" not in descriptions["linda"]
     assert "finance_status" in descriptions["catherine"] and "recent_purchases" in descriptions["catherine"]
     assert "agent_permissions" not in descriptions["catherine"] and "free_blocks" not in descriptions["catherine"]
-    assert all("committed_this_month" not in descriptions[a] for a in ("susan", "dave", "linda"))
+    assert "planning_notes" in descriptions["lauren"]
+    assert all(key not in descriptions["lauren"] for key in ("agent_permissions", "free_blocks", "finance_status"))
+    assert all("committed_this_month" not in descriptions[a] for a in ("susan", "dave", "linda", "lauren"))
     for text in descriptions.values():
         assert "OPENAI_API_KEY" not in text and "token_store" not in text
 
@@ -485,7 +520,7 @@ def test_tool_use_inside_run_goes_through_gateway(gary):
 def test_only_managers_delegate_and_limits_apply(gary):
     service = build_team(gary, limits=AgentLimits(max_active_assignments=2, max_execution_seconds=5))
     request = DelegateRequest(agent_id="susan", objective="Research three experiment ideas.")
-    for actor in ("susan", "dave", "linda", "catherine", "mallory"):
+    for actor in ("susan", "dave", "linda", "catherine", "lauren", "mallory"):
         with pytest.raises(PermissionError):
             service._delegate_db(request, actor)
     with pytest.raises(UnknownAgentError):
@@ -497,7 +532,7 @@ def test_only_managers_delegate_and_limits_apply(gary):
         service._delegate_db(request, "gary")
 
 
-def test_management_review_all_four_independent(gary):
+def test_management_review_all_five_independent(gary):
     executor = FakeExecutor()
     service = build_team(gary, executor)
 
@@ -513,7 +548,8 @@ def test_management_review_all_four_independent(gary):
     assert review.security.risk_level == "high"
     assert review.operations.deadline_assessment == "at_risk"
     assert review.finance.budget_assessment == "within_budget"
-    assert len(executor.requests) == 4
+    assert review.ethics.ethical_assessment == "acceptable_with_safeguards"
+    assert len(executor.requests) == 5
     for request in executor.requests:
         assert "reports_shared_by_gary" not in request.task_description
         for other in OUTPUTS.values():
@@ -639,18 +675,20 @@ def test_gary_tools_management_review_and_budget(gary):
         assert started["success"] is True
         await service.wait([a["assignment_id"] for a in started["assignments"]], timeout=20)
         review = await call_tool("management_review_get", {}, ctx)
-        fifth = await call_tool("delegate_to_agent", {"agent_id": "linda", "objective": "One more planning pass please."}, ctx)
-        sixth = await call_tool("delegate_to_agent", {"agent_id": "linda", "objective": "Yet another planning pass please."}, ctx)
+        sixth = await call_tool("delegate_to_agent", {"agent_id": "linda", "objective": "One more planning pass please."}, ctx)
+        seventh = await call_tool("delegate_to_agent", {"agent_id": "linda", "objective": "Yet another planning pass please."}, ctx)
         bad = await call_tool("delegate_to_agent", {"agent_id": "intern", "objective": "Fetch coffee for the team."}, ctx)
-        return review, fifth, sixth, bad
-    review, fifth, sixth, bad = asyncio.run(scenario())
+        return review, sixth, seventh, bad
+    review, sixth, seventh, bad = asyncio.run(scenario())
     body = review["review"]
     assert body["research"]["summary"] == RESEARCH["summary"]
     assert body["security"]["recommendation"] == "approve_with_controls"
     assert body["operations"]["deadline_assessment"] == "at_risk"
     assert body["finance"]["estimated_monthly_cost_usd"] == 20.0
-    assert fifth["success"] is True
-    assert sixth["success"] is False and "limit 5" in sixth["error"]
+    assert body["ethics"]["ethical_assessment"] == "acceptable_with_safeguards"
+    # A full five-person review leaves room for one more assignment (e.g. the follow-up).
+    assert sixth["success"] is True
+    assert seventh["success"] is False and "limit 6" in seventh["error"]
     assert bad["success"] is False
 
 
@@ -780,3 +818,111 @@ def test_note_written_during_assignment(gary):
     result = run(delegate_and_wait(service, agent_id="susan", objective="Research ideas and keep a note of them."))
     assert result["status"] == "completed"
     assert service.runner.services.notebooks.notes[0]["notebook"] == "Susan"
+
+
+# -------------------------------------------------------------- Lauren / EASE
+
+def lauren_gateway(service, assignment_id="assign-ethics"):
+    state = RunState(assignment_id, "lauren")
+    agent = service.registry.get("lauren")
+    return ToolGateway(service.runner.services, agent, state, service.registry.limits), state
+
+
+def test_only_lauren_runs_ease_and_once_per_assignment(gary):
+    service = build_team(gary)
+    ease = service.runner.services.ease
+    susan = ToolGateway(service.runner.services, service.registry.get("susan"),
+                        RunState("assign-s", "susan"), service.registry.limits)
+    gateway, state = lauren_gateway(service)
+    question = "Should GaryCorp scrape public websites for competitor pricing?"
+
+    async def scenario():
+        with pytest.raises(ToolDenied, match="not permitted to use run_ease_analysis"):
+            await susan.call("run_ease_analysis", {"question": question})
+        with pytest.raises(ValueError):
+            await gateway.call("run_ease_analysis", {"question": "too short"})
+        with pytest.raises(ValueError):
+            await gateway.call("run_ease_analysis", {"question": question, "min_actions": 12})
+        result = await gateway.call("run_ease_analysis", {"question": question, "context": {"sites": "three"}})
+        assert result["election"]["elected_option_id"] == "A1"
+        with pytest.raises(ToolDenied, match="at most 1 times"):
+            await gateway.call("run_ease_analysis", {"question": question})
+    run(scenario())
+    assert ease.requests == [{"question": question, "context": {"sites": "three"}, "min_actions": 4}]
+    assert state.ease_analyses == 1
+
+
+def test_ease_failures_are_reported_to_lauren(gary):
+    from gary.agents.ease import EaseError
+
+    service = build_team(gary)
+    service.runner.services.ease = FakeEase(EaseError("EASE analysis failed with HTTP 400: Prompt injection detected"))
+    gateway, state = lauren_gateway(service)
+    question = "Should GaryCorp publish the customer survey results?"
+    result = run(gateway.call("run_ease_analysis", {"question": question}))
+    assert result == {"error": "EASE analysis failed with HTTP 400: Prompt injection detected"}
+    assert state.ease_analyses == 0
+
+    service.runner.services.ease = None
+    gateway, _ = lauren_gateway(service, "assign-ethics-2")
+    assert run(gateway.call("run_ease_analysis", {"question": question})) == {
+        "error": "The EASE service is not configured"}
+
+
+def test_lauren_assignment_records_ease_use_not_model_claim(gary):
+    def uses_ease(request):
+        tools = {t.name: t for t in request.tools}
+        assert "web_search" not in tools and "request_card_purchase" not in tools
+        tools["run_ease_analysis"].invoke({"question": "Should GaryCorp email past customers a survey?"})
+        return {**ETHICS, "ease_analyses": 7}
+
+    service = build_team(gary, FakeExecutor({"lauren": [uses_ease, {**ETHICS, "ease_analyses": 3}]}))
+    result = run(delegate_and_wait(service, agent_id="lauren", objective="Is emailing past customers a survey ethical?"))
+    assert result["status"] == "completed"
+    assert result["report"]["ease_analyses"] == 1
+    assert result["run"]["tool_calls"] == 1
+
+    skipped = run(delegate_and_wait(service, agent_id="lauren", objective="Is emailing past customers a survey ethical?"))
+    assert skipped["report"]["ease_analyses"] == 0
+
+
+def test_ethics_report_validation():
+    from gary.agents.models import EthicsReport
+
+    assert EthicsReport.model_validate({**ETHICS, "assignment_id": "a"}).ease_analyses == 0
+    for bad in ({"ethical_assessment": "fine"}, {"confidence": 2}, {"recommended_option": ""},
+                {"safeguards": ["x"] * 21}):
+        with pytest.raises(ValidationError):
+            EthicsReport.model_validate({**ETHICS, "assignment_id": "a", **bad})
+
+
+def test_ease_result_is_condensed_below_tool_limit():
+    from gary.agents.ease import condense_ease_result
+    from gary.agents.gateway import RESULT_CHAR_LIMIT
+
+    long = "word " * 400
+    impact = {"stakeholder_name": "Customers", "benefits": [long], "harms": [long, long],
+              "autonomy_respected": False, "informed_consent": True, "net_impact": -2}
+    evaluation = {
+        "stakeholder_impacts": [impact] * 6,
+        "risks": {"privacy_risks": [long] * 5, "societal_risks": [long] * 5, "overall_severity": "high"},
+        "ethical_analysis": {name: {"score": 4.25, "reasoning": long} for name in
+                             ("utilitarian", "care_ethics", "virtue_ethics")} | {"synthesis": long},
+        "improvements": [long] * 5, "rating": 4.44, "remaining_concerns": [long] * 5,
+    }
+    data = {
+        "environment": {"goal": {"objective": long}, "stakeholders": [{"name": "Customers", "affected_degree": "high"}] * 12,
+                        "uncertainties": [long] * 6},
+        "actions": [{"id": f"A{i}", "name": long, "description": long, "reversibility": "low"} for i in range(8)],
+        "evaluations": [{**evaluation, "action_id": f"A{i}"} for i in range(8)],
+        "election": {"elected_action": {"id": "A2", "name": "Ask first"},
+                     "decision_matrix": [{"action_id": "A2", "final_score": 7.123}],
+                     "qualitative_factors": [long] * 6, "rejected_alternatives": [{"action_id": "A1", "reason": long}] * 8,
+                     "fallback_plan": long, "sensitivity_analysis": {"is_robust": True, "robustness_note": long}},
+    }
+    result = condense_ease_result(data)
+    assert len(json.dumps(result)) < RESULT_CHAR_LIMIT
+    assert result["election"]["elected_option_id"] == "A2"
+    option = next(o for o in result["options"] if o["id"] == "A2")
+    assert option["final_score_0_10"] == 7.1 and option["safety_rating_0_10"] == 4.4
+    assert option["consent_or_autonomy_concerns"] == ["Customers"] * 3

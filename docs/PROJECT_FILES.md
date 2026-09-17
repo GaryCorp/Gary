@@ -91,17 +91,18 @@ Chief of Staff operations package:
 
 GaryCorp specialist team (see [Team](TEAM.md)):
 
-- `roster.py` defines Gary, Susan, Dave, Linda, and Catherine: identity,
+- `roster.py` defines Gary, Susan, Dave, Linda, Catherine, and Lauren: identity,
   prompts, tools, limits (the permission authority);
-- `models.py` has agent definitions and the Research, Security, Operations, and
-  Finance report models;
+- `models.py` has agent definitions and the Research, Security, Operations,
+  Finance, and Ethics report models;
 - `gateway.py` is the tool catalog and permission-checking gateway;
 - `context.py` builds least-privilege context packages;
 - `executor.py` is the boundary to the agent framework, and `crew.py` the
   CrewAI executor;
 - `runner.py` runs assignments; `service.py` handles delegation, management
   reviews, and reading reports;
-- `web.py` is the read-only web research service.
+- `web.py` is the read-only web research service;
+- `ease.py` is the client for the EASE service, which condenses its analysis for Lauren.
 
 ### `backend/gary/finance/`
 

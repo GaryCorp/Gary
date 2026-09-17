@@ -368,7 +368,7 @@ notebook when he first writes to it. Summaries are written to
 
 ## GaryCorp team
 
-Settings for Susan, Dave, Linda, and Catherine (see [Team](TEAM.md)).
+Settings for Susan, Dave, Linda, Catherine, and Lauren (see [Team](TEAM.md)).
 
 ### `GARY_EMPLOYEE_MODEL`
 
@@ -390,7 +390,7 @@ hosted `web_search` tool). Each search is roughly 15,000 tokens.
 | `MAX_AGENT_ITERATIONS` | 8 | 1–25 | CrewAI iterations per run |
 | `MAX_AGENT_EXECUTION_SECONDS` | 300 | 30–1800 | Hard time limit per run |
 | `MAX_CONCURRENT_AGENT_RUNS` | 2 | 1–6 | Runs at once |
-| `MAX_ASSIGNMENTS_PER_GARY_PLAN` | 5 | 1–10 | Assignments per conversation or review |
+| `MAX_ASSIGNMENTS_PER_GARY_PLAN` | 6 | 1–10 | Assignments per conversation or review |
 | `MAX_ACTIVE_AGENT_ASSIGNMENTS` | 6 | 1–20 | Queued plus running assignments |
 
 Values outside the range stop the backend at startup.
@@ -405,6 +405,22 @@ Values outside the range stop the backend at startup.
 US dollars, such as `49.99`. The per-purchase limit cannot exceed the monthly
 limit; an invalid value stops the backend at startup. Every purchase also needs
 your approval on the approvals page (see [Team](TEAM.md#catherines-debit-card)).
+
+### EASE
+
+Lauren's ethics framework runs as the `ease-api` container, with
+`ease-worker` and `ease-redis`. It is reachable from the host at
+`http://localhost:8001` (interactive docs at `/docs`).
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `EASE_API_URL` | `http://ease-api:8000` | Where the backend reaches EASE. Set it empty to run Lauren without the service. |
+| `EASE_API_KEY` | empty | API key for EASE. When set, both EASE and the backend use it; empty means EASE requires no key (it listens only on loopback and the assistant network). |
+| `EASE_LLM_PROVIDER` | `openai` | EASE's model provider: `openai`, `anthropic`, or `google`. |
+| `EASE_LLM_API_KEY` | `OPENAI_API_KEY` | Key for that provider. |
+| `EASE_LLM_MODEL` | `gpt-5.4-mini` | EASE's model. |
+
+Rebuild after changing EASE's code: `docker compose up -d --build ease-api ease-worker`.
 
 ## Joplin
 

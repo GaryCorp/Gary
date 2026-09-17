@@ -98,7 +98,7 @@ Set `PLANNING_TIMES` empty to turn scheduled runs off.
 
 ## Specialist team
 
-When Gary delegates to Susan, Dave, Linda, or Catherine, their context package and tool
+When Gary delegates to Susan, Dave, Linda, Catherine, or Lauren, their context package and tool
 results are sent to OpenAI (`GARY_EMPLOYEE_MODEL`): the assignment and any
 context Gary includes, the related project and its tasks, Gary's planning notes
 for that project, and depending on the specialist, commitments, follow-ups,
@@ -107,7 +107,10 @@ configuration, recent audit summaries, or Catherine's card brand, last four
 digits, expiry, spending totals, purchase requests, and team token usage. No
 email content, credentials, or card number are included. Susan's and
 Catherine's web searches send the search query to OpenAI's web search
-(`AGENT_WEB_SEARCH_MODEL`). Reports are stored locally in `data/gary.db`, and
+(`AGENT_WEB_SEARCH_MODEL`). Lauren's EASE analyses send the decision question
+and context she writes to the local `ease-api` container, which sends them to
+its own model provider (`EASE_LLM_PROVIDER`, OpenAI by default); EASE stores
+nothing (it has no database) and its logs stay in Docker. Reports are stored locally in `data/gary.db`, and
 notes the specialists write are saved in their own notebooks in your local
 Joplin app.
 CrewAI telemetry and hosted tracing are disabled.

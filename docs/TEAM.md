@@ -1,6 +1,6 @@
 # GaryCorp Team
 
-Gary manages four specialist AI employees. Each is a separate CrewAI agent
+Gary manages five specialist AI employees. Each is a separate CrewAI agent
 with its own identity, prompt, tools, permissions, context, structured report,
 and audit history. Gary decides when their expertise is worth asking for,
 delegates, reads their reports, and makes the company-level recommendation.
@@ -10,10 +10,9 @@ Gary
 ├── Susan — Director of Research & Strategy
 ├── Dave — Director of Security
 ├── Linda — Director of Operations
-└── Catherine — Chief Financial Officer
+├── Catherine — Chief Financial Officer
+└── Lauren — Director of Ethics
 ```
-
-The Ethics Agent is a future department and is not part of this version.
 
 ## How work flows
 
@@ -28,7 +27,7 @@ GaryCorpAgentRunner              context package, granted tools, time and output
   ↓
 CrewAIExecutor                   one single-agent crew per assignment
   ↓
-Susan / Dave / Linda / Catherine tool calls go through the ToolGateway
+Susan / Dave / Linda / Catherine / Lauren: tool calls go through the ToolGateway
   ↓
 Structured report                validated, stored in agent_assignments, audited
   ↓
@@ -44,20 +43,20 @@ not confused.
 
 ## The employees
 
-| | Susan | Dave | Linda | Catherine |
-|---|---|---|---|---|
-| Department | Research | Security | Operations | Finance |
-| Answers | Options, evidence, tradeoffs, alternatives, what is missing | Attack surface, permissions, trust boundaries, blast radius, controls | Tasks, order, dependencies, estimates, blockers, schedule, deadline realism | Up-front and ongoing costs, budget fit, cheaper alternatives, AI spending, purchases |
-| Report | `ResearchReport` | `SecurityReport` | `OperationsReport` | `FinanceReport` |
-| Key fields | findings, options, recommendation, assumptions, uncertainties, sources, confidence | risk_level, attack_surfaces, required and recommended controls, recommendation (approve … reject), confidence | proposed_tasks, dependencies, estimated_total_minutes, blockers, deadline_assessment, decisions_needed, confidence | costs (item, amount, frequency), estimated one-time and monthly cost, budget_assessment, savings_opportunities, risks, decisions_needed, recommendation, confidence, purchase_request_ids (set by the application) |
-| Tools | `web_search`, `read_project`, `read_tasks`, `read_relevant_notes`, `read_previous_research`, `write_note` | `read_project`, `read_tasks`, `read_agent_permissions`, `read_action_policy`, `read_audit_events`, `read_system_configuration_summary`, `read_relevant_notes`, `write_note` | `read_projects`, `read_project`, `read_tasks`, `read_dependencies`, `read_calendar_availability`, `read_commitments`, `read_followups`, `read_relevant_notes`, `write_note` | `read_finance_status`, `read_purchases`, `read_ai_usage`, `read_projects`, `read_project`, `read_tasks`, `read_relevant_notes`, `web_search`, `request_card_purchase`, `write_note` |
-| Joplin notebook | Susan | Dave | Linda | Catherine |
-| Context package | assignment, project and tasks, planning notes | assignment, project and tasks, all agents' permissions, action policy, deployment summary, recent security-relevant audit events | assignment, project and tasks, active projects, commitments, follow-ups, calendar availability, planning notes | assignment, project and tasks, card status (brand, last four, expiry), spending limits and this month's committed spend, recent purchase requests, planning notes |
+| | Susan | Dave | Linda | Catherine | Lauren |
+|---|---|---|---|---|---|
+| Department | Research | Security | Operations | Finance | Ethics |
+| Answers | Options, evidence, tradeoffs, alternatives, what is missing | Attack surface, permissions, trust boundaries, blast radius, controls | Tasks, order, dependencies, estimates, blockers, schedule, deadline realism | Up-front and ongoing costs, budget fit, cheaper alternatives, AI spending, purchases | Who is affected and how, harms, consent, fairness, honesty, safeguards, value judgments for you |
+| Report | `ResearchReport` | `SecurityReport` | `OperationsReport` | `FinanceReport` | `EthicsReport` |
+| Key fields | findings, options, recommendation, assumptions, uncertainties, sources, confidence | risk_level, attack_surfaces, required and recommended controls, recommendation (approve … reject), confidence | proposed_tasks, dependencies, estimated_total_minutes, blockers, deadline_assessment, decisions_needed, confidence | costs (item, amount, frequency), estimated one-time and monthly cost, budget_assessment, savings_opportunities, risks, decisions_needed, recommendation, confidence, purchase_request_ids (set by the application) | ethical_assessment (acceptable … unacceptable), stakeholders, ethical_concerns, options_considered, recommended_option, safeguards, where_you_differ_from_ease, value_judgments_for_alex, uncertainties, confidence, ease_analyses (set by the application) |
+| Tools | `web_search`, `read_project`, `read_tasks`, `read_relevant_notes`, `read_previous_research`, `write_note` | `read_project`, `read_tasks`, `read_agent_permissions`, `read_action_policy`, `read_audit_events`, `read_system_configuration_summary`, `read_relevant_notes`, `write_note` | `read_projects`, `read_project`, `read_tasks`, `read_dependencies`, `read_calendar_availability`, `read_commitments`, `read_followups`, `read_relevant_notes`, `write_note` | `read_finance_status`, `read_purchases`, `read_ai_usage`, `read_projects`, `read_project`, `read_tasks`, `read_relevant_notes`, `web_search`, `request_card_purchase`, `write_note` | `run_ease_analysis`, `read_projects`, `read_project`, `read_tasks`, `read_relevant_notes`, `read_action_policy`, `write_note` |
+| Joplin notebook | Susan | Dave | Linda | Catherine | Lauren |
+| Context package | assignment, project and tasks, planning notes | assignment, project and tasks, all agents' permissions, action policy, deployment summary, recent security-relevant audit events | assignment, project and tasks, active projects, commitments, follow-ups, calendar availability, planning notes | assignment, project and tasks, card status (brand, last four, expiry), spending limits and this month's committed spend, recent purchase requests, planning notes | assignment, project and tasks, planning notes |
 
 Personalities are deliberately subtle: Susan is curious and evidence-oriented,
 Dave skeptical and precise but looking for the safest practical way forward,
 Linda practical and unimpressed by unrealistic plans, Catherine careful and
-frugal without being stingy. Disagreement comes from
+frugal without being stingy, Lauren principled and even-handed but not preachy. Disagreement comes from
 their different jobs, not from scripted conflict.
 
 All definitions live in `backend/gary/agents/roster.py`.
@@ -76,12 +75,13 @@ Permissions are enforced in code, not only by prompts:
   are validated, per-run limits apply (12 tool calls, 4 web searches), a run
   that timed out cannot make further calls, and every call and denial is
   audited as `agent_tool_called` or `agent_tool_denied`.
-- **Specialist tools are read-only except `write_note` and Catherine's
-  `request_card_purchase`**, and return filtered data: no credentials, no card
+- **Specialist tools are read-only except `write_note`, Catherine's
+  `request_card_purchase`, and Lauren's `run_ease_analysis`** (which changes
+  nothing but sends her question to the EASE service), and return filtered data: no credentials, no card
   number, no email content, no audit details, busy calendar time without
   titles, and only Gary's planning notes (never the whole notebook).
 - **Notes go only to the agent's own notebook.** `write_note` takes a title
-  and Markdown body; the notebook comes from the roster (Susan, Dave, Linda),
+  and Markdown body; the notebook comes from the roster,
   never from the model, and must already exist as a top-level Joplin notebook.
   Agents cannot read, edit, move, or delete notes, or write anywhere else. At
   most 3 notes per assignment; each note ends with who wrote it, when, and for
@@ -91,7 +91,7 @@ Permissions are enforced in code, not only by prompts:
   charging a card, reading the card number, permissions, shell, SQL, security
   policy, account creation, deletion, delegation) cannot be granted: a roster
   listing one fails at startup.
-- **No delegation by employees.** CrewAI `allow_delegation=False` for all four;
+- **No delegation by employees.** CrewAI `allow_delegation=False` for all of them;
   the roster refuses an employee with `can_delegate`; the service only accepts
   assignments from Gary (or Alex through the CLI).
 - **No code execution, memory, or planning** in CrewAI. CrewAI telemetry and
@@ -103,8 +103,10 @@ Permissions are enforced in code, not only by prompts:
 
 Employees are advisory: Dave's controls are recommendations, Linda's tasks are
 proposals Gary adds only with your agreement, and Catherine's purchases are
-requests you approve. Because permissions are per-agent capabilities,
-Catherine's purchase authority was added without changing the others.
+requests you approve, and Lauren's assessments are advice: she cannot take or
+block any action. Because permissions are per-agent capabilities, Catherine's
+purchase authority and Lauren's EASE access were added without changing the
+others.
 
 ## Catherine's debit card
 
@@ -152,10 +154,41 @@ application from the run, so she cannot claim a request she did not make.
 Gary announces requests when her report is ready. Spending this month and all
 requests are on `/finance`.
 
+## Lauren and the EASE framework
+
+Lauren reviews decisions with EASE, the ethical decision-making framework in
+`EASE/`, which runs as the `ease-api` container (see
+[Configuration](CONFIGURATION.md#ease)). EASE has four steps:
+
+1. **Environment**: the goal, the current state, and the stakeholders.
+2. **Actions**: realistic options, always including doing nothing.
+3. **Safety**: for each option, benefits and harms to each stakeholder, consent
+   and autonomy, privacy, security, and societal risks, and utilitarian, care,
+   and virtue ethics scores (0–10), with suggested improvements.
+4. **Election**: a weighted decision matrix (safety 40%, goal 30%, risk 20%,
+   resource efficiency 10%) elects an option, with rejected alternatives, a
+   fallback plan, and whether the result holds under other weights.
+
+For each assignment Lauren runs `run_ease_analysis` once, on the decision as a
+neutral question with the key facts as context. The backend calls
+`POST /api/v1/ease` on `EASE_API_URL` and condenses EASE's full response (tens
+of kilobytes) to the options, scores, harms, consent concerns, and election,
+under the 12,000-character tool result limit. An analysis takes about one to
+two minutes; the call waits up to 240 seconds.
+
+EASE's result is analysis, not a verdict. Lauren checks it for a missed
+stakeholder, a less harmful option, deception, consent problems, or
+irreversible harm, and records where she disagrees in
+`where_you_differ_from_ease`. `ease_analyses` in her report is set by the
+application from the run, so a report written without EASE is visible (and
+shown as "EASE not used" on `/team`). If EASE is unreachable, returns an error
+(such as its prompt-injection check), or `EASE_API_URL` is empty, the tool
+reports that and Lauren applies the four steps herself and says so.
+
 ## Notes
 
 Each specialist keeps notes in their own Joplin notebook: **Susan**, **Dave**,
-**Linda**, and **Catherine** (top-level notebooks, next to **Gary**). They write a note when
+**Linda**, **Catherine**, and **Lauren** (top-level notebooks, next to **Gary**). They write a note when
 the assignment asks for one, or for a concise record worth keeping beyond the
 report; the structured report is still required. To ask for a write-up:
 
@@ -168,7 +201,7 @@ created elsewhere. Gary's own Joplin tools stay limited to the Gary notebook.
 
 ## Management reviews
 
-`run_management_review` asks several employees (all four by default, or a
+`run_management_review` asks several employees (all five by default, or a
 subset) to review one topic **independently**: every first-round assignment
 gets the same starting context and none sees another's report. Gary compares
 the reports and does not force consensus.
@@ -187,13 +220,15 @@ failed, and `failed` if all did.
 | `MAX_AGENT_ITERATIONS` | 8 | CrewAI reasoning/tool iterations per run |
 | `MAX_AGENT_EXECUTION_SECONDS` | 300 | Hard time limit per run |
 | `MAX_CONCURRENT_AGENT_RUNS` | 2 | Runs executing at once |
-| `MAX_ASSIGNMENTS_PER_GARY_PLAN` | 5 | Assignments Gary may create in one conversation or review |
+| `MAX_ASSIGNMENTS_PER_GARY_PLAN` | 6 | Assignments Gary may create in one conversation or review |
 | `CFO_PER_PURCHASE_LIMIT_USD` | 50 | Largest single card purchase Catherine may request |
 | `CFO_MONTHLY_LIMIT_USD` | 200 | Card purchases requested or approved per calendar month |
 | `MAX_ACTIVE_AGENT_ASSIGNMENTS` | 6 | Queued plus running assignments across the company |
 
 Also fixed in code: one output retry, 12 tool calls, 4 web searches, 3 notes,
-and 2 purchase requests per run, one follow-up per review.
+2 purchase requests, and 1 EASE analysis per run, one follow-up per review.
+A review with all five employees uses five of Gary's six assignments for the
+conversation, which leaves room for the follow-up.
 
 ## Persistence and audit
 
@@ -218,7 +253,8 @@ error), `agent_tool_called`, `agent_tool_denied`,
 `management_review_started`, `management_review_completed` / `partial` /
 `failed`, and for finance `card_added`, `card_frozen`, `card_unfrozen`,
 `card_removed`, `approval_requested` (by `catherine`), and
-`card_purchase_approved`. Model reasoning is never stored.
+`card_purchase_approved`. Lauren's completed assignments record her
+`ethical_assessment` and `ease_analyses`. Model reasoning is never stored.
 
 After a restart, running assignments are marked failed (they cannot resume)
 and queued ones start again. Reports stay available.
@@ -236,6 +272,8 @@ Gary, what is Dave worried about?
 Gary, ask Catherine what the team's AI usage is costing us.
 Gary, have Catherine buy a USB microphone under forty dollars.
 Gary, does Linda think we can finish this Friday?
+Gary, have Lauren check whether it's ethical to email past collaborators about the next video.
+Gary, what does Lauren think the safeguards should be?
 Gary, show me the management review.
 Gary, who's on the team?
 ```
@@ -253,7 +291,7 @@ docker compose exec backend python -m app.team_cli team
 docker compose exec backend python -m app.team_cli assign susan "Research three ideas for the next experiment"
 
 # Independent management review
-docker compose exec backend python -m app.team_cli review "Give GaryCorp a browser automation capability" --agents susan,dave,linda,catherine
+docker compose exec backend python -m app.team_cli review "Give GaryCorp a browser automation capability" --agents susan,dave,linda,catherine,lauren
 
 # Look up results
 docker compose exec backend python -m app.team_cli show <assignment_id>
@@ -286,6 +324,12 @@ Run against the real models before release:
   returned a valid `FinanceReport` (about $0.30 for the week, $1.31 a month)
   noting that the provider reported no billed cost. Adding, freezing, and
   removing a card on `/finance` was checked against a throwaway database.
+- Lauren, asked whether GaryCorp should automatically email past video
+  collaborators using addresses from Alex's inbox (78 seconds, 1 EASE
+  analysis): rated it `needs_revision`, recommended not sending without
+  documented permission, listed safeguards and the value judgments left to
+  Alex, and noted where she differed from EASE (it elected never contacting
+  them; she would allow narrowly targeted outreach with documented permission).
 
 ## Models and cost
 
@@ -293,3 +337,6 @@ Specialists use `GARY_EMPLOYEE_MODEL` (default: the planning model) through
 CrewAI, with the existing `OPENAI_API_KEY`. Susan's and Catherine's `web_search` uses OpenAI's
 hosted web search with `AGENT_WEB_SEARCH_MODEL` (default `gpt-5.4-mini`); each
 search is about 15,000 tokens. Token usage per run is stored in `agent_runs`.
+Lauren's EASE analyses run inside the `ease-api` container on its own model
+(`EASE_LLM_MODEL`, default `gpt-5.4-mini` with the same OpenAI key), about two
+dozen model calls each; their tokens are not included in `agent_runs`.

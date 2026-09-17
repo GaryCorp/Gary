@@ -11,7 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-ReportKind = Literal["research", "security", "operations", "finance"]
+ReportKind = Literal["research", "security", "operations", "finance", "ethics"]
 
 LIST_LIMIT = 20
 TEXT_LIMIT = 4000
@@ -241,17 +241,54 @@ class FinanceReport(FinanceFindings):
         return _bounded_items(value)
 
 
+# -------------------------------------------------------------------- ethics
+
+EthicalAssessment = Literal["acceptable", "acceptable_with_safeguards", "needs_revision", "unacceptable"]
+
+
+class EthicsFindings(ReportModel):
+    summary: str
+    ethical_assessment: EthicalAssessment
+    stakeholders: list[str]
+    ethical_concerns: list[str]
+    options_considered: list[str]
+    recommended_option: str
+    safeguards: list[str]
+    where_you_differ_from_ease: list[str]
+    value_judgments_for_alex: list[str]
+    uncertainties: list[str]
+    confidence: float
+
+
+class EthicsReport(EthicsFindings):
+    assignment_id: str
+    summary: str = Field(min_length=1, max_length=TEXT_LIMIT)
+    recommended_option: str = Field(min_length=1, max_length=TEXT_LIMIT)
+    confidence: float = Field(ge=0, le=1)
+    # Set by the application from the run, never by the model: how many EASE
+    # analyses completed, so a report that skipped the framework is visible.
+    ease_analyses: int = Field(default=0, ge=0)
+
+    @field_validator("stakeholders", "ethical_concerns", "options_considered", "safeguards",
+                     "where_you_differ_from_ease", "value_judgments_for_alex", "uncertainties")
+    @classmethod
+    def bounded(cls, value):
+        return _bounded_items(value)
+
+
 FINDINGS_MODELS: dict[str, type[ReportModel]] = {
     "research": ResearchFindings,
     "security": SecurityFindings,
     "operations": OperationsFindings,
     "finance": FinanceFindings,
+    "ethics": EthicsFindings,
 }
 REPORT_MODELS: dict[str, type[ReportModel]] = {
     "research": ResearchReport,
     "security": SecurityReport,
     "operations": OperationsReport,
     "finance": FinanceReport,
+    "ethics": EthicsReport,
 }
 
 
@@ -263,5 +300,6 @@ class ManagementReview(BaseModel):
     security: SecurityReport | None = None
     operations: OperationsReport | None = None
     finance: FinanceReport | None = None
+    ethics: EthicsReport | None = None
     follow_ups: list[dict] = Field(default_factory=list)
     assignments: list[dict] = Field(default_factory=list)

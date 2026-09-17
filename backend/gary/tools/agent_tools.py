@@ -12,7 +12,7 @@ from pydantic import Field
 from gary.models.common import EntityId, RequestModel, validate_request
 from gary.tools.base import Tool, ToolContext, integer, obj, present, run_sync, string
 
-AGENT_IDS = ["susan", "dave", "linda", "catherine"]
+AGENT_IDS = ["susan", "dave", "linda", "catherine", "lauren"]
 
 
 class AssignmentLookup(RequestModel):
@@ -148,7 +148,7 @@ TOOLS = [
     Tool(
         "team_list",
         "List GaryCorp's team (Susan: research and strategy; Dave: security; Linda: "
-        "operations; Catherine: finance), their status, and recent assignments and reviews.",
+        "operations; Catherine: finance; Lauren: ethics), their status, and recent assignments and reviews.",
         obj({}),
         team_list,
     ),
@@ -159,7 +159,9 @@ TOOLS = [
         "permissions, controls. Linda: execution plans, feasibility, dependencies, "
         "scheduling. Catherine: costs, budgets, AI spending, and buying things on "
         "GaryCorp's debit card (she can only request a purchase; the user approves it "
-        "on the approvals web page). Runs in the background. Do not delegate trivial work.",
+        "on the approvals web page). Lauren: ethical review of a decision with the EASE "
+        "framework (stakeholders, harms, consent, safeguards). Runs in the background. "
+        "Do not delegate trivial work.",
         obj(
             {
                 "agent_id": string("Which specialist.", AGENT_IDS),
@@ -180,13 +182,13 @@ TOOLS = [
     Tool(
         "run_management_review",
         "Ask several specialists to review one topic independently (none sees another's "
-        "report). Defaults to all four; pass agents to choose a subset. Use for decisions "
+        "report). Defaults to all five; pass agents to choose a subset. Use for decisions "
         "that need more than one department.",
         obj(
             {
                 "topic": string("The proposal or question under review."),
                 "agents": {"type": "array", "items": {"type": "string", "enum": AGENT_IDS},
-                           "description": "Which specialists; omit for all four."},
+                           "description": "Which specialists; omit for all five."},
                 "questions": {"type": "object", "additionalProperties": {"type": "string"},
                               "description": "Optional specific question per agent id."},
                 "project_id": string("Related project_id, if any."),

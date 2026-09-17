@@ -29,13 +29,14 @@ logger = logging.getLogger("gary.agents.service")
 CONTEXT_JSON_LIMIT = 6000
 STOPWORDS = frozenset(
     "the and for with about what did does find found from that this into your their have has "
-    "was were are our gary susan dave linda catherine report research review".split()
+    "was were are our gary susan dave linda catherine lauren report research review".split()
 )
 REVIEW_FRAMING = {
     "research": "Evaluate its usefulness, the available approaches, the evidence, and the tradeoffs.",
     "security": "Threat-model it and determine the minimum safe permission set and required controls.",
     "operations": "Assess its operational value, what implementing it would require, and whether the timing is realistic.",
     "finance": "Assess what it would cost up front and over time, whether it fits the budget, and cheaper alternatives. Do not request any purchase.",
+    "ethics": "Run the EASE framework on it and assess who it affects, its ethical risks, and the safeguards it needs.",
 }
 
 
@@ -57,7 +58,7 @@ class DelegateRequest(RequestModel):
 
 class ReviewRequest(RequestModel):
     topic: str = Field(min_length=10, max_length=2000)
-    agents: list[str] | None = Field(default=None, max_length=4)
+    agents: list[str] | None = Field(default=None, max_length=5)
     questions: dict[str, str] | None = None
     project_id: EntityId | None = None
     task_id: EntityId | None = None

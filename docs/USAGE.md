@@ -366,11 +366,11 @@ or at `http://localhost:8000/approvals`, which shows the exact recipient, text,
 or times. Unanswered approvals expire after 72 hours. Gary only reports an
 action as done when it actually succeeded.
 
-## The team: Susan, Dave, Linda, and Catherine
+## The team: Susan, Dave, Linda, Catherine, and Lauren
 
 Gary can ask specialists for help: Susan for research and strategy, Dave for
-security, Linda for operations planning, and Catherine for costs, budgets, and
-purchases.
+security, Linda for operations planning, Catherine for costs, budgets, and
+purchases, and Lauren for ethical review with the EASE framework.
 
 ```text
 Gary, have Susan research the best tools for recording screen demos.
@@ -381,6 +381,7 @@ Gary, what did Susan find?
 Gary, show me the management review.
 Gary, what would a transcription subscription cost us per month?
 Gary, have Catherine buy a USB microphone under forty dollars.
+Gary, have Lauren check whether it's ethical to email past collaborators about the next video.
 ```
 
 They work in the background, usually for a minute or two; Gary announces when
@@ -397,7 +398,7 @@ card. Give her the card, freeze it, or remove it at
 `http://localhost:8000/finance`.
 
 Each specialist can also keep notes in their own Joplin notebook (**Susan**,
-**Dave**, **Linda**, **Catherine**). Ask for a write-up as part of the assignment:
+**Dave**, **Linda**, **Catherine**, **Lauren**). Ask for a write-up as part of the assignment:
 
 ```text
 Gary, have Linda plan the prototype and write the plan up in her notebook.

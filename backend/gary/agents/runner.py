@@ -55,6 +55,16 @@ REPORT_GUIDANCE = {
         "savings_opportunities; risks; decisions_needed; recommendation; confidence "
         "from 0 to 1. Mention any purchase you requested in the summary."
     ),
+    "ethics": (
+        "Return an EthicsReport: summary; ethical_assessment (acceptable, "
+        "acceptable_with_safeguards, needs_revision, unacceptable); stakeholders "
+        "(who is affected and how); ethical_concerns; options_considered (each with "
+        "its EASE safety rating where available); recommended_option; safeguards "
+        "(conditions that make the recommendation acceptable); where_you_differ_from_ease "
+        "(where your judgment departs from EASE's election and why; empty if it does "
+        "not); value_judgments_for_alex (tradeoffs only Alex can decide); "
+        "uncertainties; confidence from 0 to 1."
+    ),
 }
 
 
@@ -74,6 +84,8 @@ def _summary_line(kind: str, report: dict) -> str:
         summary = f"[deadline {report['deadline_assessment']}] {summary}"
     elif kind == "finance":
         summary = f"[{report['budget_assessment']}, {len(report['purchase_request_ids'])} purchase requests] {summary}"
+    elif kind == "ethics":
+        summary = f"[{report['ethical_assessment']}] {summary}"
     return summary[:500]
 
 
@@ -171,6 +183,10 @@ class GaryCorpAgentRunner:
                 details.update(budget_assessment=report["budget_assessment"],
                                purchase_request_ids=report["purchase_request_ids"])
                 summary = f"{agent.name} returned a financial assessment ({report['budget_assessment']})"
+            elif kind == "ethics":
+                details.update(ethical_assessment=report["ethical_assessment"],
+                               ease_analyses=report["ease_analyses"])
+                summary = f"{agent.name} returned an ethics review ({report['ethical_assessment']})"
             else:
                 details.update(confidence=report["confidence"], sources=len(report["sources"]))
                 summary = f"{agent.name} completed research"
@@ -221,10 +237,10 @@ class GaryCorpAgentRunner:
     def _bind_tools(self, gateway: ToolGateway, loop: asyncio.AbstractEventLoop) -> list[BoundTool]:
         bound = []
         for spec in gateway.tools():
-            def invoke(arguments: dict, _name=spec.name):
+            def invoke(arguments: dict, _name=spec.name, _timeout=spec.timeout_seconds):
                 future = asyncio.run_coroutine_threadsafe(gateway.call(_name, arguments), loop)
                 try:
-                    return future.result(timeout=120)
+                    return future.result(timeout=_timeout)
                 except ToolDenied as exc:
                     return {"error": str(exc)}
                 except ValueError as exc:
@@ -269,6 +285,8 @@ class GaryCorpAgentRunner:
         data["assignment_id"] = state.assignment_id
         if agent.report_kind == "finance":
             data["purchase_request_ids"] = list(state.purchase_request_ids)
+        if agent.report_kind == "ethics":
+            data["ease_analyses"] = state.ease_analyses
         return REPORT_MODELS[agent.report_kind].model_validate(data).model_dump(mode="json")
 
     async def run_assignment(self, assignment_id: str, shared_reports: list[dict] | None = None) -> dict:
