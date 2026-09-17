@@ -139,12 +139,28 @@ class FakeEase:
 
 
 class FakeNotebooks:
+    """Enforces the same containment as JoplinAgentNotebooks: only notes
+    directly in the named notebook are listed or read."""
+
     def __init__(self):
         self.notes = []
 
     async def create_note(self, notebook, title, body):
-        self.notes.append({"notebook": notebook, "title": title, "body": body})
-        return {"note_id": f"note-{len(self.notes)}"}
+        note_id = f"{len(self.notes) + 1:032x}"
+        self.notes.append({"notebook": notebook, "title": title, "body": body, "note_id": note_id})
+        return {"note_id": note_id}
+
+    async def list_notes(self, notebook, query):
+        words = query.casefold().split()
+        return [{"note_id": n["note_id"], "title": n["title"], "updated": "2026-09-17T10:00:00-05:00"}
+                for n in reversed(self.notes)
+                if n["notebook"] == notebook and all(w in n["title"].casefold() for w in words)]
+
+    async def read_note(self, notebook, note_id):
+        for note in self.notes:
+            if note["note_id"] == note_id and note["notebook"] == notebook:
+                return {**note, "updated": "2026-09-17T10:00:00-05:00"}
+        raise ValueError(f"No note with that note_id in the {notebook} notebook")
 
 
 class FakeWeb:
@@ -260,10 +276,13 @@ def test_each_employee_has_exactly_its_approved_tools():
         "read_tasks", "read_relevant_notes", "web_search", "request_card_purchase", "write_note"}
     assert set(registry.get("lauren").allowed_tools) == {
         "run_ease_analysis", "read_projects", "read_project", "read_tasks", "read_relevant_notes",
-        "read_action_policy", "write_note"}
+        "read_action_policy", "list_own_notes", "read_own_note", "write_note"}
     assert {d.agent_id: d.notebook for d in registry.employees()} == {
         "susan": "Susan", "dave": "Dave", "linda": "Linda", "catherine": "Catherine", "lauren": "Lauren"}
     assert [d.agent_id for d in registry.employees() if "run_ease_analysis" in d.allowed_tools] == ["lauren"]
+    # Reading a notebook is granted per agent: only Lauren reads hers.
+    for tool in ("list_own_notes", "read_own_note"):
+        assert [d.agent_id for d in registry.employees() if tool in d.allowed_tools] == ["lauren"]
     assert "web_search" not in registry.get("dave").allowed_tools
     assert "web_search" not in registry.get("linda").allowed_tools
     # Spending authority belongs to Catherine alone.
@@ -757,7 +776,7 @@ def test_each_agent_writes_only_to_its_own_notebook(gary, agent_id, notebook):
             await gateway.call("write_note", {"title": "Sneaky", "body": "x", "notebook": "Gary"})
         return result
     result = run(scenario())
-    assert result == {"created": True, "notebook": notebook, "title": "Browser automation findings", "note_id": "note-1"}
+    assert result == {"created": True, "notebook": notebook, "title": "Browser automation findings", "note_id": f"{1:032x}"}
     assert [n["notebook"] for n in notebooks.notes] == [notebook]
     body = notebooks.notes[0]["body"]
     assert body.startswith("Read-only first.")
@@ -926,3 +945,73 @@ def test_ease_result_is_condensed_below_tool_limit():
     option = next(o for o in result["options"] if o["id"] == "A2")
     assert option["final_score_0_10"] == 7.1 and option["safety_rating_0_10"] == 4.4
     assert option["consent_or_autonomy_concerns"] == ["Customers"] * 3
+
+
+def test_lauren_reads_only_her_own_notebook(gary):
+    service = build_team(gary)
+    notebooks = service.runner.services.notebooks
+    gateway, _ = lauren_gateway(service)
+    susan = ToolGateway(service.runner.services, service.registry.get("susan"),
+                        RunState("assign-s", "susan"), service.registry.limits)
+
+    async def scenario():
+        await notebooks.create_note("Susan", "Survey ideas", "Susan's private research.")
+        await notebooks.create_note("Lauren", "Survey ethics", "Consent is required.")
+        written = await gateway.call("write_note", {"title": "Scraping principles", "body": "Respect robots.txt."})
+        listed = await gateway.call("list_own_notes", {})
+        filtered = await gateway.call("list_own_notes", {"query": "survey"})
+        read = await gateway.call("read_own_note", {"note_id": written["note_id"]})
+        foreign = await gateway.call("read_own_note", {"note_id": notebooks.notes[0]["note_id"]})
+        with pytest.raises(ValueError):
+            await gateway.call("read_own_note", {"note_id": "../folders"})
+        with pytest.raises(ToolDenied, match="not permitted to use read_own_note"):
+            await susan.call("read_own_note", {"note_id": notebooks.notes[0]["note_id"]})
+        with pytest.raises(ToolDenied, match="not permitted to use list_own_notes"):
+            await susan.call("list_own_notes", {})
+        return listed, filtered, read, foreign
+    listed, filtered, read, foreign = run(scenario())
+
+    assert listed["notebook"] == "Lauren"
+    assert [n["title"] for n in listed["notes"]] == ["Scraping principles", "Survey ethics"]
+    assert [n["title"] for n in filtered["notes"]] == ["Survey ethics"]
+    assert read["body"].startswith("Respect robots.txt.") and "Written by Lauren" in read["body"]
+    assert read["truncated"] is False
+    assert foreign == {"error": "No note with that note_id in the Lauren notebook"}
+
+
+def test_note_reads_are_limited_and_truncated(gary):
+    service = build_team(gary)
+    notebooks = service.runner.services.notebooks
+    gateway, _ = lauren_gateway(service)
+
+    async def scenario():
+        long = await notebooks.create_note("Lauren", "Long analysis", "x" * 15_000)
+        first = await gateway.call("read_own_note", {"note_id": long["note_id"]})
+        for _ in range(4):
+            await gateway.call("read_own_note", {"note_id": long["note_id"]})
+        with pytest.raises(ToolDenied, match="at most 5 times"):
+            await gateway.call("read_own_note", {"note_id": long["note_id"]})
+        return first
+    first = run(scenario())
+    assert first["truncated"] is True and len(first["body"]) == 10_000
+
+    service.runner.services.notebooks = None
+    gateway, _ = lauren_gateway(service, "assign-ethics-3")
+    assert run(gateway.call("list_own_notes", {})) == {"error": "Joplin is not available right now"}
+
+
+def test_lauren_is_told_she_can_read_her_notebook(gary):
+    executor = FakeExecutor()
+    service = build_team(gary, executor)
+    run(delegate_and_wait(service, agent_id="lauren", objective="Review the survey plan against my earlier notes."))
+    run(delegate_and_wait(service, agent_id="susan", objective="Research survey tools for creators."))
+    lauren, susan = executor.requests
+    assert "list_own_notes and read_own_note" in lauren.task_description
+    assert "list_own_notes" not in susan.task_description
+
+
+def test_roster_requires_notebook_for_note_readers():
+    base = AgentRegistry()
+    reader = base.get("lauren").model_copy(update={"notebook": None, "allowed_tools": ("read_own_note",)})
+    with pytest.raises(ValueError, match="read_own_note but no notebook"):
+        AgentRegistry((base.manager(), reader))

@@ -28,7 +28,8 @@ projects and tasks. It uses:
   separate, permission-limited agent returning structured reports and keeping
   notes in their own Joplin notebook. Catherine holds an encrypted debit card
   and can request purchases, each approved only by you on the approvals page.
-  Lauren reviews decisions with the EASE ethical decision-making framework.
+  Lauren reviews decisions with the EASE ethical decision-making framework and
+  can read her own notebook back to build on earlier conclusions.
 - **Docker Compose** with separate `voice`, `backend`, and `joplin-proxy`
   services, plus `ease-api`, `ease-worker`, and `ease-redis` for EASE.
 

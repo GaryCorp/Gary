@@ -363,7 +363,8 @@ Gary tool (delegate_to_agent, run_management_review, ...)
   -> GaryCorpAgentRunner
        context package  (per department, least privilege)
        ToolGateway      (granted tools: read-only, plus notes in the agent's own
-                         Joplin notebook, Catherine's purchase requests, and
+                         Joplin notebook (Lauren also reads hers), Catherine's
+                         purchase requests, and
                          Lauren's EASE analyses via ease-api;
                          every call checked and audited)
        CrewAIExecutor   (separate single-agent crew per assignment)

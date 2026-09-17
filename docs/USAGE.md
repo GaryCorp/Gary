@@ -404,6 +404,13 @@ Each specialist can also keep notes in their own Joplin notebook (**Susan**,
 Gary, have Linda plan the prototype and write the plan up in her notebook.
 ```
 
+Lauren can also read her **Lauren** notebook, so she can build on her earlier
+conclusions, or on principles you write there yourself:
+
+```text
+Gary, have Lauren check her notes on AI voiceovers and review the sponsor read.
+```
+
 ## Follow-up behavior
 
 After an assistant response, a short follow-up period remains active.

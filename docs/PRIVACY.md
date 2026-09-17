@@ -112,7 +112,10 @@ and context she writes to the local `ease-api` container, which sends them to
 its own model provider (`EASE_LLM_PROVIDER`, OpenAI by default); EASE stores
 nothing (it has no database) and its logs stay in Docker. Reports are stored locally in `data/gary.db`, and
 notes the specialists write are saved in their own notebooks in your local
-Joplin app.
+Joplin app. When Lauren reads her **Lauren** notebook, the titles she lists and
+the text of the notes she opens (up to 10,000 characters each) are sent to
+OpenAI as part of her work, so do not keep anything in that notebook you would
+not send to OpenAI. No other notebook is read.
 CrewAI telemetry and hosted tracing are disabled.
 
 ## Debit card

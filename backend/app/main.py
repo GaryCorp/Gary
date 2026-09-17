@@ -1998,11 +1998,14 @@ class JoplinPlanningNotebook:
 
 
 class JoplinAgentNotebooks:
-    """Create-only access to each specialist's own top-level notebook
-    (Susan, Dave, Linda). The notebook must already exist; it is never created,
-    and nested notebooks with the same name are never matched."""
+    """Access to each specialist's own top-level notebook: every specialist
+    with write_note can create notes, and those granted list_own_notes and
+    read_own_note (Lauren) can also read them. Only notes directly in that
+    notebook are listed or read; sub-notebooks and every other notebook are
+    out of reach. The notebook must already exist; it is never created, and
+    nested notebooks with the same name are never matched."""
 
-    async def create_note(self, notebook: str, title: str, body: str) -> dict:
+    async def _notebook_id(self, notebook: str) -> str:
         if not JOPLIN_TOKEN:
             raise ValueError("Joplin is not set up")
         folders = await joplin_items("/folders?fields=id,title,parent_id")
@@ -2015,12 +2018,52 @@ class JoplinAgentNotebooks:
                 f"The top-level Joplin notebook {notebook!r} was not found"
                 if not matches else f"There are several top-level notebooks named {notebook!r}"
             )
+        return matches[0]["id"]
+
+    async def create_note(self, notebook: str, title: str, body: str) -> dict:
+        folder_id = await self._notebook_id(notebook)
         created = await joplin_request(
             "POST", "/notes",
             {"title": title[:JOPLIN_NOTE_TITLE_LIMIT], "body": body[:JOPLIN_NOTE_BODY_LIMIT],
-             "parent_id": matches[0]["id"]},
+             "parent_id": folder_id},
         )
         return {"note_id": created.get("id")}
+
+    async def list_notes(self, notebook: str, query: str) -> list[dict]:
+        folder_id = await self._notebook_id(notebook)
+        words = notebook_key(single_line(query or "")[:100]).split()
+        notes = [
+            note for note in await joplin_items(f"/folders/{folder_id}/notes?fields=id,title,updated_time")
+            if all(word in (note.get("title") or "").casefold() for word in words)
+        ]
+        notes.sort(key=lambda note: note.get("updated_time") or 0, reverse=True)
+        return [
+            {"note_id": note["id"], "title": note.get("title") or "Untitled",
+             "updated": joplin_time_local(note.get("updated_time"))}
+            for note in notes
+        ]
+
+    async def read_note(self, notebook: str, note_id: str) -> dict:
+        folder_id = await self._notebook_id(notebook)
+        try:
+            note = await joplin_request(
+                "GET",
+                f"/notes/{urllib.parse.quote(note_id)}?fields=id,title,body,parent_id,updated_time,deleted_time",
+            )
+        except JoplinError as exc:
+            if exc.status == 404:
+                raise ValueError(f"No note with that note_id in the {notebook} notebook") from exc
+            raise
+        # The same answer whether the note is elsewhere or missing, so other
+        # notebooks cannot be probed.
+        if note.get("parent_id") != folder_id or note.get("deleted_time"):
+            raise ValueError(f"No note with that note_id in the {notebook} notebook")
+        return {
+            "note_id": note["id"],
+            "title": note.get("title") or "Untitled",
+            "updated": joplin_time_local(note.get("updated_time")),
+            "body": note.get("body") or "",
+        }
 
 
 class GoogleBusyCalendar:
@@ -2141,7 +2184,8 @@ def system_configuration_summary() -> dict:
         "google_scopes": SCOPES,
         "joplin_access": (
             f"Gary: notes and notebooks inside the {JOPLIN_NOTEBOOK} notebook only; "
-            "Susan, Dave, Linda, Catherine, Lauren: create-only notes in their own top-level notebook"
+            "Susan, Dave, Linda, Catherine: create-only notes in their own top-level notebook; "
+            "Lauren: create, list, and read notes directly in her own top-level notebook"
         ),
         "openai_usage": {
             "voice": OPENAI_REALTIME_MODEL,

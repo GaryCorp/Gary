@@ -264,6 +264,10 @@ class GaryCorpAgentRunner:
             "write_note: do so when the objective asks for notes, or for a concise "
             "record worth keeping beyond this report. Your report is still required."
             if "write_note" in agent.allowed_tools and agent.notebook else "",
+            f"You can read your own notebook ({agent.notebook}) with list_own_notes and "
+            "read_own_note: check it when the objective refers to your notes or earlier "
+            "work, or when an earlier note on the same decision would help."
+            if "read_own_note" in agent.allowed_tools and agent.notebook else "",
             REPORT_GUIDANCE[agent.report_kind],
         ]
         if feedback:
