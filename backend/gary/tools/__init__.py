@@ -9,6 +9,7 @@ import logging
 import sqlite3
 
 from gary.tools import (
+    agent_tools,
     approval_tools,
     followup_tools,
     planning_tools,
@@ -27,6 +28,7 @@ REGISTRY: dict[str, Tool] = {
         followup_tools,
         planning_tools,
         approval_tools,
+        agent_tools,
     )
     for tool in module.TOOLS
 }

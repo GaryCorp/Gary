@@ -7,3 +7,6 @@ google-auth-httplib2>=0.2,<1
 google-api-python-client>=2.150,<3
 cryptography>=44,<47
 itsdangerous>=2.2,<3
+# GaryCorp specialist agents. Pinned: the adapter in gary/agents/crew.py
+# targets this release's API.
+crewai==1.15.22

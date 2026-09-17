@@ -539,9 +539,18 @@ def test_find_work_blocks_tool_uses_calendar(lunch_gary, monkeypatch):
 
 # ------------------------------------------------------ end-to-end scenario
 
-def test_publish_by_friday_end_to_end(db_path, clock, external):
+def test_publish_by_friday_end_to_end(db_path, clock, external, monkeypatch):
     """Alex: "Gary, I need to publish the next video by Friday." Later, filming
     runs over; Gary notices, replans, and everything survives a restart."""
+    import gary.tools.planning_tools as planning_tools
+
+    class Frozen(dt.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return clock().astimezone(tz)
+
+    # planning_find_work_blocks reads the wall clock; pin it to the test clock.
+    monkeypatch.setattr(planning_tools.dt, "datetime", Frozen)
     gary = build_gary(db_path, "America/Chicago", action_handlers=fake_handlers(external),
                       clock=clock, work_week=LUNCH)
     notebook = FakeNotebook()

@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 FROM python:3.12-slim
 
 ARG APP_UID=1000
@@ -13,7 +14,12 @@ RUN groupadd --gid "${APP_GID}" appgroup \
 WORKDIR /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# uv resolves and installs much faster than pip for CrewAI's large dependency
+# tree; the cache mount keeps downloads between builds without adding them to
+# the image.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    pip install --no-cache-dir uv==0.12.15 \
+    && uv pip install --system -r requirements.txt
 
 COPY gary ./gary
 COPY app ./app

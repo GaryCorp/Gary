@@ -85,6 +85,27 @@ Chief of Staff operations package:
   (`planning_cycle.py`);
 - `tools/` has the function tools exposed to Gary.
 
+### `backend/gary/agents/`
+
+GaryCorp specialist team (see [Team](TEAM.md)):
+
+- `roster.py` defines Gary, Susan, Dave, and Linda: identity, prompts, tools,
+  limits (the permission authority);
+- `models.py` has agent definitions and the Research, Security, and Operations
+  report models;
+- `gateway.py` is the tool catalog and permission-checking gateway;
+- `context.py` builds least-privilege context packages;
+- `executor.py` is the boundary to the agent framework, and `crew.py` the
+  CrewAI executor;
+- `runner.py` runs assignments; `service.py` handles delegation, management
+  reviews, and reading reports;
+- `web.py` is the read-only web research service.
+
+### `backend/app/team_cli.py`
+
+Command-line tool to run assignments and reviews by hand inside the backend
+container.
+
 ### `backend/tests/`
 
 pytest suite for the operations package, using temporary databases.
@@ -193,6 +214,10 @@ Where audio and credentials travel.
 ### `docs/TROUBLESHOOTING.md`
 
 Common failures and commands.
+
+### `docs/TEAM.md`
+
+The specialist team: roles, permissions, reviews, limits, and CLI.
 
 ### `docs/PROJECT_FILES.md`
 

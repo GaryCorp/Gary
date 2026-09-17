@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.14.0 — GaryCorp team: Susan, Dave, and Linda
+
+- Gary now manages three specialist AI employees built with CrewAI 1.15.22:
+  Susan (Director of Research & Strategy), Dave (Director of Security), and
+  Linda (Director of Operations). Each runs as a separate single-agent crew with
+  its own role, prompt, read-only tools, context package, structured report
+  (ResearchReport, SecurityReport, OperationsReport), and audit history. See
+  `docs/TEAM.md`.
+- Gary's new tools: `team_list`, `delegate_to_agent`, `run_management_review`
+  (independent reviews by all three or a subset), `management_review_follow_up`
+  (one targeted follow-up per review), `agent_assignment_get` (including lookup
+  by topic), `agent_assignments_list`, `management_review_get`. Gary's prompt
+  adds when to delegate, how to synthesize, and not to conceal disagreement.
+- Permissions are code-enforced: a frozen roster (`gary/agents/roster.py`),
+  CrewAI agents built with only granted tools, and a tool gateway that re-checks,
+  validates, limits, and audits every call. Specialists cannot delegate, execute
+  code, send email, change the calendar, or change permissions. CrewAI memory,
+  planning, telemetry, tracing, and version checks are off.
+- Hard limits: iterations, execution time, concurrent runs, assignments per
+  conversation, active assignments, tool calls and web searches per run, and
+  one output retry (`MAX_AGENT_*` settings, `GARY_EMPLOYEE_MODEL`,
+  `AGENT_WEB_SEARCH_MODEL`).
+- Migration `002_agents.sql`: `agents` (org chart), `agent_assignments`,
+  `management_reviews`, `agent_runs` (model, attempts, tool calls, token usage).
+  Interrupted assignments are marked failed on restart; queued ones restart.
+- Susan's web research uses OpenAI's hosted web search: answer and source URLs
+  only, no browser.
+- New `/team` page and `python -m app.team_cli` for manual assignments and
+  reviews. Gary announces finished reports and reviews by voice.
+- The backend image installs dependencies with `uv` (1.34 GB with CrewAI), and
+  the backend memory limit rises to 1.5 GB.
+- Fixed a date-dependent test in the Chief of Staff scenario.
+- 154 tests (plus an opt-in live CrewAI test).
+
 ## 1.13.0 — Chief of Staff upgrade
 
 - Gary's prompt now includes the Chief of Staff role: turning goals into

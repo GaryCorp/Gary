@@ -30,6 +30,11 @@ from googleapiclient.errors import HttpError
 from starlette.middleware.sessions import SessionMiddleware
 
 from gary import build_gary
+from gary.agents.gateway import AgentServices, validate_roster_tools
+from gary.agents.roster import AgentLimits, AgentRegistry
+from gary.agents.runner import GaryCorpAgentRunner
+from gary.agents.service import AgentService
+from gary.agents.web import OpenAIWebResearch
 from gary.backup import backup_daily
 from gary.planner import OpenAIPlanner
 from gary.db.repositories import Repositories
@@ -101,6 +106,26 @@ PRINCIPAL_NAME = os.getenv("PRINCIPAL_NAME", "Alex").strip() or "Alex"
 # after OpenAI's suggested wait, a limited number of times in a row.
 REALTIME_RATE_LIMIT_RETRIES = 2
 REALTIME_RATE_LIMIT_MAX_WAIT = 30
+
+# GaryCorp specialist team (Susan, Dave, Linda).
+GARY_EMPLOYEE_MODEL = os.getenv("GARY_EMPLOYEE_MODEL", "").strip() or PLANNING_MODEL
+AGENT_WEB_SEARCH_MODEL = os.getenv("AGENT_WEB_SEARCH_MODEL", "gpt-5.4-mini").strip()
+
+
+def env_int(name: str, default: int, low: int, high: int) -> int:
+    value = int(os.getenv(name, str(default)))
+    if not low <= value <= high:
+        raise ValueError(f"{name} must be between {low} and {high}")
+    return value
+
+
+AGENT_LIMITS = AgentLimits(
+    max_iterations=env_int("MAX_AGENT_ITERATIONS", 8, 1, 25),
+    max_execution_seconds=env_int("MAX_AGENT_EXECUTION_SECONDS", 300, 30, 1800),
+    max_concurrent_runs=env_int("MAX_CONCURRENT_AGENT_RUNS", 2, 1, 6),
+    max_assignments_per_plan=env_int("MAX_ASSIGNMENTS_PER_GARY_PLAN", 4, 1, 10),
+    max_active_assignments=env_int("MAX_ACTIVE_AGENT_ASSIGNMENTS", 6, 1, 20),
+)
 JOPLIN_PLANNING_NOTEBOOK = "Planning"
 JOPLIN_SUMMARY_NOTEBOOK = "Daily Summaries"
 PLANNING_NOTE_CHARS = 3000
@@ -155,6 +180,10 @@ JOPLIN_NOTE_LIST_LIMIT = 20
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # The org chart mirrors the roster; assignments cut off by a restart are
+    # failed, and queued ones start again.
+    await asyncio.to_thread(agent_service.sync_roster)
+    await agent_service.recover_interrupted()
     # Scheduled planning runs in the backend, whether or not voice is connected.
     scheduler = (
         asyncio.create_task(run_planning_scheduler()) if PLANNING_SCHEDULE else None
@@ -2050,10 +2079,87 @@ planning_cycle = PlanningCycle(
     GmailUnreadSummaries(),
     max_actions=PLANNING_MAX_ACTIONS,
 )
+def system_configuration_summary() -> dict:
+    """Non-secret facts about this deployment, for security reviews."""
+    return {
+        "services": {
+            "backend": "FastAPI on 127.0.0.1:8000 (loopback only); holds the OpenAI key, Google OAuth tokens (encrypted at rest), and the Joplin token",
+            "voice": "local microphone and wake word; holds only the voice bridge token",
+            "joplin-proxy": "host network, listens only on the Docker network gateway, forwards to Joplin's local API",
+        },
+        "web_pages": ["/", "/login", "/events", "/approvals (CSRF-protected approve/reject)", "/team", "/health"],
+        "web_authentication": "none; relies on loopback-only binding",
+        "google_scopes": SCOPES,
+        "joplin_access": f"notes and notebooks inside the {JOPLIN_NOTEBOOK} notebook only",
+        "openai_usage": {
+            "voice": OPENAI_REALTIME_MODEL,
+            "planning": PLANNING_MODEL,
+            "specialists": GARY_EMPLOYEE_MODEL,
+            "web_search": AGENT_WEB_SEARCH_MODEL,
+        },
+        "operations_database": "SQLite data/gary.db, owner-only, append-only audit log, daily backups",
+        "approval_policy": "code-defined green/yellow/red; voice approval needs spoken confirmation",
+        "planning_schedule": {name: time.strftime("%H:%M") for name, time in PLANNING_SCHEDULE.items()},
+        "agent_limits": AGENT_LIMITS.__dict__,
+        "crewai": "telemetry and tracing disabled; memory, planning, and code execution off",
+    }
+
+
+agent_registry = AgentRegistry(limits=AGENT_LIMITS)
+validate_roster_tools(agent_registry)
+agent_services = AgentServices(
+    gary=gary_ops,
+    registry=agent_registry,
+    web=OpenAIWebResearch(OPENAI_API_KEY, AGENT_WEB_SEARCH_MODEL),
+    notes=planning_notebook,
+    calendar=planning_calendar,
+    system_summary=system_configuration_summary,
+    manager_tools=tuple(sorted(GARY_TOOL_NAMES)),
+)
+
+
+def build_agent_executor():
+    # Imported here so the rest of Gary starts even if CrewAI cannot load.
+    from gary.agents.crew import CrewAIExecutor
+
+    return CrewAIExecutor(OPENAI_API_KEY)
+
+
+async def announce_assignment_finished(assignment: dict) -> None:
+    if in_quiet_hours(dt.datetime.now(ZoneInfo(LOCAL_TIMEZONE))):
+        return
+    if assignment["review_id"] and assignment["review_round"] == 1:
+        # Announce a review once, when its last first-round report is in.
+        review = await asyncio.to_thread(agent_service.get_review, assignment["review_id"])
+        if review.status != "running":
+            await announce_to_voice(
+                f"The team's review of {single_line(review.topic)[:80]} is ready. "
+                f"Say {WAKE_WORD_DISPLAY}, show me the management review."
+            )
+        return
+    agent = agent_registry.get(assignment["assigned_to"])
+    if assignment["status"] == "completed":
+        await announce_to_voice(
+            f"{agent.name} has finished: {single_line(assignment['objective'])[:80]}. "
+            f"Ask me what {agent.name} found."
+        )
+    else:
+        await announce_to_voice(f"{agent.name}'s assignment did not complete.")
+
+
+agent_runner = GaryCorpAgentRunner(
+    agent_services,
+    build_agent_executor(),
+    GARY_EMPLOYEE_MODEL,
+    on_finished=announce_assignment_finished,
+)
+agent_service = AgentService(gary_ops, agent_registry, agent_runner)
+
 GARY_INTEGRATIONS = {
     "calendar": planning_calendar,
     "notebook": planning_notebook,
     "planning_cycle": planning_cycle,
+    "agents": agent_service,
 }
 
 
@@ -2606,6 +2712,8 @@ async def home(request: Request):
     ·
     <a href="/approvals">{approvals_link}</a>
     ·
+    <a href="/team">Team</a>
+    ·
     <a href="/logout">Logout</a>
   </p>
 </body>
@@ -2833,6 +2941,76 @@ async def resolve_approval(request: Request, approval_id: str):
         request.session["approval_message"] = f"{result['summary']}: {outcome}"
 
     return RedirectResponse("/approvals", status_code=303)
+
+
+@app.get("/team")
+async def team_page(request: Request):
+    team = await asyncio.to_thread(agent_service.team)
+    history = await asyncio.to_thread(agent_service.list_assignments, None, None, 15)
+
+    def esc(value) -> str:
+        return html.escape(str(value)) if value is not None else ""
+
+    def members(parent: str | None, depth: int = 0) -> str:
+        rows = ""
+        for member in team["members"]:
+            if member["reports_to"] != parent:
+                continue
+            counts = ", ".join(f"{k} {v}" for k, v in sorted(member["assignments"].items())) or "no assignments"
+            rows += (
+                f'<li style="margin-left:{depth * 1.5}em"><strong>{esc(member["name"])}</strong> — '
+                f'{esc(member["title"])} · Status: {esc(member["status"].capitalize())} · {esc(counts)}</li>'
+            )
+            rows += members(member["agent_id"], depth + 1)
+        return rows
+
+    def outcome(item: dict) -> str:
+        report = item["report"] or {}
+        if "risk_level" in report:
+            return f"Risk: {report['risk_level']}, {report['recommendation']}"
+        if "deadline_assessment" in report:
+            return f"Deadline assessment: {report['deadline_assessment']}"
+        if "confidence" in report:
+            return f"Confidence: {report['confidence']:.0%}"
+        return item["error"] or ""
+
+    rows = "".join(
+        "<tr>"
+        f"<td>{esc(item['agent'].split(',')[0])}</td>"
+        f"<td>{esc(item['status'])}</td>"
+        f"<td>{esc(item['objective'][:140])}</td>"
+        f"<td>{esc(outcome(item))}</td>"
+        f"<td>{esc((item['report'] or {}).get('summary', '')[:200])}</td>"
+        f"<td>{esc(item['created_at'][:16].replace('T', ' '))}</td>"
+        "</tr>"
+        for item in history
+    )
+    reviews = "".join(
+        f"<li>{esc(r['topic'][:140])} — {esc(r['status'])} ({esc(r['created_at'][:16].replace('T', ' '))})</li>"
+        for r in team["recent_reviews"]
+    )
+    return HTMLResponse(
+        f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>GaryCorp Team</title>
+</head>
+<body>
+  <h1>GaryCorp Team</h1>
+  <ul>{members(None)}</ul>
+  <h2>Recent assignments</h2>
+  <table border="1" cellpadding="4" style="border-collapse:collapse">
+    <tr><th>Agent</th><th>Status</th><th>Objective</th><th>Outcome</th><th>Summary</th><th>Assigned</th></tr>
+    {rows or '<tr><td colspan="6">No assignments yet.</td></tr>'}
+  </table>
+  <h2>Management reviews</h2>
+  <ul>{reviews or "<li>None yet.</li>"}</ul>
+  <p>Model: {esc(GARY_EMPLOYEE_MODEL)} · Limits: {esc(team["limits"])}</p>
+  <p><a href="/">Back</a></p>
+</body>
+</html>"""
+    )
 
 
 @app.get("/logout")
@@ -3202,6 +3380,48 @@ work: preserve sleep, meals, breaks, exercise, and personal commitments. Be
 concise, calm, competent, and slightly managerial. Do not manufacture chaos or
 behave badly for humor; the humor comes from being an extremely serious Chief
 of Staff.
+
+GaryCorp team:
+You manage three specialist employees, each a separate AI that works in the
+background and returns a structured report:
+- Susan, Director of Research & Strategy: research, options, evidence, strategic
+  analysis.
+- Dave, Director of Security: threat modeling, permissions, attack surface,
+  controls.
+- Linda, Director of Operations: execution planning, feasibility, task
+  breakdown, dependencies, scheduling implications.
+
+Use them when their specialization would materially improve a decision or
+reduce your uncertainty. Do not delegate trivial tasks, and do not delegate to
+make the organization look busy: a small number of useful assignments beats
+bureaucracy. When {PRINCIPAL_NAME} names one person, ask only that person.
+
+Map requests to tools:
+- Have Susan research this, get Dave's security assessment, have Linda create
+  an execution plan: delegate_to_agent with a specific objective and any
+  context they need.
+- Ask the team what they think, have Research and Security review this
+  independently: run_management_review, with agents for a subset.
+- What did Susan find about X, what is Dave worried about, does Linda think we
+  can finish Friday: agent_assignment_get with agent_id and about set to the
+  topic. Specialists often have several reports; never answer about one piece of
+  work from a different report, and if the match is wrong or missing, say so.
+- Show me the management review: management_review_get.
+- Who is on the team, what are they working on: team_list.
+Assignments run in the background: say who is working on what, and that you
+will report back. Never invent or role-play a specialist's findings; only
+report what their report says, and say if it is not ready yet.
+
+When reports are in, synthesize them. Say where specialists agree and where
+they disagree, and do not conceal disagreement. Do not automatically choose the
+most optimistic or the most cautious recommendation: weigh the evidence, the
+objective, application policy, and {PRINCIPAL_NAME}'s instructions, then give
+your recommendation. If you need clarification, ask one targeted follow-up with
+management_review_follow_up rather than holding a meeting. Linda's proposed
+tasks are proposals: add them to the task system only with
+{PRINCIPAL_NAME}'s agreement. Dave's controls are advice until
+{PRINCIPAL_NAME} decides. Only you may delegate; never try to give employees
+more permissions.
 
 Do not read IDs aloud.
 

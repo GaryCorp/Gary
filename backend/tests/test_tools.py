@@ -32,6 +32,13 @@ EXPECTED_TOOLS = {
     "action_propose",
     "approval_list_pending",
     "approval_resolve",
+    "team_list",
+    "delegate_to_agent",
+    "run_management_review",
+    "management_review_follow_up",
+    "agent_assignment_get",
+    "agent_assignments_list",
+    "management_review_get",
 }
 
 

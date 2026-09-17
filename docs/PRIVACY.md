@@ -96,6 +96,18 @@ The request is sent with `store: false`. The daily summary is written to
 **Gary › Daily Summaries** in Joplin, and a short briefing may be spoken aloud.
 Set `PLANNING_TIMES` empty to turn scheduled runs off.
 
+## Specialist team
+
+When Gary delegates to Susan, Dave, or Linda, their context package and tool
+results are sent to OpenAI (`GARY_EMPLOYEE_MODEL`): the assignment and any
+context Gary includes, the related project and its tasks, Gary's planning notes
+for that project, and depending on the specialist, commitments, follow-ups,
+free calendar blocks (without event titles), the permission and policy
+configuration, and recent audit summaries. No email content or credentials are
+included. Susan's web searches send the search query to OpenAI's web search
+(`AGENT_WEB_SEARCH_MODEL`). Reports are stored locally in `data/gary.db`.
+CrewAI telemetry and hosted tracing are disabled.
+
 ## OpenAI key
 
 The API key is not placed in the voice container.

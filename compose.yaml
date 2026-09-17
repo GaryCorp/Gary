@@ -43,6 +43,23 @@ services:
       PLANNING_EMAIL: "${PLANNING_EMAIL:-snippets}"
       PRINCIPAL_NAME: "${PRINCIPAL_NAME:-Alex}"
 
+      # GaryCorp specialists (Susan, Dave, Linda). Empty model = PLANNING_MODEL.
+      GARY_EMPLOYEE_MODEL: "${GARY_EMPLOYEE_MODEL:-}"
+      AGENT_WEB_SEARCH_MODEL: "${AGENT_WEB_SEARCH_MODEL:-gpt-5.4-mini}"
+      MAX_AGENT_ITERATIONS: "${MAX_AGENT_ITERATIONS:-8}"
+      MAX_AGENT_EXECUTION_SECONDS: "${MAX_AGENT_EXECUTION_SECONDS:-300}"
+      MAX_CONCURRENT_AGENT_RUNS: "${MAX_CONCURRENT_AGENT_RUNS:-2}"
+      MAX_ASSIGNMENTS_PER_GARY_PLAN: "${MAX_ASSIGNMENTS_PER_GARY_PLAN:-4}"
+      MAX_ACTIVE_AGENT_ASSIGNMENTS: "${MAX_ACTIVE_AGENT_ASSIGNMENTS:-6}"
+      # CrewAI: no telemetry or hosted tracing; its scratch storage stays in
+      # the container and is not part of GaryCorp's records.
+      CREWAI_DISABLE_TELEMETRY: "true"
+      CREWAI_DISABLE_TRACKING: "true"
+      CREWAI_DISABLE_VERSION_CHECK: "true"
+      CREWAI_TRACING_ENABLED: "false"
+      OTEL_SDK_DISABLED: "true"
+      CREWAI_STORAGE_DIR: /tmp/crewai
+
       CLIENT_SECRETS_FILE: /run/secrets/google_client_secret.json
       TOKEN_STORE_FILE: /data/token_store.enc
       REDIRECT_URI: http://localhost:8000/oauth2callback
@@ -80,8 +97,9 @@ services:
     cap_drop:
       - ALL
 
-    pids_limit: 128
-    mem_limit: 768m
+    pids_limit: 256
+    # CrewAI and two concurrent specialist runs need more than the original 768m.
+    mem_limit: 1536m
     cpus: 1.50
 
     healthcheck:

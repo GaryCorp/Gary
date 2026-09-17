@@ -168,7 +168,7 @@ delete_joplin_note
 ```
 
 They call the Joplin desktop app's Web Clipper API through the `joplin-proxy`
-service (see [Joplin proxy](#7-joplin-proxy-container)).
+service (see [Joplin proxy](#8-joplin-proxy-container)).
 
 - `list_joplin_notebooks` returns the Gary notebook and its sub-notebooks.
 - `create_joplin_notebook` creates a sub-notebook inside Gary, or reports that
@@ -348,7 +348,27 @@ Action handlers:
 | `send_external_email` | yellow | sends one plain-text email; audited as `email_sent` |
 | `spend_money`, `change_security_settings`, `access_password_manager`, `change_own_permissions`, `modify_permissions`, `delete_audit_log` | red | refused |
 
-### 7. Joplin proxy container
+### 7. GaryCorp specialist team
+
+`backend/gary/agents/` adds three CrewAI specialists that Gary manages (see
+[Team](TEAM.md)):
+
+```text
+Gary tool (delegate_to_agent, run_management_review, ...)
+  -> AgentService      roster and limit checks, persisted assignment, audit
+  -> GaryCorpAgentRunner
+       context package  (per department, least privilege)
+       ToolGateway      (granted, read-only tools; every call checked and audited)
+       CrewAIExecutor   (separate single-agent crew per assignment)
+  -> validated ResearchReport / SecurityReport / OperationsReport
+  -> agent_assignments, agent_runs, audit_log; voice announcement
+```
+
+Gary's team tools: `team_list`, `delegate_to_agent`, `run_management_review`,
+`management_review_follow_up`, `agent_assignment_get`,
+`agent_assignments_list`, `management_review_get`.
+
+### 8. Joplin proxy container
 
 Joplin desktop listens only on the host's `127.0.0.1:41184`, which containers
 cannot reach. The `joplin-proxy` service runs `joplin_proxy/joplin_proxy.py` in
@@ -368,7 +388,7 @@ It accepts connections only from `ASSISTANT_SUBNET`, holds no secrets (the
 backend sends the Joplin token with each request), and closes the connection if
 Joplin is not running, so the backend can tell the user to open Joplin.
 
-### 8. Docker network
+### 9. Docker network
 
 The voice and backend containers share the `assistant_net` bridge network,
 which has a fixed subnet, `172.30.99.0/24`, and gateway `172.30.99.1`

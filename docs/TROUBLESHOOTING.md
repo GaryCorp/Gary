@@ -240,6 +240,25 @@ docker compose start backend
 - No spoken briefing: the voice service must be connected, it is not quiet
   hours, and the model may return no briefing when nothing needs attention.
 
+## A specialist assignment failed
+
+Check the error and run details:
+
+```bash
+docker compose exec backend python -m app.team_cli team
+docker compose exec backend python -m app.team_cli show <assignment_id>
+```
+
+- `did not finish within N seconds`: the run hit `MAX_AGENT_EXECUTION_SECONDS`.
+- `report failed validation`: the model's report was malformed twice; try again
+  or use a more capable `GARY_EMPLOYEE_MODEL`.
+- `Interrupted by an application restart`: the backend restarted mid-run;
+  delegate again.
+- `already has N assignments in progress`: wait, or raise
+  `MAX_ACTIVE_AGENT_ASSIGNMENTS`.
+- Rate limit errors from OpenAI: specialists share your account's limits with
+  Gary's voice and planning; reduce `MAX_CONCURRENT_AGENT_RUNS` to 1.
+
 ## Google login loops
 
 Confirm the Google OAuth redirect URI exactly matches:

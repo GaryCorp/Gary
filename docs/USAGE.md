@@ -366,6 +366,25 @@ or at `http://localhost:8000/approvals`, which shows the exact recipient, text,
 or times. Unanswered approvals expire after 72 hours. Gary only reports an
 action as done when it actually succeeded.
 
+## The team: Susan, Dave, and Linda
+
+Gary can ask specialists for help: Susan for research and strategy, Dave for
+security, and Linda for operations planning.
+
+```text
+Gary, have Susan research the best tools for recording screen demos.
+Gary, get Dave's security assessment of the approvals page.
+Gary, have Linda create an execution plan for the video project.
+Gary, I'm thinking about giving you browser automation. Have your team evaluate it.
+Gary, what did Susan find?
+Gary, show me the management review.
+```
+
+They work in the background, usually for a minute or two; Gary announces when
+a report or review is ready. When several review the same question, they work
+independently and Gary tells you where they disagree before recommending. See
+[Team](TEAM.md) for details, limits, and the manual CLI.
+
 ## Follow-up behavior
 
 After an assistant response, a short follow-up period remains active.

@@ -359,6 +359,35 @@ previous daily summary; no other notes are read. Gary creates the Planning
 notebook when he first writes to it. Summaries are written to
 **Gary › Daily Summaries**, one note per day.
 
+## GaryCorp team
+
+Settings for Susan, Dave, and Linda (see [Team](TEAM.md)).
+
+### `GARY_EMPLOYEE_MODEL`
+
+Default: empty, which uses `PLANNING_MODEL`.
+
+The model the specialists run on through CrewAI. Any model with tool calling and
+structured outputs, such as `gpt-5.4-mini` or `gpt-5.6-terra`; not a Realtime
+model.
+
+### `AGENT_WEB_SEARCH_MODEL`
+
+Default: `gpt-5.4-mini`. The model for Susan's read-only web search (OpenAI's
+hosted `web_search` tool). Each search is roughly 15,000 tokens.
+
+### Execution limits
+
+| Setting | Default | Range | Meaning |
+|---|---|---|---|
+| `MAX_AGENT_ITERATIONS` | 8 | 1–25 | CrewAI iterations per run |
+| `MAX_AGENT_EXECUTION_SECONDS` | 300 | 30–1800 | Hard time limit per run |
+| `MAX_CONCURRENT_AGENT_RUNS` | 2 | 1–6 | Runs at once |
+| `MAX_ASSIGNMENTS_PER_GARY_PLAN` | 4 | 1–10 | Assignments per conversation or review |
+| `MAX_ACTIVE_AGENT_ASSIGNMENTS` | 6 | 1–20 | Queued plus running assignments |
+
+Values outside the range stop the backend at startup.
+
 ## Joplin
 
 Gary uses the Joplin desktop app's Web Clipper API. In Joplin, open

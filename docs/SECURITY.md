@@ -199,6 +199,31 @@ emails.
   `override_working_hours`, which Gary is told to use only when you explicitly
   ask for that time. The planning model cannot set it.
 
+## Specialist team
+
+Susan, Dave, and Linda are separate CrewAI agents with code-enforced least
+privilege (details in [Team](TEAM.md#permissions)):
+
+- permissions live in frozen roster definitions, not the database or prompts;
+- each agent is built with only its granted tools, and the gateway re-checks
+  every call, validates arguments, applies per-run limits, and audits calls and
+  denials;
+- every specialist tool is read-only and filtered: no credentials, email
+  content, audit details, calendar titles, or notes outside Gary's planning
+  notes;
+- sending email, calendar changes, money, permissions, shell, SQL, deletion,
+  and delegation cannot be granted to any specialist;
+- CrewAI delegation, code execution, memory, planning, telemetry, and tracing
+  are off;
+- only Gary (or Alex through the CLI) creates assignments, within hard limits on
+  time, iterations, concurrency, and assignments per conversation;
+- specialist reports are validated before they are stored, and they are
+  advisory: nothing a specialist returns changes company state by itself.
+
+Web pages and notes a specialist reads are untrusted: the task prompt labels
+them as data, and the worst an injected instruction could do is distort a
+report that Gary and Alex then weigh.
+
 ## Joplin tools
 
 - all note tools are confined to the Gary notebook (`JOPLIN_NOTEBOOK`) and its
