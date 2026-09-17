@@ -404,10 +404,12 @@ Each specialist can also keep notes in their own Joplin notebook (**Susan**,
 Gary, have Linda plan the prototype and write the plan up in her notebook.
 ```
 
-Lauren can also read her **Lauren** notebook, so she can build on her earlier
-conclusions, or on principles you write there yourself:
+Each specialist can also read their own notebook, so they can build on their
+earlier notes, or on anything you write there yourself. They cannot read any
+other notebook:
 
 ```text
+Gary, have Susan check her notes on screen recording tools before researching microphones.
 Gary, have Lauren check her notes on AI voiceovers and review the sponsor read.
 ```
 

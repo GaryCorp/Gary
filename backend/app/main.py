@@ -1998,9 +1998,9 @@ class JoplinPlanningNotebook:
 
 
 class JoplinAgentNotebooks:
-    """Access to each specialist's own top-level notebook: every specialist
-    with write_note can create notes, and those granted list_own_notes and
-    read_own_note (Lauren) can also read them. Only notes directly in that
+    """Access to each specialist's own top-level notebook: create notes with
+    write_note, and list and read them with list_own_notes and read_own_note.
+    Only notes directly in that
     notebook are listed or read; sub-notebooks and every other notebook are
     out of reach. The notebook must already exist; it is never created, and
     nested notebooks with the same name are never matched."""
@@ -2184,8 +2184,8 @@ def system_configuration_summary() -> dict:
         "google_scopes": SCOPES,
         "joplin_access": (
             f"Gary: notes and notebooks inside the {JOPLIN_NOTEBOOK} notebook only; "
-            "Susan, Dave, Linda, Catherine: create-only notes in their own top-level notebook; "
-            "Lauren: create, list, and read notes directly in her own top-level notebook"
+            "Susan, Dave, Linda, Catherine, Lauren: create, list, and read notes directly in "
+            "their own top-level notebook only; no editing or deleting"
         ),
         "openai_usage": {
             "voice": OPENAI_REALTIME_MODEL,

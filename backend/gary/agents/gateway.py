@@ -386,7 +386,7 @@ def _read_agent_permissions(call: ToolCall):
             "Permissions are defined in code (gary/agents/roster.py) and enforced by "
             "the tool gateway on every call; no agent can change them.",
             "Specialist tools are read-only except write_note (the agent's own notebook; "
-            "list_own_notes and read_own_note read only that notebook) "
+            "list_own_notes and read_own_note read only that same notebook) "
             "and request_card_purchase (Catherine only: creates a purchase request that "
             "Alex must approve on the web page; it cannot charge the card).",
             "run_ease_analysis (Lauren only) sends a decision question and context to the "

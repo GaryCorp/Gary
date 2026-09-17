@@ -242,7 +242,7 @@ code-enforced least privilege (details in [Team](TEAM.md#permissions)):
   denials;
 - every specialist tool is read-only and filtered (no credentials, card
   number, email content, audit details, calendar titles, or notes outside
-  Gary's planning notes and, for Lauren, her own notebook), except `write_note`,
+  Gary's planning notes and the agent's own notebook), except `write_note`,
   which only creates notes in the agent's own top-level Joplin notebook (fixed
   in the roster, never chosen by the model), at most 3 per assignment, each
   stamped and audited, and
@@ -250,11 +250,11 @@ code-enforced least privilege (details in [Team](TEAM.md#permissions)):
   you approve on the web page (see [Catherine's debit card](#catherines-debit-card)),
   and Lauren's `run_ease_analysis`, which sends a question to the local EASE
   service (once per assignment) and changes nothing;
-- Lauren's `list_own_notes` and `read_own_note` read only notes directly in
-  the top-level **Lauren** notebook: the backend checks each note's notebook on
-  every read and answers a note elsewhere exactly like a missing one, reads are
-  capped at 5 per assignment and 10,000 characters each, and no other
-  specialist is granted them;
+- `list_own_notes` and `read_own_note` read only notes directly in the agent's
+  own top-level notebook (fixed in the roster): the backend checks each note's
+  notebook on every read and answers a note elsewhere, including another
+  specialist's notebook, exactly like a missing one, and reads are capped at 5
+  per assignment and 10,000 characters each;
 - sending email, calendar changes, charging a card or spending money directly,
   reading the card number, permissions, shell, SQL, deletion, and delegation
   cannot be granted to any specialist;
@@ -271,9 +271,11 @@ them as data, and the worst an injected instruction could do is distort a
 report that Gary and Alex then weigh, add up to three misleading notes to
 that specialist's own notebook, or, for Catherine, create up to two purchase
 requests within the limits that wait for Alex on the approvals page. Because
-Lauren reads her notebook, a misleading note she wrote (or text pasted into
-that notebook) can carry into later assignments; it can still only affect her
-advisory reports. Review the **Lauren** notebook if her conclusions drift.
+specialists read their own notebooks, a misleading note (one they wrote from a
+poisoned web page, or text pasted into the notebook) can carry into their later
+assignments; it can still only affect that specialist's advisory reports, or,
+for Catherine, purchase requests that still need your approval. Review a
+specialist's notebook if their conclusions drift.
 
 EASE (`ease-api`) listens on host loopback (`127.0.0.1:8001`) and the assistant
 Docker network, with no API key by default, so any process on this machine can

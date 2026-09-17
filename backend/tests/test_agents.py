@@ -263,26 +263,28 @@ def test_each_employee_has_exactly_its_approved_tools():
     registry = AgentRegistry()
     assert set(registry.get("susan").allowed_tools) == {
         "web_search", "read_project", "read_tasks", "read_relevant_notes", "read_previous_research",
-        "write_note"}
+        "list_own_notes", "read_own_note", "write_note"}
     assert set(registry.get("dave").allowed_tools) == {
         "read_project", "read_tasks", "read_agent_permissions", "read_action_policy",
-        "read_audit_events", "read_system_configuration_summary", "read_relevant_notes", "write_note"}
+        "read_audit_events", "read_system_configuration_summary", "read_relevant_notes",
+        "list_own_notes", "read_own_note", "write_note"}
     assert set(registry.get("linda").allowed_tools) == {
         "read_projects", "read_project", "read_tasks", "read_dependencies",
         "read_calendar_availability", "read_commitments", "read_followups", "read_relevant_notes",
-        "write_note"}
+        "list_own_notes", "read_own_note", "write_note"}
     assert set(registry.get("catherine").allowed_tools) == {
         "read_finance_status", "read_purchases", "read_ai_usage", "read_projects", "read_project",
-        "read_tasks", "read_relevant_notes", "web_search", "request_card_purchase", "write_note"}
+        "read_tasks", "read_relevant_notes", "web_search", "request_card_purchase",
+        "list_own_notes", "read_own_note", "write_note"}
     assert set(registry.get("lauren").allowed_tools) == {
         "run_ease_analysis", "read_projects", "read_project", "read_tasks", "read_relevant_notes",
         "read_action_policy", "list_own_notes", "read_own_note", "write_note"}
     assert {d.agent_id: d.notebook for d in registry.employees()} == {
         "susan": "Susan", "dave": "Dave", "linda": "Linda", "catherine": "Catherine", "lauren": "Lauren"}
     assert [d.agent_id for d in registry.employees() if "run_ease_analysis" in d.allowed_tools] == ["lauren"]
-    # Reading a notebook is granted per agent: only Lauren reads hers.
-    for tool in ("list_own_notes", "read_own_note"):
-        assert [d.agent_id for d in registry.employees() if tool in d.allowed_tools] == ["lauren"]
+    # Every note writer can read back its own notebook, and nothing else.
+    for definition in registry.employees():
+        assert {"write_note", "list_own_notes", "read_own_note"} <= set(definition.allowed_tools)
     assert "web_search" not in registry.get("dave").allowed_tools
     assert "web_search" not in registry.get("linda").allowed_tools
     # Spending authority belongs to Catherine alone.
@@ -947,7 +949,7 @@ def test_ease_result_is_condensed_below_tool_limit():
     assert option["consent_or_autonomy_concerns"] == ["Customers"] * 3
 
 
-def test_lauren_reads_only_her_own_notebook(gary):
+def test_each_specialist_reads_only_its_own_notebook(gary):
     service = build_team(gary)
     notebooks = service.runner.services.notebooks
     gateway, _ = lauren_gateway(service)
@@ -964,12 +966,16 @@ def test_lauren_reads_only_her_own_notebook(gary):
         foreign = await gateway.call("read_own_note", {"note_id": notebooks.notes[0]["note_id"]})
         with pytest.raises(ValueError):
             await gateway.call("read_own_note", {"note_id": "../folders"})
-        with pytest.raises(ToolDenied, match="not permitted to use read_own_note"):
-            await susan.call("read_own_note", {"note_id": notebooks.notes[0]["note_id"]})
-        with pytest.raises(ToolDenied, match="not permitted to use list_own_notes"):
-            await susan.call("list_own_notes", {})
-        return listed, filtered, read, foreign
-    listed, filtered, read, foreign = run(scenario())
+        susan_listed = await susan.call("list_own_notes", {})
+        susan_own = await susan.call("read_own_note", {"note_id": notebooks.notes[0]["note_id"]})
+        susan_foreign = await susan.call("read_own_note", {"note_id": written["note_id"]})
+        return listed, filtered, read, foreign, susan_listed, susan_own, susan_foreign
+    listed, filtered, read, foreign, susan_listed, susan_own, susan_foreign = run(scenario())
+
+    assert susan_listed["notebook"] == "Susan"
+    assert [n["title"] for n in susan_listed["notes"]] == ["Survey ideas"]
+    assert susan_own["body"] == "Susan's private research."
+    assert susan_foreign == {"error": "No note with that note_id in the Susan notebook"}
 
     assert listed["notebook"] == "Lauren"
     assert [n["title"] for n in listed["notes"]] == ["Scraping principles", "Survey ethics"]
@@ -1000,14 +1006,17 @@ def test_note_reads_are_limited_and_truncated(gary):
     assert run(gateway.call("list_own_notes", {})) == {"error": "Joplin is not available right now"}
 
 
-def test_lauren_is_told_she_can_read_her_notebook(gary):
+@pytest.mark.parametrize("agent_id, notebook", [("susan", "Susan"), ("dave", "Dave"), ("linda", "Linda"),
+                                                ("catherine", "Catherine"), ("lauren", "Lauren")])
+def test_specialists_are_told_they_can_read_their_notebook(gary, agent_id, notebook):
     executor = FakeExecutor()
     service = build_team(gary, executor)
-    run(delegate_and_wait(service, agent_id="lauren", objective="Review the survey plan against my earlier notes."))
-    run(delegate_and_wait(service, agent_id="susan", objective="Research survey tools for creators."))
-    lauren, susan = executor.requests
-    assert "list_own_notes and read_own_note" in lauren.task_description
-    assert "list_own_notes" not in susan.task_description
+    run(delegate_and_wait(service, agent_id=agent_id, objective="Review the survey plan against my earlier notes."))
+    assert f"read your own notebook ({notebook}) with list_own_notes and read_own_note" in executor.requests[0].task_description
+
+    without = service.registry.get(agent_id).model_copy(update={"allowed_tools": ("write_note",)})
+    text = service.runner._task_description(without, {"assignment": {"objective": "x"}}, None)
+    assert "list_own_notes" not in text
 
 
 def test_roster_requires_notebook_for_note_readers():

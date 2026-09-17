@@ -49,8 +49,8 @@ not confused.
 | Answers | Options, evidence, tradeoffs, alternatives, what is missing | Attack surface, permissions, trust boundaries, blast radius, controls | Tasks, order, dependencies, estimates, blockers, schedule, deadline realism | Up-front and ongoing costs, budget fit, cheaper alternatives, AI spending, purchases | Who is affected and how, harms, consent, fairness, honesty, safeguards, value judgments for you |
 | Report | `ResearchReport` | `SecurityReport` | `OperationsReport` | `FinanceReport` | `EthicsReport` |
 | Key fields | findings, options, recommendation, assumptions, uncertainties, sources, confidence | risk_level, attack_surfaces, required and recommended controls, recommendation (approve … reject), confidence | proposed_tasks, dependencies, estimated_total_minutes, blockers, deadline_assessment, decisions_needed, confidence | costs (item, amount, frequency), estimated one-time and monthly cost, budget_assessment, savings_opportunities, risks, decisions_needed, recommendation, confidence, purchase_request_ids (set by the application) | ethical_assessment (acceptable … unacceptable), stakeholders, ethical_concerns, options_considered, recommended_option, safeguards, where_you_differ_from_ease, value_judgments_for_alex, uncertainties, confidence, ease_analyses (set by the application) |
-| Tools | `web_search`, `read_project`, `read_tasks`, `read_relevant_notes`, `read_previous_research`, `write_note` | `read_project`, `read_tasks`, `read_agent_permissions`, `read_action_policy`, `read_audit_events`, `read_system_configuration_summary`, `read_relevant_notes`, `write_note` | `read_projects`, `read_project`, `read_tasks`, `read_dependencies`, `read_calendar_availability`, `read_commitments`, `read_followups`, `read_relevant_notes`, `write_note` | `read_finance_status`, `read_purchases`, `read_ai_usage`, `read_projects`, `read_project`, `read_tasks`, `read_relevant_notes`, `web_search`, `request_card_purchase`, `write_note` | `run_ease_analysis`, `read_projects`, `read_project`, `read_tasks`, `read_relevant_notes`, `read_action_policy`, `list_own_notes`, `read_own_note`, `write_note` |
-| Joplin notebook | Susan (write) | Dave (write) | Linda (write) | Catherine (write) | Lauren (read and write) |
+| Tools | `web_search`, `read_project`, `read_tasks`, `read_relevant_notes`, `read_previous_research`, `list_own_notes`, `read_own_note`, `write_note` | `read_project`, `read_tasks`, `read_agent_permissions`, `read_action_policy`, `read_audit_events`, `read_system_configuration_summary`, `read_relevant_notes`, `list_own_notes`, `read_own_note`, `write_note` | `read_projects`, `read_project`, `read_tasks`, `read_dependencies`, `read_calendar_availability`, `read_commitments`, `read_followups`, `read_relevant_notes`, `list_own_notes`, `read_own_note`, `write_note` | `read_finance_status`, `read_purchases`, `read_ai_usage`, `read_projects`, `read_project`, `read_tasks`, `read_relevant_notes`, `web_search`, `request_card_purchase`, `list_own_notes`, `read_own_note`, `write_note` | `run_ease_analysis`, `read_projects`, `read_project`, `read_tasks`, `read_relevant_notes`, `read_action_policy`, `list_own_notes`, `read_own_note`, `write_note` |
+| Joplin notebook (read and write) | Susan | Dave | Linda | Catherine | Lauren |
 | Context package | assignment, project and tasks, planning notes | assignment, project and tasks, all agents' permissions, action policy, deployment summary, recent security-relevant audit events | assignment, project and tasks, active projects, commitments, follow-ups, calendar availability, planning notes | assignment, project and tasks, card status (brand, last four, expiry), spending limits and this month's committed spend, recent purchase requests, planning notes | assignment, project and tasks, planning notes |
 
 Personalities are deliberately subtle: Susan is curious and evidence-oriented,
@@ -79,13 +79,13 @@ Permissions are enforced in code, not only by prompts:
   `request_card_purchase`, and Lauren's `run_ease_analysis`** (which changes
   nothing but sends her question to the EASE service), and return filtered data: no credentials, no card
   number, no email content, no audit details, busy calendar time without
-  titles, and only Gary's planning notes (never the whole notebook), plus, for
-  Lauren, her own notebook.
-- **Notes go only to the agent's own notebook.** `write_note` takes a title
+  titles, and only Gary's planning notes (never the whole notebook), plus
+  each agent's own notebook.
+- **Notes stay in the agent's own notebook.** `write_note` takes a title
   and Markdown body; the notebook comes from the roster,
   never from the model, and must already exist as a top-level Joplin notebook.
-  Only Lauren can read her notebook back (see [Notes](#notes)); no agent can
-  edit, move, or delete notes, or write anywhere else. At
+  Each agent can read back only its own notebook (see [Notes](#notes)); no
+  agent can edit, move, or delete notes, or read or write anywhere else. At
   most 3 notes per assignment; each note ends with who wrote it, when, and for
   which assignment, and each write is audited (long bodies shortened in the
   audit log).
@@ -201,35 +201,38 @@ Gary, have Dave threat-model the approvals page and write up his findings in his
 The notebooks must exist; if one is missing, the note is refused rather than
 created elsewhere. Gary's own Joplin tools stay limited to the Gary notebook.
 
-### Lauren reads her notebook
+### Reading their notebooks
 
-Lauren can also read the **Lauren** notebook, so it works as her running record
-of earlier conclusions and principles:
+Every specialist can also read their own notebook, so it works as a running
+record of earlier findings, plans, and conclusions:
 
-- `list_own_notes` lists the notes directly in her notebook (title, note_id,
+- `list_own_notes` lists the notes directly in their notebook (title, note_id,
   last update, newest first; at most 30), optionally only titles containing
   every word of `query`.
 - `read_own_note` reads one note's text by `note_id`, cut to 10,000 characters
   (the result says when it was cut). At most 5 reads per assignment.
 
-Both take the notebook from the roster, never from the model. The backend
-looks up the top-level **Lauren** notebook and checks, on every read, that the
-note is directly inside it and not in the trash. A note anywhere else,
-including a sub-notebook of **Lauren**, gets the same "no note with that
-note_id" answer as a note that does not exist, so other notebooks cannot be
-probed. Note text is labeled as data, not instructions.
+Both take the notebook from the roster, never from the model: Susan reads only
+**Susan**, Dave only **Dave**, and so on. The backend looks up that top-level
+notebook and checks, on every read, that the note is directly inside it and
+not in the trash. A note anywhere else, including another specialist's
+notebook, Gary's notebook, or a sub-notebook of their own, gets the same "no
+note with that note_id" answer as a note that does not exist, so other
+notebooks cannot be probed. Note text is labeled as data, not instructions.
 
-Her instructions tell her to check the notebook before a new analysis and to
-stay consistent with her earlier notes or say why she departs from them. You
-can also point her at them:
+Each assignment tells them they can check their notebook when the objective
+refers to their notes or earlier work, or when an earlier note on the same
+topic would help. Lauren's instructions go further: she checks it before every
+new analysis and stays consistent with her earlier notes or says why she
+departs from them. To point any of them at their notes:
 
 ```text
+Gary, have Dave check his notes from the approvals page review and tell me whether the new finance page has the same issues.
 Gary, have Lauren check her notes on AI voiceovers and tell me whether a voice clone of me for a sponsor read is okay.
 ```
 
-Notes you add to the **Lauren** notebook yourself (principles, policies,
-background) are read the same way. Reading is granted per agent; the other
-specialists still only write.
+Notes you add to a specialist's notebook yourself (preferences, policies,
+background) are read the same way.
 
 ## Management reviews
 
@@ -258,7 +261,7 @@ failed, and `failed` if all did.
 | `MAX_ACTIVE_AGENT_ASSIGNMENTS` | 6 | Queued plus running assignments across the company |
 
 Also fixed in code: one output retry, 12 tool calls, 4 web searches, 3 notes
-written, 5 notes read (Lauren), 2 purchase requests, and 1 EASE analysis per run, one follow-up per review.
+written, 5 notes read, 2 purchase requests, and 1 EASE analysis per run, one follow-up per review.
 A review with all five employees uses five of Gary's six assignments for the
 conversation, which leaves room for the follow-up.
 
@@ -369,6 +372,10 @@ Run against the real models before release:
   wrote a note). Her report cited the earlier conclusion and stayed consistent
   with it. Against the real Joplin, reading a note from another notebook and
   reading a made-up note_id were both refused with the same message.
+- After reading was extended to the whole team, Susan, Dave, Linda, and
+  Catherine each tried to read one of Lauren's real notes through their own
+  notebook and were refused with the same message; each listed their own
+  (still empty) notebook without error.
 
 ## Models and cost
 
