@@ -366,10 +366,11 @@ or at `http://localhost:8000/approvals`, which shows the exact recipient, text,
 or times. Unanswered approvals expire after 72 hours. Gary only reports an
 action as done when it actually succeeded.
 
-## The team: Susan, Dave, and Linda
+## The team: Susan, Dave, Linda, and Catherine
 
 Gary can ask specialists for help: Susan for research and strategy, Dave for
-security, and Linda for operations planning.
+security, Linda for operations planning, and Catherine for costs, budgets, and
+purchases.
 
 ```text
 Gary, have Susan research the best tools for recording screen demos.
@@ -378,6 +379,8 @@ Gary, have Linda create an execution plan for the video project.
 Gary, I'm thinking about giving you browser automation. Have your team evaluate it.
 Gary, what did Susan find?
 Gary, show me the management review.
+Gary, what would a transcription subscription cost us per month?
+Gary, have Catherine buy a USB microphone under forty dollars.
 ```
 
 They work in the background, usually for a minute or two; Gary announces when
@@ -385,8 +388,16 @@ a report or review is ready. When several review the same question, they work
 independently and Gary tells you where they disagree before recommending. See
 [Team](TEAM.md) for details, limits, and the manual CLI.
 
+Catherine never sees the card number and cannot charge the card. A purchase
+she requests appears at `http://localhost:8000/approvals` with the merchant,
+amount, and reason, within the spending limits. Only you can approve it, on
+that page; Gary can reject one by voice but not approve it. No payment channel
+is connected yet, so approving a purchase records it without charging the
+card. Give her the card, freeze it, or remove it at
+`http://localhost:8000/finance`.
+
 Each specialist can also keep notes in their own Joplin notebook (**Susan**,
-**Dave**, **Linda**). Ask for a write-up as part of the assignment:
+**Dave**, **Linda**, **Catherine**). Ask for a write-up as part of the assignment:
 
 ```text
 Gary, have Linda plan the prototype and write the plan up in her notebook.

@@ -14,6 +14,8 @@ services:
       OPENAI_API_KEY: "${OPENAI_API_KEY:?Set OPENAI_API_KEY in .env}"
       SESSION_SECRET: "${SESSION_SECRET:?Run bash setup.sh}"
       TOKEN_ENCRYPTION_KEY: "${TOKEN_ENCRYPTION_KEY:?Run bash setup.sh}"
+      # Optional: without it Catherine's card cannot be added.
+      CARD_ENCRYPTION_KEY: "${CARD_ENCRYPTION_KEY:-}"
       VOICE_BRIDGE_TOKEN: "${VOICE_BRIDGE_TOKEN:?Run bash setup.sh}"
 
       OPENAI_REALTIME_MODEL: "${OPENAI_REALTIME_MODEL:-gpt-realtime-2.1}"
@@ -43,14 +45,16 @@ services:
       PLANNING_EMAIL: "${PLANNING_EMAIL:-snippets}"
       PRINCIPAL_NAME: "${PRINCIPAL_NAME:-Alex}"
 
-      # GaryCorp specialists (Susan, Dave, Linda). Empty model = PLANNING_MODEL.
+      # GaryCorp specialists (Susan, Dave, Linda, Catherine). Empty model = PLANNING_MODEL.
       GARY_EMPLOYEE_MODEL: "${GARY_EMPLOYEE_MODEL:-}"
       AGENT_WEB_SEARCH_MODEL: "${AGENT_WEB_SEARCH_MODEL:-gpt-5.4-mini}"
       MAX_AGENT_ITERATIONS: "${MAX_AGENT_ITERATIONS:-8}"
       MAX_AGENT_EXECUTION_SECONDS: "${MAX_AGENT_EXECUTION_SECONDS:-300}"
       MAX_CONCURRENT_AGENT_RUNS: "${MAX_CONCURRENT_AGENT_RUNS:-2}"
-      MAX_ASSIGNMENTS_PER_GARY_PLAN: "${MAX_ASSIGNMENTS_PER_GARY_PLAN:-4}"
+      MAX_ASSIGNMENTS_PER_GARY_PLAN: "${MAX_ASSIGNMENTS_PER_GARY_PLAN:-5}"
       MAX_ACTIVE_AGENT_ASSIGNMENTS: "${MAX_ACTIVE_AGENT_ASSIGNMENTS:-6}"
+      CFO_PER_PURCHASE_LIMIT_USD: "${CFO_PER_PURCHASE_LIMIT_USD:-50}"
+      CFO_MONTHLY_LIMIT_USD: "${CFO_MONTHLY_LIMIT_USD:-200}"
       # CrewAI: no telemetry or hosted tracing; its scratch storage stays in
       # the container and is not part of GaryCorp's records.
       CREWAI_DISABLE_TELEMETRY: "true"
@@ -62,6 +66,7 @@ services:
 
       CLIENT_SECRETS_FILE: /run/secrets/google_client_secret.json
       TOKEN_STORE_FILE: /data/token_store.enc
+      CARD_VAULT_FILE: /data/card_vault.enc
       REDIRECT_URI: http://localhost:8000/oauth2callback
 
       # The OAuth callback is plain http on host loopback only (127.0.0.1:8000).

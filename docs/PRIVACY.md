@@ -98,17 +98,26 @@ Set `PLANNING_TIMES` empty to turn scheduled runs off.
 
 ## Specialist team
 
-When Gary delegates to Susan, Dave, or Linda, their context package and tool
+When Gary delegates to Susan, Dave, Linda, or Catherine, their context package and tool
 results are sent to OpenAI (`GARY_EMPLOYEE_MODEL`): the assignment and any
 context Gary includes, the related project and its tasks, Gary's planning notes
 for that project, and depending on the specialist, commitments, follow-ups,
 free calendar blocks (without event titles), the permission and policy
-configuration, and recent audit summaries. No email content or credentials are
-included. Susan's web searches send the search query to OpenAI's web search
+configuration, recent audit summaries, or Catherine's card brand, last four
+digits, expiry, spending totals, purchase requests, and team token usage. No
+email content, credentials, or card number are included. Susan's and
+Catherine's web searches send the search query to OpenAI's web search
 (`AGENT_WEB_SEARCH_MODEL`). Reports are stored locally in `data/gary.db`, and
 notes the specialists write are saved in their own notebooks in your local
 Joplin app.
 CrewAI telemetry and hosted tracing are disabled.
+
+## Debit card
+
+The card number, expiry, and name you enter at `/finance` stay on this machine,
+encrypted in `data/card_vault.enc`. Nothing sends them anywhere: no payment
+channel is connected, and no model ever receives them. The merchant, amount,
+and description of purchase requests go to OpenAI as part of Catherine's work.
 
 ## OpenAI key
 

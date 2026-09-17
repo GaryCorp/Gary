@@ -26,6 +26,7 @@ It is not designed as an Internet-facing multi-user service.
 - OpenAI API key;
 - Google OAuth client file;
 - encrypted token storage;
+- the card encryption key and encrypted card vault;
 - bridge token;
 - Joplin Web Clipper token.
 
@@ -116,6 +117,34 @@ Keep the data directory restrictive:
 chmod 700 data
 ```
 
+## Catherine's debit card
+
+- The card number is Fernet-encrypted in `data/card_vault.enc` (file 600) with
+  `CARD_ENCRYPTION_KEY`, a different key from the Google tokens. SQLite, the
+  audit log, backups of `gary.db`, tool results, prompts, and web pages hold
+  only brand, last four digits, expiry, and status. The security code is never
+  collected.
+- Nothing decrypts the vault yet. No tool can read it, and `charge_card` and
+  `read_card_number` are forbidden tools.
+- The `/finance` page (add, freeze, remove) uses the same CSRF token and origin
+  check as `/approvals`, and like it relies on the loopback-only binding.
+- Only Catherine has `request_card_purchase`. It creates a yellow
+  `card_purchase` action; Gary's `action_propose` refuses that action type.
+- Card purchases are in `WEB_ONLY_APPROVAL_ACTIONS`: the approval service
+  refuses to approve them from any channel but the web page, so a misheard or
+  injected spoken "yes" cannot approve spending. Rejecting works by voice.
+- Hard caps from `.env`, rechecked at approval: per purchase and per calendar
+  month, counting pending and approved requests. At most 2 requests per
+  assignment and none during management reviews.
+- Catherine reads web pages, which may contain prompt injection. The worst
+  case is up to two misleading purchase requests within the limits, each shown
+  in full on the approvals page for you to reject. Read the merchant and link
+  before approving.
+- No payment channel is connected, so nothing is charged even when approved.
+  Connecting one is a separate decision that deserves its own security review.
+- Use a virtual or limited card where possible, and freeze it at `/finance`
+  when not needed.
+
 ## OAuth state
 
 The application validates the OAuth `state` parameter to reduce CSRF risk.
@@ -204,31 +233,36 @@ emails.
 
 ## Specialist team
 
-Susan, Dave, and Linda are separate CrewAI agents with code-enforced least
-privilege (details in [Team](TEAM.md#permissions)):
+Susan, Dave, Linda, and Catherine are separate CrewAI agents with
+code-enforced least privilege (details in [Team](TEAM.md#permissions)):
 
 - permissions live in frozen roster definitions, not the database or prompts;
 - each agent is built with only its granted tools, and the gateway re-checks
   every call, validates arguments, applies per-run limits, and audits calls and
   denials;
-- every specialist tool is read-only and filtered (no credentials, email
-  content, audit details, calendar titles, or notes outside Gary's planning
-  notes), except `write_note`, which only creates notes in the agent's own
-  top-level Joplin notebook (fixed in the roster, never chosen by the model),
-  at most 3 per assignment, each stamped and audited;
-- sending email, calendar changes, money, permissions, shell, SQL, deletion,
-  and delegation cannot be granted to any specialist;
+- every specialist tool is read-only and filtered (no credentials, card
+  number, email content, audit details, calendar titles, or notes outside
+  Gary's planning notes), except `write_note`, which only creates notes in the
+  agent's own top-level Joplin notebook (fixed in the roster, never chosen by
+  the model), at most 3 per assignment, each stamped and audited, and
+  Catherine's `request_card_purchase`, which only creates a purchase request
+  you approve on the web page (see [Catherine's debit card](#catherines-debit-card));
+- sending email, calendar changes, charging a card or spending money directly,
+  reading the card number, permissions, shell, SQL, deletion, and delegation
+  cannot be granted to any specialist;
 - CrewAI delegation, code execution, memory, planning, telemetry, and tracing
   are off;
 - only Gary (or Alex through the CLI) creates assignments, within hard limits on
   time, iterations, concurrency, and assignments per conversation;
 - specialist reports are validated before they are stored, and they are
-  advisory: nothing a specialist returns changes company state by itself.
+  advisory: nothing a specialist returns changes company state by itself
+  (Catherine's purchase requests change nothing until you approve them).
 
 Web pages and notes a specialist reads are untrusted: the task prompt labels
 them as data, and the worst an injected instruction could do is distort a
-report that Gary and Alex then weigh, or add up to three misleading notes to
-that specialist's own notebook.
+report that Gary and Alex then weigh, add up to three misleading notes to
+that specialist's own notebook, or, for Catherine, create up to two purchase
+requests within the limits that wait for Alex on the approvals page.
 
 ## Joplin tools
 
@@ -254,7 +288,7 @@ The provided `.gitignore` ignores secrets and local data:
 .env
 .env.bak*
 client_secret.json
-data/*   (except data/.gitkeep): token store, gary.db, backups
+data/*   (except data/.gitkeep): token store, card vault, gary.db, backups
 .models/
 ```
 

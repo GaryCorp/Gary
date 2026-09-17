@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from gary.db import Database
 from gary.db.repositories import Repositories
-from gary.policy import APPROVAL_EXPIRY_HOURS, SYSTEM_ACTOR, USER_ACTOR
+from gary.policy import APPROVAL_EXPIRY_HOURS, SYSTEM_ACTOR, USER_ACTOR, WEB_ONLY_APPROVAL_ACTIONS
 from gary.services.common import Clock, NotFoundError, clock_now, default_clock
 from gary.timeutil import format_utc, to_datetime
 
@@ -97,6 +97,16 @@ class ApprovalService:
             approval = repos.approvals.get(approval_id)
             if approval is None:
                 raise NotFoundError(f"No approval with id {approval_id}")
+            if (
+                decision == "approved"
+                and channel != "web"
+                and approval["action_type"] in WEB_ONLY_APPROVAL_ACTIONS
+                and approval["status"] == "pending"
+            ):
+                raise ValueError(
+                    "This request can only be approved on the approvals page, "
+                    "http://localhost:8000/approvals, not by voice"
+                )
             if not repos.approvals.resolve(approval_id, decision, note, now):
                 raise ValueError(f"This approval is already {approval['status']}")
 

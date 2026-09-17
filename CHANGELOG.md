@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.16.0 — Catherine, Chief Financial Officer
+
+- Gary's team gains a fourth employee, Catherine (Finance). She reports on up-front
+  and ongoing costs, budget fit, cheaper alternatives, and the team's AI usage,
+  in a validated `FinanceReport`. Her tools are `read_finance_status`,
+  `read_purchases`, `read_ai_usage`, project and task reads, planning notes,
+  `web_search`, `request_card_purchase`, and `write_note` (the **Catherine**
+  notebook). She joins management reviews by default.
+- Catherine holds a debit card, added at the new `/finance` page (CSRF-protected,
+  with freeze, unfreeze, replace, and remove). The card number is
+  Fernet-encrypted in `data/card_vault.enc` with the new `CARD_ENCRYPTION_KEY`.
+  SQLite (`payment_cards`, migration `003_finance.sql`) keeps only brand, last
+  four digits, expiry, and status. The security code is not collected.
+- `request_card_purchase` creates a yellow `card_purchase` action, checked
+  against `CFO_PER_PURCHASE_LIMIT_USD` (default 50) and `CFO_MONTHLY_LIMIT_USD`
+  (default 200) when requested and again when approved. Card purchases can only
+  be approved on `/approvals`: voice approval is refused, and Gary cannot
+  propose one himself. At most 2 per assignment, none during reviews.
+- No payment channel is connected yet: approving a purchase records it but
+  does not charge the card.
+- `MAX_ASSIGNMENTS_PER_GARY_PLAN` now defaults to 5, so a full four-person
+  review still leaves room for one follow-up.
+- Verified with the real model: Catherine reported the team's AI usage cost
+  from `read_ai_usage` and a price check by web search. The `/finance` page was
+  checked against a throwaway database.
+- 179 tests (plus an opt-in live CrewAI test).
+
 ## 1.15.0 — Specialist notes in Joplin
 
 - Susan, Dave, and Linda can write notes with the new `write_note` tool, each

@@ -33,6 +33,7 @@ for line in lines:
 generated = {
     "SESSION_SECRET": secrets.token_hex(32),
     "TOKEN_ENCRYPTION_KEY": base64.urlsafe_b64encode(os.urandom(32)).decode(),
+    "CARD_ENCRYPTION_KEY": base64.urlsafe_b64encode(os.urandom(32)).decode(),
     "VOICE_BRIDGE_TOKEN": secrets.token_urlsafe(48),
     "HOST_UID": str(os.getuid()),
     "HOST_GID": str(os.getgid()),

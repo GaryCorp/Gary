@@ -11,7 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-ReportKind = Literal["research", "security", "operations"]
+ReportKind = Literal["research", "security", "operations", "finance"]
 
 LIST_LIMIT = 20
 TEXT_LIMIT = 4000
@@ -31,7 +31,7 @@ class GaryCorpAgentDefinition(BaseModel):
     reports_to: str | None
 
     # Capability-based permissions: the exact tool names this agent may call.
-    # Future authority (for example a CFO's spending tool) is granted the same
+    # Authority such as Catherine's request_card_purchase is granted the same
     # way, per agent, never globally.
     allowed_tools: tuple[str, ...] = ()
 
@@ -194,15 +194,64 @@ class OperationsReport(OperationsFindings):
         return value
 
 
+# ------------------------------------------------------------------- finance
+
+CostFrequency = Literal["one_time", "monthly", "yearly", "usage_based", "unknown"]
+BudgetAssessment = Literal["within_budget", "tight", "over_budget", "unknown"]
+
+
+class CostItem(ReportModel):
+    item: str
+    amount_usd: float | None
+    frequency: CostFrequency
+
+
+class FinanceFindings(ReportModel):
+    summary: str
+    costs: list[CostItem]
+    estimated_one_time_cost_usd: float | None
+    estimated_monthly_cost_usd: float | None
+    budget_assessment: BudgetAssessment
+    savings_opportunities: list[str]
+    risks: list[str]
+    decisions_needed: list[str]
+    recommendation: str
+    confidence: float
+
+
+class ValidCostItem(CostItem):
+    item: str = Field(min_length=1, max_length=300)
+    amount_usd: float | None = Field(ge=0, le=10_000_000)
+
+
+class FinanceReport(FinanceFindings):
+    assignment_id: str
+    summary: str = Field(min_length=1, max_length=TEXT_LIMIT)
+    costs: list[ValidCostItem] = Field(max_length=30)
+    estimated_one_time_cost_usd: float | None = Field(ge=0, le=100_000_000)
+    estimated_monthly_cost_usd: float | None = Field(ge=0, le=100_000_000)
+    recommendation: str = Field(min_length=1, max_length=TEXT_LIMIT)
+    confidence: float = Field(ge=0, le=1)
+    # Set by the application from the run, never by the model.
+    purchase_request_ids: list[str] = Field(default_factory=list)
+
+    @field_validator("savings_opportunities", "risks", "decisions_needed")
+    @classmethod
+    def bounded(cls, value):
+        return _bounded_items(value)
+
+
 FINDINGS_MODELS: dict[str, type[ReportModel]] = {
     "research": ResearchFindings,
     "security": SecurityFindings,
     "operations": OperationsFindings,
+    "finance": FinanceFindings,
 }
 REPORT_MODELS: dict[str, type[ReportModel]] = {
     "research": ResearchReport,
     "security": SecurityReport,
     "operations": OperationsReport,
+    "finance": FinanceReport,
 }
 
 
@@ -213,5 +262,6 @@ class ManagementReview(BaseModel):
     research: ResearchReport | None = None
     security: SecurityReport | None = None
     operations: OperationsReport | None = None
+    finance: FinanceReport | None = None
     follow_ups: list[dict] = Field(default_factory=list)
     assignments: list[dict] = Field(default_factory=list)

@@ -91,10 +91,10 @@ Chief of Staff operations package:
 
 GaryCorp specialist team (see [Team](TEAM.md)):
 
-- `roster.py` defines Gary, Susan, Dave, and Linda: identity, prompts, tools,
-  limits (the permission authority);
-- `models.py` has agent definitions and the Research, Security, and Operations
-  report models;
+- `roster.py` defines Gary, Susan, Dave, Linda, and Catherine: identity,
+  prompts, tools, limits (the permission authority);
+- `models.py` has agent definitions and the Research, Security, Operations, and
+  Finance report models;
 - `gateway.py` is the tool catalog and permission-checking gateway;
 - `context.py` builds least-privilege context packages;
 - `executor.py` is the boundary to the agent framework, and `crew.py` the
@@ -102,6 +102,19 @@ GaryCorp specialist team (see [Team](TEAM.md)):
 - `runner.py` runs assignments; `service.py` handles delegation, management
   reviews, and reading reports;
 - `web.py` is the read-only web research service.
+
+### `backend/gary/finance/`
+
+Catherine's debit card (see [Team](TEAM.md#catherines-debit-card)):
+
+- `cards.py` validates card numbers, encrypts the details into the card vault,
+  and adds, freezes, and removes the card;
+- `purchases.py` has the spending limits, the purchase payload, and the
+  `card_purchase` action handler.
+
+`db/migrations/003_finance.sql` adds `payment_cards`, and
+`db/repositories/finance.py` reads cards, committed spend, purchases, and
+specialist token usage.
 
 ### `backend/app/team_cli.py`
 
@@ -112,7 +125,8 @@ container.
 
 pytest suite using temporary databases and fakes for Google, Joplin, OpenAI, and
 the agent framework: operations, planning, Chief of Staff behavior, tools, the
-specialist team (`test_agents.py`), and the CrewAI adapter (`test_crew.py`,
+specialist team (`test_agents.py`), Catherine's card and purchases
+(`test_finance.py`), and the CrewAI adapter (`test_crew.py`,
 including an opt-in live test with `GARY_LIVE_AGENT_TEST=1`).
 
 ### `backend/app/__init__.py`

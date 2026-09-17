@@ -1,8 +1,8 @@
 """Context packages: least privilege for information.
 
 Each specialist gets only what their profile needs for the assignment. Nobody
-receives email content, credentials, the whole notebook, or another
-specialist's report unless Gary explicitly shares it in a follow-up.
+receives email content, credentials, the card number, the whole notebook, or
+another specialist's report unless Gary explicitly shares it in a follow-up.
 """
 
 import asyncio
@@ -14,10 +14,13 @@ from gary.agents.gateway import (
     AgentServices,
     AvailabilityArgs,
     NoArgs,
+    PurchasesArgs,
     RunState,
     ToolCall,
     _read_action_policy,
     _read_agent_permissions,
+    _read_finance_status,
+    _read_purchases,
     _read_system_configuration_summary,
     read_calendar_availability,
 )
@@ -144,7 +147,7 @@ async def build_context(
     context.update(await asyncio.to_thread(read_state))
     project_name = context.get("project", {}).get("name")
 
-    if agent.context_profile in ("research", "operations"):
+    if agent.context_profile in ("research", "operations", "finance"):
         context["planning_notes"] = await _notes(services, project_name)
 
     if agent.context_profile == "security":
@@ -163,6 +166,15 @@ async def build_context(
         except Exception as exc:
             logger.warning("Calendar unavailable for agent context: %s", exc)
             context["calendar"] = f"not available ({type(exc).__name__})"
+
+    if agent.context_profile == "finance":
+        state = RunState(assignment["id"], agent.agent_id)
+        context["finance_status"] = await asyncio.to_thread(
+            _read_finance_status, ToolCall(services, agent, state, NoArgs())
+        )
+        context["recent_purchases"] = (
+            await asyncio.to_thread(_read_purchases, ToolCall(services, agent, state, PurchasesArgs(limit=10)))
+        )["purchases"]
 
     if shared_reports:
         context["reports_shared_by_gary"] = shared_reports

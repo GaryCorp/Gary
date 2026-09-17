@@ -36,6 +36,8 @@ from gary.agents.runner import GaryCorpAgentRunner
 from gary.agents.service import AgentService
 from gary.agents.web import OpenAIWebResearch
 from gary.backup import backup_daily
+from gary.finance import cards as finance_cards
+from gary.finance.purchases import SpendingLimits, card_purchase_handler, dollars_to_cents, format_cents, purchase_brief, spending_status
 from gary.planner import OpenAIPlanner
 from gary.db.repositories import Repositories
 from gary.models.action import (
@@ -43,7 +45,7 @@ from gary.models.action import (
     ScheduleTaskPayload,
     SendExternalEmailPayload,
 )
-from gary.policy import CRITICAL_TASK_PRIORITY, USER_ACTOR, YELLOW
+from gary.policy import CFO_ACTOR, CRITICAL_TASK_PRIORITY, USER_ACTOR, YELLOW
 from gary.services.action_service import ActionHandler
 from gary.services.calendar_blocks import working_time_problem
 from gary.services.common import require_task
@@ -123,8 +125,16 @@ AGENT_LIMITS = AgentLimits(
     max_iterations=env_int("MAX_AGENT_ITERATIONS", 8, 1, 25),
     max_execution_seconds=env_int("MAX_AGENT_EXECUTION_SECONDS", 300, 30, 1800),
     max_concurrent_runs=env_int("MAX_CONCURRENT_AGENT_RUNS", 2, 1, 6),
-    max_assignments_per_plan=env_int("MAX_ASSIGNMENTS_PER_GARY_PLAN", 4, 1, 10),
+    max_assignments_per_plan=env_int("MAX_ASSIGNMENTS_PER_GARY_PLAN", 5, 1, 10),
     max_active_assignments=env_int("MAX_ACTIVE_AGENT_ASSIGNMENTS", 6, 1, 20),
+)
+# Catherine's debit card. The card number is encrypted in its own vault file
+# with its own key; without the key a card cannot be added.
+CARD_ENCRYPTION_KEY = os.getenv("CARD_ENCRYPTION_KEY", "").strip() or None
+CARD_VAULT_FILE = Path(os.getenv("CARD_VAULT_FILE", "/data/card_vault.enc"))
+SPENDING_LIMITS = SpendingLimits(
+    per_purchase_cents=dollars_to_cents(os.getenv("CFO_PER_PURCHASE_LIMIT_USD", "50")),
+    monthly_cents=dollars_to_cents(os.getenv("CFO_MONTHLY_LIMIT_USD", "200")),
 )
 JOPLIN_PLANNING_NOTEBOOK = "Planning"
 JOPLIN_SUMMARY_NOTEBOOK = "Daily Summaries"
@@ -1788,9 +1798,13 @@ def external_action_handlers() -> dict[str, ActionHandler]:
 gary_ops = build_gary(
     GARY_DB_PATH,
     LOCAL_TIMEZONE,
-    action_handlers=external_action_handlers(),
+    action_handlers={
+        **external_action_handlers(),
+        "card_purchase": card_purchase_handler(SPENDING_LIMITS, ZoneInfo(LOCAL_TIMEZONE)),
+    },
     work_week=WORK_WEEK,
 )
+card_vault = finance_cards.CardVault(CARD_VAULT_FILE, CARD_ENCRYPTION_KEY)
 
 
 def run_daily_backup() -> Path | None:
@@ -2113,12 +2127,13 @@ def system_configuration_summary() -> dict:
             "voice": "local microphone and wake word; holds only the voice bridge token",
             "joplin-proxy": "host network, listens only on the Docker network gateway, forwards to Joplin's local API",
         },
-        "web_pages": ["/", "/login", "/events", "/approvals (CSRF-protected approve/reject)", "/team", "/health"],
+        "web_pages": ["/", "/login", "/events", "/approvals (CSRF-protected approve/reject)", "/team",
+                      "/finance (CSRF-protected: add, freeze, or remove Catherine's card)", "/health"],
         "web_authentication": "none; relies on loopback-only binding",
         "google_scopes": SCOPES,
         "joplin_access": (
             f"Gary: notes and notebooks inside the {JOPLIN_NOTEBOOK} notebook only; "
-            "Susan, Dave, Linda: create-only notes in their own top-level notebook"
+            "Susan, Dave, Linda, Catherine: create-only notes in their own top-level notebook"
         ),
         "openai_usage": {
             "voice": OPENAI_REALTIME_MODEL,
@@ -2130,6 +2145,15 @@ def system_configuration_summary() -> dict:
         "approval_policy": "code-defined green/yellow/red; voice approval needs spoken confirmation",
         "planning_schedule": {name: time.strftime("%H:%M") for name, time in PLANNING_SCHEDULE.items()},
         "agent_limits": AGENT_LIMITS.__dict__,
+        "finance": {
+            "card_storage": "card number Fernet-encrypted in data/card_vault.enc with CARD_ENCRYPTION_KEY; "
+                            "SQLite holds only brand, last four digits, expiry, and status",
+            "vault_key_configured": card_vault.configured,
+            "purchases": "Catherine can request card_purchase actions (yellow, approvable only on the "
+                         "/approvals web page); no payment channel is connected, so nothing is charged",
+            "per_purchase_limit": format_cents(SPENDING_LIMITS.per_purchase_cents),
+            "monthly_limit": format_cents(SPENDING_LIMITS.monthly_cents),
+        },
         "crewai": "telemetry and tracing disabled; memory, planning, and code execution off",
     }
 
@@ -2145,6 +2169,7 @@ agent_services = AgentServices(
     notebooks=JoplinAgentNotebooks(),
     system_summary=system_configuration_summary,
     manager_tools=tuple(sorted(GARY_TOOL_NAMES)),
+    spending_limits=SPENDING_LIMITS,
 )
 
 
@@ -2169,9 +2194,15 @@ async def announce_assignment_finished(assignment: dict) -> None:
         return
     agent = agent_registry.get(assignment["assigned_to"])
     if assignment["status"] == "completed":
+        requested = len(json.loads(assignment["result_json"] or "{}").get("purchase_request_ids", []))
+        purchases = (
+            f" {agent.name} requested {requested} card purchase{'s' if requested != 1 else ''} "
+            "for you to approve on the approvals page."
+            if requested else ""
+        )
         await announce_to_voice(
             f"{agent.name} has finished: {single_line(assignment['objective'])[:80]}. "
-            f"Ask me what {agent.name} found."
+            f"Ask me what {agent.name} found.{purchases}"
         )
     else:
         await announce_to_voice(f"{agent.name}'s assignment did not complete.")
@@ -2744,6 +2775,8 @@ async def home(request: Request):
     ·
     <a href="/team">Team</a>
     ·
+    <a href="/finance">Finance</a>
+    ·
     <a href="/logout">Logout</a>
   </p>
 </body>
@@ -2965,7 +2998,7 @@ async def resolve_approval(request: Request, approval_id: str):
         if execution is None:
             outcome = "Rejected."
         elif execution["status"] == "succeeded":
-            outcome = "Approved and done."
+            outcome = (execution.get("result") or {}).get("note") or "Approved and done."
         else:
             outcome = f"Approved, but it failed: {execution.get('error')}"
         request.session["approval_message"] = f"{result['summary']}: {outcome}"
@@ -3000,6 +3033,9 @@ async def team_page(request: Request):
             return f"Risk: {report['risk_level']}, {report['recommendation']}"
         if "deadline_assessment" in report:
             return f"Deadline assessment: {report['deadline_assessment']}"
+        if "budget_assessment" in report:
+            requested = len(report.get("purchase_request_ids", []))
+            return f"Budget: {report['budget_assessment']}, purchase requests: {requested}"
         if "confidence" in report:
             return f"Confidence: {report['confidence']:.0%}"
         return item["error"] or ""
@@ -3041,6 +3077,128 @@ async def team_page(request: Request):
 </body>
 </html>"""
     )
+
+
+def finance_origin_refused(request: Request) -> bool:
+    origin = request.headers.get("origin")
+    return origin is not None and origin not in ALLOWED_ORIGINS
+
+
+@app.get("/finance")
+async def finance_page(request: Request):
+    token = approval_csrf_token(request)
+    message = request.session.pop("finance_message", None)
+    timezone = ZoneInfo(LOCAL_TIMEZONE)
+
+    def read():
+        with gary_ops.db.read() as conn:
+            repos = Repositories.bind(conn)
+            card = finance_cards.public_card(repos.finance.current_card(CFO_ACTOR))
+            spending = spending_status(repos, SPENDING_LIMITS, timezone, dt.datetime.now(dt.timezone.utc))
+            purchases = [purchase_brief(row, timezone) for row in repos.finance.list_purchases(limit=20)]
+        return card, spending, purchases
+
+    card, spending, purchases = await asyncio.to_thread(read)
+    esc = html.escape
+    csrf = f'<input type="hidden" name="csrf" value="{esc(token)}">'
+
+    if card:
+        toggle = "unfreeze" if card["status"] == "frozen" else "freeze"
+        card_html = (
+            f"<p><strong>{esc(card['brand'])} ending {esc(card['last4'])}</strong> · "
+            f"expires {esc(card['expires'])} · status: <strong>{esc(card['status'])}</strong></p>"
+            f'<form method="post" action="/finance/card/{toggle}" style="display:inline">{csrf}'
+            f"<button>{toggle.capitalize()} card</button></form> "
+            f'<form method="post" action="/finance/card/remove" style="display:inline">{csrf}'
+            "<button>Remove card</button></form>"
+            "<h3>Replace the card</h3>"
+        )
+    else:
+        card_html = "<p>Catherine has no card yet.</p><h3>Give Catherine a card</h3>"
+
+    if card_vault.configured:
+        form = (
+            f'<form method="post" action="/finance/card" autocomplete="off">{csrf}'
+            '<p><label>Card number <input name="number" inputmode="numeric" autocomplete="off" required></label></p>'
+            '<p><label>Expiry month <input name="exp_month" size="2" inputmode="numeric" required></label> '
+            '<label>year <input name="exp_year" size="4" inputmode="numeric" required></label></p>'
+            '<p><label>Name on card <input name="name_on_card" autocomplete="off"></label></p>'
+            "<p>The security code is not stored. The number is encrypted on this machine; "
+            "Catherine and Gary only see the brand and last four digits.</p>"
+            "<button>Save card</button></form>"
+        )
+    else:
+        form = "<p>Set <code>CARD_ENCRYPTION_KEY</code> in <code>.env</code> (run setup.sh) to add a card.</p>"
+
+    rows = "".join(
+        "<tr>"
+        f"<td>{esc(p['requested_at'][:16].replace('T', ' '))}</td><td>{esc(p['merchant'] or '')}</td>"
+        f"<td>{esc(p['description'] or '')}</td><td>{esc(p['amount'])}</td>"
+        f"<td>{esc(p['status'])}{(' — ' + esc(p['error'])) if p['error'] else ''}</td>"
+        "</tr>"
+        for p in purchases
+    )
+    return HTMLResponse(
+        f"""<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Finance</title>
+</head>
+<body>
+  <h1>Finance</h1>
+  {f"<p><strong>{esc(message)}</strong></p>" if message else ""}
+  <h2>Catherine's debit card</h2>
+  {card_html}
+  {form}
+  <h2>Spending this month</h2>
+  <p>Committed {esc(spending['committed_this_month'])} of {esc(spending['monthly_limit'])}
+  ({esc(spending['remaining_this_month'])} left) · per-purchase limit {esc(spending['per_purchase_limit'])}.
+  Committed means requested and waiting for approval, or approved.</p>
+  <p>No payment channel is connected, so approved purchases are not charged to the card.
+  Approve or reject requests on the <a href="/approvals">approvals page</a>.</p>
+  <h2>Purchase requests</h2>
+  <table border="1" cellpadding="4" style="border-collapse:collapse">
+    <tr><th>Requested</th><th>Merchant</th><th>For</th><th>Amount</th><th>Status</th></tr>
+    {rows or '<tr><td colspan="5">None yet.</td></tr>'}
+  </table>
+  <p><a href="/">Back</a></p>
+</body>
+</html>"""
+    )
+
+
+@app.post("/finance/card/{operation}")
+@app.post("/finance/card")
+async def change_finance_card(request: Request, operation: str = "add"):
+    if finance_origin_refused(request):
+        return HTMLResponse("Cross-origin request refused", status_code=403)
+    form = urllib.parse.parse_qs((await request.body()).decode("utf-8", "replace"))
+    field = lambda name: (form.get(name) or [""])[0]  # noqa: E731
+    expected = request.session.get("approval_csrf")
+    if not expected or not secrets.compare_digest(field("csrf"), expected):
+        return HTMLResponse("Invalid or expired form; reload the page", status_code=403)
+
+    try:
+        if operation == "add":
+            today = dt.datetime.now(ZoneInfo(LOCAL_TIMEZONE)).date()
+            card = await asyncio.to_thread(
+                finance_cards.add_card, gary_ops.db, card_vault, field("number"),
+                field("exp_month"), field("exp_year"), field("name_on_card"), today,
+            )
+            message = f"Saved. Catherine now holds the {card['brand']} card ending {card['last4']}."
+        elif operation in ("freeze", "unfreeze"):
+            card = await asyncio.to_thread(finance_cards.set_frozen, gary_ops.db, operation == "freeze")
+            message = f"The card ending {card['last4']} is now {card['status']}."
+        elif operation == "remove":
+            await asyncio.to_thread(finance_cards.remove_card, gary_ops.db, card_vault)
+            message = "The card was removed and its encrypted details deleted."
+        else:
+            return HTMLResponse("Unknown operation", status_code=404)
+    except (ValueError, finance_cards.CardVaultError) as exc:
+        message = str(exc)
+    request.session["finance_message"] = message
+    return RedirectResponse("/finance", status_code=303)
 
 
 @app.get("/logout")
@@ -3412,7 +3570,7 @@ behave badly for humor; the humor comes from being an extremely serious Chief
 of Staff.
 
 GaryCorp team:
-You manage three specialist employees, each a separate AI that works in the
+You manage four specialist employees, each a separate AI that works in the
 background and returns a structured report:
 - Susan, Director of Research & Strategy: research, options, evidence, strategic
   analysis.
@@ -3420,6 +3578,8 @@ background and returns a structured report:
   controls.
 - Linda, Director of Operations: execution planning, feasibility, task
   breakdown, dependencies, scheduling implications.
+- Catherine, Chief Financial Officer: costs, budgets, subscriptions, AI
+  spending, and purchases on GaryCorp's debit card.
 
 Use them when their specialization would materially improve a decision or
 reduce your uncertainty. Do not delegate trivial tasks, and do not delegate to
@@ -3436,10 +3596,18 @@ Map requests to tools:
   can finish Friday: agent_assignment_get with agent_id and about set to the
   topic. Specialists often have several reports; never answer about one piece of
   work from a different report, and if the match is wrong or missing, say so.
+- What would this cost, can we afford it, what are we spending on AI: delegate
+  to Catherine.
+- Buy something: delegate to Catherine with exactly what to buy and any budget.
+  She can only request a purchase within the spending limits. Nothing is
+  charged: {PRINCIPAL_NAME} must approve every card purchase on the approvals
+  page at http://localhost:8000/approvals, and you cannot approve one by voice,
+  only reject it. No payment channel is connected yet, so even an approved
+  purchase is not charged; never say anything was bought or paid for.
 - Show me the management review: management_review_get.
 - Who is on the team, what are they working on: team_list.
 Each specialist can write notes in their own Joplin notebook (Susan, Dave,
-Linda); when {PRINCIPAL_NAME} wants their work written up, include that in the
+Linda, Catherine); when {PRINCIPAL_NAME} wants their work written up, include that in the
 objective. Assignments run in the background: say who is working on what, and
 that you will report back. Never invent or role-play a specialist's findings; only
 report what their report says, and say if it is not ready yet.

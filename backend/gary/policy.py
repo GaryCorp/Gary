@@ -21,6 +21,10 @@ ACTION_POLICIES = {
     "change_external_commitment": YELLOW,
     "cancel_external_meeting": YELLOW,
     "download_file": YELLOW,
+    # Catherine's debit card purchase requests. Always yellow, and approvable
+    # only on the web page (WEB_ONLY_APPROVAL_ACTIONS). Any other way of
+    # spending money stays red.
+    "card_purchase": YELLOW,
     "spend_money": RED,
     "change_security_settings": RED,
     "access_password_manager": RED,
@@ -30,6 +34,11 @@ ACTION_POLICIES = {
 }
 
 RISK_ORDER = {GREEN: 0, YELLOW: 1, RED: 2}
+
+# Approvals for these actions can only be approved on the /approvals web page,
+# never by voice, where a misheard or injected "yes" could approve. Rejecting
+# is allowed on any channel.
+WEB_ONLY_APPROVAL_ACTIONS = frozenset({"card_purchase"})
 
 # Moving a calendar event for a task at or above this priority, or one tied
 # to an open commitment, is critical and needs approval.
@@ -42,6 +51,7 @@ APPROVAL_EXPIRY_HOURS = 72
 # The human principal, as recorded in the audit log.
 USER_ACTOR = "alex"
 GARY_ACTOR = "gary"
+CFO_ACTOR = "catherine"
 SYSTEM_ACTOR = "system"
 
 

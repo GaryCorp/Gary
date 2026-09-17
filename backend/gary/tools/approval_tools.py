@@ -20,6 +20,10 @@ ACTION_PAYLOADS = (
 
 async def action_propose(args: dict, ctx: ToolContext) -> dict:
     request = validate_request(ProposeActionRequest, args)
+    if request.action_type == "card_purchase":
+        raise ValueError(
+            "Only Catherine can request card purchases. Delegate the purchase to her."
+        )
     result = await ctx.gary.actions.propose(request)
     if result.get("approval_id"):
         ctx.approval_ids().add(result["approval_id"])
@@ -101,7 +105,8 @@ TOOLS = [
         "Approve or reject a pending request on the user's behalf. First read "
         "the request summary to the user and ask. Only call after the user "
         "clearly says approve or reject for that specific request. Approving "
-        "runs the action immediately.",
+        "runs the action immediately. Card purchases can only be rejected here; "
+        "they are approved on the approvals web page.",
         obj(
             {
                 "approval_id": string("approval_id from approval_list_pending or action_propose."),

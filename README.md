@@ -23,9 +23,10 @@ projects and tasks. It uses:
 - **Approval policy as code**: risky actions such as emails Gary starts wait
   for your approval, by voice or at `http://localhost:8000/approvals`.
 - **A specialist team** managed by Gary, built with CrewAI: Susan (Research &
-  Strategy), Dave (Security), and Linda (Operations), each a separate,
-  permission-limited agent returning structured reports and keeping notes in
-  their own Joplin notebook.
+  Strategy), Dave (Security), Linda (Operations), and Catherine (CFO), each a
+  separate, permission-limited agent returning structured reports and keeping
+  notes in their own Joplin notebook. Catherine holds an encrypted debit card
+  and can request purchases, each approved only by you on the approvals page.
 - **Docker Compose** with separate `voice`, `backend`, and `joplin-proxy`
   services.
 
@@ -98,7 +99,7 @@ planning is on by default; set `PLANNING_TIMES=` in `.env` to turn it off.
 - [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) — all `.env` settings
 - [`docs/USAGE.md`](docs/USAGE.md) — what to say to Gary
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — components, tools, and data flow
-- [`docs/TEAM.md`](docs/TEAM.md) — Susan, Dave, and Linda: roles, permissions, reviews
+- [`docs/TEAM.md`](docs/TEAM.md) — Susan, Dave, Linda, and Catherine: roles, permissions, reviews, the debit card
 - [`docs/SECURITY.md`](docs/SECURITY.md) — security decisions and limitations
 - [`docs/PRIVACY.md`](docs/PRIVACY.md) — where audio, email, and notes travel
 - [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — common failures and fixes

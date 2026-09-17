@@ -74,7 +74,22 @@ OPERATIONS = {
     "recommendation": "Implement next week.",
     "confidence": 0.75,
 }
-OUTPUTS = {"susan": RESEARCH, "dave": SECURITY, "linda": OPERATIONS}
+FINANCE = {
+    "summary": "A read-only browser pilot costs about $20 a month in extra model usage.",
+    "costs": [
+        {"item": "Extra model tokens", "amount_usd": 20.0, "frequency": "monthly"},
+        {"item": "Playwright", "amount_usd": 0.0, "frequency": "one_time"},
+    ],
+    "estimated_one_time_cost_usd": 0.0,
+    "estimated_monthly_cost_usd": 20.0,
+    "budget_assessment": "within_budget",
+    "savings_opportunities": ["Use the mini model for page summaries"],
+    "risks": ["Usage-based costs grow with pages visited"],
+    "decisions_needed": ["Monthly cap for browsing tokens"],
+    "recommendation": "Affordable; cap the token spend.",
+    "confidence": 0.6,
+}
+OUTPUTS = {"susan": RESEARCH, "dave": SECURITY, "linda": OPERATIONS, "catherine": FINANCE}
 
 
 class FakeExecutor:
@@ -158,13 +173,14 @@ def audit_types(gary, entity_id):
 
 # ------------------------------------------------------------------ registry
 
-def test_registry_loads_three_employees_and_gary():
+def test_registry_loads_four_employees_and_gary():
     registry = AgentRegistry()
-    assert registry.employee_ids() == ["susan", "dave", "linda"]
+    assert registry.employee_ids() == ["susan", "dave", "linda", "catherine"]
     assert [(d.name, d.title) for d in registry.employees()] == [
         ("Susan", "Director of Research & Strategy"),
         ("Dave", "Director of Security"),
         ("Linda", "Director of Operations"),
+        ("Catherine", "Chief Financial Officer"),
     ]
     assert all(d.reports_to == "gary" for d in registry.employees())
     assert registry.manager().can_delegate is True
@@ -173,7 +189,7 @@ def test_registry_loads_three_employees_and_gary():
 
 def test_unknown_agent_ids_rejected():
     registry = AgentRegistry()
-    for bad in ("mallory", "", "cfo", "ethics"):
+    for bad in ("mallory", "", "cfo", "ethics", "Catherine Smith"):
         with pytest.raises(UnknownAgentError):
             registry.employee(bad)
     with pytest.raises(UnknownAgentError, match="not an employee"):
@@ -211,10 +227,15 @@ def test_each_employee_has_exactly_its_approved_tools():
         "read_projects", "read_project", "read_tasks", "read_dependencies",
         "read_calendar_availability", "read_commitments", "read_followups", "read_relevant_notes",
         "write_note"}
+    assert set(registry.get("catherine").allowed_tools) == {
+        "read_finance_status", "read_purchases", "read_ai_usage", "read_projects", "read_project",
+        "read_tasks", "read_relevant_notes", "web_search", "request_card_purchase", "write_note"}
     assert {d.agent_id: d.notebook for d in registry.employees()} == {
-        "susan": "Susan", "dave": "Dave", "linda": "Linda"}
+        "susan": "Susan", "dave": "Dave", "linda": "Linda", "catherine": "Catherine"}
     assert "web_search" not in registry.get("dave").allowed_tools
     assert "web_search" not in registry.get("linda").allowed_tools
+    # Spending authority belongs to Catherine alone.
+    assert [d.agent_id for d in registry.employees() if "request_card_purchase" in d.allowed_tools] == ["catherine"]
 
 
 def test_limits_cap_roster_values():
@@ -308,14 +329,17 @@ def test_gateway_tools_filter_sensitive_data(gary):
         audit = await gateway.call("read_audit_events", {"limit": 5})
         return permissions, policy, audit
     permissions, policy, audit = run(scenario())
-    assert {a["agent_id"] for a in permissions["agents"]} == {"gary", "susan", "dave", "linda"}
+    assert {a["agent_id"] for a in permissions["agents"]} == {"gary", "susan", "dave", "linda", "catherine"}
     assert policy["action_policies"]["spend_money"] == "red"
+    assert policy["action_policies"]["card_purchase"] == "yellow"
+    assert policy["web_only_approval_actions"] == ["card_purchase"]
     assert all("details_json" not in e and "details" not in e for e in audit["events"])
 
 
 # -------------------------------------------------------------------- runner
 
-@pytest.mark.parametrize("agent_id, kind", [("susan", "research"), ("dave", "security"), ("linda", "operations")])
+@pytest.mark.parametrize("agent_id, kind", [("susan", "research"), ("dave", "security"), ("linda", "operations"),
+                                            ("catherine", "finance")])
 def test_gary_can_delegate_to_each_employee(gary, agent_id, kind):
     executor = FakeExecutor()
     finished = []
@@ -333,7 +357,7 @@ def test_gary_can_delegate_to_each_employee(gary, agent_id, kind):
     assert request.agent.agent_id == agent_id
     assert [t.name for t in request.tools] == list(service.registry.get(agent_id).allowed_tools)
     assert request.output_model.__name__ == {"research": "ResearchFindings", "security": "SecurityFindings",
-                                             "operations": "OperationsFindings"}[kind]
+                                             "operations": "OperationsFindings", "finance": "FinanceFindings"}[kind]
     assert audit_types(gary, result["assignment_id"])[:3] == [
         "agent_assignment_delegated", "agent_assignment_started", "agent_assignment_completed"]
 
@@ -345,7 +369,7 @@ def test_context_packages_are_isolated(gary):
     make_task(gary, title="Film", project_id=project["id"])
 
     async def scenario():
-        for agent_id in ("susan", "dave", "linda"):
+        for agent_id in ("susan", "dave", "linda", "catherine"):
             await delegate_and_wait(service, agent_id=agent_id, project_id=project["id"],
                                     objective="Review the launch plan carefully.")
     run(scenario())
@@ -356,6 +380,9 @@ def test_context_packages_are_isolated(gary):
     assert "free_blocks" not in descriptions["dave"]
     assert "free_blocks" in descriptions["linda"] and "open_commitments" in descriptions["linda"]
     assert "agent_permissions" not in descriptions["linda"]
+    assert "finance_status" in descriptions["catherine"] and "recent_purchases" in descriptions["catherine"]
+    assert "agent_permissions" not in descriptions["catherine"] and "free_blocks" not in descriptions["catherine"]
+    assert all("committed_this_month" not in descriptions[a] for a in ("susan", "dave", "linda"))
     for text in descriptions.values():
         assert "OPENAI_API_KEY" not in text and "token_store" not in text
 
@@ -458,7 +485,7 @@ def test_tool_use_inside_run_goes_through_gateway(gary):
 def test_only_managers_delegate_and_limits_apply(gary):
     service = build_team(gary, limits=AgentLimits(max_active_assignments=2, max_execution_seconds=5))
     request = DelegateRequest(agent_id="susan", objective="Research three experiment ideas.")
-    for actor in ("susan", "dave", "linda", "mallory"):
+    for actor in ("susan", "dave", "linda", "catherine", "mallory"):
         with pytest.raises(PermissionError):
             service._delegate_db(request, actor)
     with pytest.raises(UnknownAgentError):
@@ -470,7 +497,7 @@ def test_only_managers_delegate_and_limits_apply(gary):
         service._delegate_db(request, "gary")
 
 
-def test_management_review_all_three_independent(gary):
+def test_management_review_all_four_independent(gary):
     executor = FakeExecutor()
     service = build_team(gary, executor)
 
@@ -485,7 +512,8 @@ def test_management_review_all_three_independent(gary):
     assert review.research.recommendation == "Start with read-only retrieval."
     assert review.security.risk_level == "high"
     assert review.operations.deadline_assessment == "at_risk"
-    assert len(executor.requests) == 3
+    assert review.finance.budget_assessment == "within_budget"
+    assert len(executor.requests) == 4
     for request in executor.requests:
         assert "reports_shared_by_gary" not in request.task_description
         for other in OUTPUTS.values():
@@ -611,17 +639,18 @@ def test_gary_tools_management_review_and_budget(gary):
         assert started["success"] is True
         await service.wait([a["assignment_id"] for a in started["assignments"]], timeout=20)
         review = await call_tool("management_review_get", {}, ctx)
-        fourth = await call_tool("delegate_to_agent", {"agent_id": "linda", "objective": "One more planning pass please."}, ctx)
-        fifth = await call_tool("delegate_to_agent", {"agent_id": "linda", "objective": "Yet another planning pass please."}, ctx)
+        fifth = await call_tool("delegate_to_agent", {"agent_id": "linda", "objective": "One more planning pass please."}, ctx)
+        sixth = await call_tool("delegate_to_agent", {"agent_id": "linda", "objective": "Yet another planning pass please."}, ctx)
         bad = await call_tool("delegate_to_agent", {"agent_id": "intern", "objective": "Fetch coffee for the team."}, ctx)
-        return review, fourth, fifth, bad
-    review, fourth, fifth, bad = asyncio.run(scenario())
+        return review, fifth, sixth, bad
+    review, fifth, sixth, bad = asyncio.run(scenario())
     body = review["review"]
     assert body["research"]["summary"] == RESEARCH["summary"]
     assert body["security"]["recommendation"] == "approve_with_controls"
     assert body["operations"]["deadline_assessment"] == "at_risk"
-    assert fourth["success"] is True
-    assert fifth["success"] is False and "limit 4" in fifth["error"]
+    assert body["finance"]["estimated_monthly_cost_usd"] == 20.0
+    assert fifth["success"] is True
+    assert sixth["success"] is False and "limit 5" in sixth["error"]
     assert bad["success"] is False
 
 

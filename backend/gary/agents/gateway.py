@@ -3,16 +3,20 @@
     CrewAI agent -> tool wrapper -> ToolGateway.call -> permission check
                  -> limits -> validated arguments -> existing service -> result
 
-Every tool is read-only and returns filtered data: no credentials, no email
-content, no notes outside Gary's planning notes, no raw SQL, no shell. A tool
+Every tool returns filtered data: no credentials, no card number, no email
+content, no notes outside Gary's planning notes, no raw SQL, no shell. Tools
+are read-only except write_note (the agent's own notebook) and
+request_card_purchase (creates an approval request; it cannot charge). A tool
 is only callable by agents whose roster entry lists it, and the gateway checks
 that on every call, independent of which tools CrewAI was given.
 """
 
+import asyncio
 import datetime as dt
 import json
 import logging
 import re
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Literal, Protocol
 
@@ -22,11 +26,22 @@ from gary.agents.models import GaryCorpAgentDefinition
 from gary.agents.roster import AgentLimits, AgentRegistry
 from gary.container import Gary
 from gary.db.repositories import Repositories
+from gary.finance.cards import public_card
+from gary.finance.purchases import (
+    SpendingLimits,
+    dollars_to_cents,
+    format_cents,
+    purchase_brief,
+    spending_status,
+)
+from gary.models.action import ProposeActionRequest
 from gary.models.common import EntityId, RequestModel, validate_request
 from gary.policy import (
     ACTION_POLICIES,
     APPROVAL_EXPIRY_HOURS,
+    CFO_ACTOR,
     CRITICAL_TASK_PRIORITY,
+    WEB_ONLY_APPROVAL_ACTIONS,
 )
 from gary.services.calendar_blocks import find_free_blocks
 from gary.services.readiness import task_readiness
@@ -73,6 +88,8 @@ class AgentServices:
     system_summary: Callable[[], dict] | None = None
     # Names of Gary's own tools, for permission reviews.
     manager_tools: tuple[str, ...] = ()
+    # Catherine's card spending caps; None when finance is not configured.
+    spending_limits: SpendingLimits | None = None
 
 
 @dataclass
@@ -84,6 +101,8 @@ class RunState:
     calls_by_tool: dict[str, int] = field(default_factory=dict)
     # Token usage of model calls made by tools (e.g. web search).
     tool_usage: dict[str, int] = field(default_factory=dict)
+    # Card purchase requests this run created (Catherine only).
+    purchase_request_ids: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -194,6 +213,24 @@ NOTE_BODY_LIMIT = 20_000
 class WriteNoteArgs(RequestModel):
     title: str = Field(min_length=1, max_length=NOTE_TITLE_LIMIT)
     body: str = Field(min_length=1, max_length=NOTE_BODY_LIMIT)
+
+
+class PurchasesArgs(RequestModel):
+    days: int = Field(default=31, strict=True, ge=1, le=366)
+    limit: int = Field(default=20, strict=True, ge=1, le=50)
+
+
+class UsageArgs(RequestModel):
+    days: int = Field(default=30, strict=True, ge=1, le=90)
+
+
+class PurchaseRequestArgs(RequestModel):
+    merchant: str = Field(min_length=1, max_length=120)
+    description: str = Field(min_length=3, max_length=500)
+    amount_usd: str = Field(min_length=1, max_length=16)
+    reason: str = Field(min_length=10, max_length=1000)
+    merchant_url: str | None = Field(default=None, max_length=500)
+    project_id: EntityId | None = None
 
 
 # ------------------------------------------------------------------ handlers
@@ -310,7 +347,9 @@ def _read_agent_permissions(call: ToolCall):
         "notes": [
             "Permissions are defined in code (gary/agents/roster.py) and enforced by "
             "the tool gateway on every call; no agent can change them.",
-            "All specialist tools are read-only.",
+            "Specialist tools are read-only except write_note (the agent's own notebook) "
+            "and request_card_purchase (Catherine only: creates a purchase request that "
+            "Alex must approve on the web page; it cannot charge the card).",
         ],
     }
 
@@ -320,6 +359,7 @@ def _read_action_policy(call: ToolCall):
         "action_policies": ACTION_POLICIES,
         "critical_task_priority_requires_approval_to_move": CRITICAL_TASK_PRIORITY,
         "approval_expiry_hours": APPROVAL_EXPIRY_HOURS,
+        "web_only_approval_actions": sorted(WEB_ONLY_APPROVAL_ACTIONS),
         "supported_action_types": call.services.gary.actions.supported_action_types(),
         "rules": [
             "green actions run automatically, yellow wait for Alex's approval, red are refused",
@@ -450,6 +490,97 @@ async def write_note(call: ToolCall):
     }
 
 
+def _since(call: ToolCall, days: int) -> str:
+    return format_utc(call.services.gary.planning.clock() - dt.timedelta(days=days))
+
+
+def _read_finance_status(call: ToolCall):
+    gary = call.services.gary
+    limits = call.services.spending_limits
+    with gary.db.read() as conn:
+        repos = Repositories.bind(conn)
+        card = public_card(repos.finance.current_card(CFO_ACTOR))
+        pending = [p for p in repos.finance.list_purchases(limit=50) if p["status"] == "awaiting_approval"]
+        spending = (
+            spending_status(repos, limits, gary.timezone, gary.planning.clock())
+            if limits else "Spending limits are not configured, so no purchase can be requested."
+        )
+    return {
+        "card": card,
+        "card_note": (
+            "Only brand, last four digits, expiry, and status are visible. You cannot see "
+            "the card number or charge the card."
+            if card else "Alex has not given Catherine a card yet."
+        ),
+        "spending": spending,
+        "purchases_waiting_for_approval": len(pending),
+    }
+
+
+def _read_purchases(call: ToolCall):
+    gary = call.services.gary
+    with gary.db.read() as conn:
+        rows = Repositories.bind(conn).finance.list_purchases(_since(call, call.args.days), call.args.limit)
+    return {"purchases": [purchase_brief(row, gary.timezone) for row in rows]}
+
+
+def _read_ai_usage(call: ToolCall):
+    with call.services.gary.db.read() as conn:
+        rows = Repositories.bind(conn).finance.agent_usage_since(_since(call, call.args.days))
+    return {
+        "days": call.args.days,
+        "specialist_runs": rows,
+        "note": (
+            "Token usage of GaryCorp specialist runs, including their web searches. "
+            "reported_cost_usd is only present when the provider reported a cost; "
+            "otherwise estimate from tokens and the model's published prices. Gary's "
+            "voice conversations and planning runs are not included."
+        ),
+    }
+
+
+async def request_card_purchase(call: ToolCall):
+    if call.agent.agent_id != CFO_ACTOR:
+        raise ToolDenied("Only Catherine can request card purchases")
+    if call.services.spending_limits is None:
+        raise ValueError("Spending limits are not configured, so no purchase can be requested")
+
+    def in_review() -> bool:
+        with call.services.gary.db.read() as conn:
+            assignment = Repositories.bind(conn).assignments.get(call.state.assignment_id)
+        return bool(assignment and assignment["review_id"])
+
+    if await asyncio.to_thread(in_review):
+        raise ToolDenied("Purchases cannot be requested during a management review; recommend it instead")
+    args = call.args
+    payload = {
+        "purchase_id": str(uuid.uuid4()),
+        "merchant": args.merchant,
+        "description": args.description,
+        "amount_cents": dollars_to_cents(args.amount_usd),
+        "currency": "USD",
+        "requested_by": CFO_ACTOR,
+        "assignment_id": call.state.assignment_id,
+    }
+    if args.merchant_url:
+        payload["merchant_url"] = args.merchant_url
+    result = await call.services.gary.actions.propose(
+        ProposeActionRequest(action_type="card_purchase", payload=payload, reason=args.reason,
+                             project_id=args.project_id),
+        actor=call.agent.agent_id,
+    )
+    if result.get("status") != "awaiting_approval":
+        raise ValueError(result.get("message") or result.get("error") or "The purchase request was not accepted")
+    call.state.purchase_request_ids.append(payload["purchase_id"])
+    return {
+        "purchase_id": payload["purchase_id"],
+        "amount": format_cents(payload["amount_cents"]),
+        "status": "waiting for Alex's approval",
+        "summary": result["summary"],
+        "note": "Nothing has been charged. Alex approves or rejects this on the approvals web page.",
+    }
+
+
 def datetime_stamp(call: ToolCall) -> str:
     return dt.datetime.now(call.services.gary.timezone).strftime("%Y-%m-%d %H:%M %Z")
 
@@ -534,6 +665,34 @@ TOOL_CATALOG: dict[str, ToolSpec] = {
             WriteNoteArgs,
             write_note,
         ),
+        ToolSpec(
+            "read_finance_status",
+            "Read Catherine's card (brand, last four digits, expiry, status; never the number), "
+            "the spending limits, what is committed this month, and how many purchases await approval.",
+            NoArgs,
+            _sync(_read_finance_status),
+        ),
+        ToolSpec(
+            "read_purchases",
+            "Read recent card purchase requests with amount, merchant, and status.",
+            PurchasesArgs,
+            _sync(_read_purchases),
+        ),
+        ToolSpec(
+            "read_ai_usage",
+            "Read token usage and any reported cost of GaryCorp specialist runs, by agent and model.",
+            UsageArgs,
+            _sync(_read_ai_usage),
+        ),
+        ToolSpec(
+            "request_card_purchase",
+            "Ask Alex to approve one purchase on GaryCorp's debit card: merchant, what it is, the "
+            "exact amount in US dollars (e.g. \"49.99\"), and why. It does not charge anything: "
+            "Alex approves or rejects it on the approvals web page. Refused if it breaks the "
+            "per-purchase or monthly limit, or the card is missing or frozen.",
+            PurchaseRequestArgs,
+            request_card_purchase,
+        ),
     )
 }
 
@@ -554,6 +713,8 @@ FORBIDDEN_TOOLS = frozenset(
         "delete_data",
         "delete_audit_log",
         "delegate_to_agent",
+        "charge_card",
+        "read_card_number",
     }
 )
 
@@ -633,6 +794,8 @@ class ToolGateway:
             per_tool_limit = self.limits.max_web_searches_per_run
         elif tool_name == "write_note":
             per_tool_limit = self.limits.max_notes_per_run
+        elif tool_name == "request_card_purchase":
+            per_tool_limit = self.limits.max_purchase_requests_per_run
         if per_tool_limit is not None and self.state.calls_by_tool.get(tool_name, 0) >= per_tool_limit:
             raise ToolDenied(f"{tool_name} may be used at most {per_tool_limit} times per assignment")
 

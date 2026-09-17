@@ -179,9 +179,13 @@ More examples are in `docs/USAGE.md` and `docs/TEAM.md`.
 - **Approvals**: anything that needs your OK waits at
   `http://localhost:8000/approvals`, or answer Gary by voice.
 - **Backups** of `data/gary.db` go to `data/backups` daily.
-- **The team**: Susan, Dave, and Linda only work when Gary (or you, through the
-  CLI) gives them an assignment. Gary announces when their reports are ready;
-  see them at `http://localhost:8000/team` and in their Joplin notebooks.
+- **The team**: Susan, Dave, Linda, and Catherine only work when Gary (or you,
+  through the CLI) gives them an assignment. Gary announces when their reports
+  are ready; see them at `http://localhost:8000/team` and in their Joplin
+  notebooks.
+- **Catherine's card**: give her a debit card at `http://localhost:8000/finance`.
+  Every purchase she requests waits for you on the approvals page, and nothing
+  is charged yet.
 
 ## 12. Stop
 

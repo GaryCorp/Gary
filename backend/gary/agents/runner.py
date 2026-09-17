@@ -47,6 +47,14 @@ REPORT_GUIDANCE = {
         "deadline_assessment (comfortable, achievable, at_risk, unrealistic, "
         "unknown); decisions_needed; recommendation; confidence from 0 to 1."
     ),
+    "finance": (
+        "Return a FinanceReport: summary; costs (item, amount_usd or null if unknown, "
+        "frequency: one_time, monthly, yearly, usage_based, unknown); "
+        "estimated_one_time_cost_usd; estimated_monthly_cost_usd (null when unknown); "
+        "budget_assessment (within_budget, tight, over_budget, unknown); "
+        "savings_opportunities; risks; decisions_needed; recommendation; confidence "
+        "from 0 to 1. Mention any purchase you requested in the summary."
+    ),
 }
 
 
@@ -64,6 +72,8 @@ def _summary_line(kind: str, report: dict) -> str:
         summary = f"[{report['risk_level']} risk, {report['recommendation']}] {summary}"
     elif kind == "operations":
         summary = f"[deadline {report['deadline_assessment']}] {summary}"
+    elif kind == "finance":
+        summary = f"[{report['budget_assessment']}, {len(report['purchase_request_ids'])} purchase requests] {summary}"
     return summary[:500]
 
 
@@ -157,6 +167,10 @@ class GaryCorpAgentRunner:
                 details.update(deadline_assessment=report["deadline_assessment"],
                                proposed_tasks=len(report["proposed_tasks"]))
                 summary = f"{agent.name} produced an execution plan (deadline {report['deadline_assessment']})"
+            elif kind == "finance":
+                details.update(budget_assessment=report["budget_assessment"],
+                               purchase_request_ids=report["purchase_request_ids"])
+                summary = f"{agent.name} returned a financial assessment ({report['budget_assessment']})"
             else:
                 details.update(confidence=report["confidence"], sources=len(report["sources"]))
                 summary = f"{agent.name} completed research"
@@ -240,7 +254,7 @@ class GaryCorpAgentRunner:
             parts += ["", f"Your previous answer was rejected by validation: {feedback}. Return a corrected report."]
         return "\n".join(parts)
 
-    def _validate(self, agent: GaryCorpAgentDefinition, assignment_id: str, output) -> dict:
+    def _validate(self, agent: GaryCorpAgentDefinition, state: RunState, output) -> dict:
         if hasattr(output, "model_dump"):
             data = output.model_dump()
         elif isinstance(output, str):
@@ -251,8 +265,10 @@ class GaryCorpAgentRunner:
             raise ValueError(f"unexpected output type {type(output).__name__}")
         if not isinstance(data, dict):
             raise ValueError("output is not an object")
-        # The application sets the assignment id; the model's value is ignored.
-        data["assignment_id"] = assignment_id
+        # The application sets these; the model's values are ignored.
+        data["assignment_id"] = state.assignment_id
+        if agent.report_kind == "finance":
+            data["purchase_request_ids"] = list(state.purchase_request_ids)
         return REPORT_MODELS[agent.report_kind].model_validate(data).model_dump(mode="json")
 
     async def run_assignment(self, assignment_id: str, shared_reports: list[dict] | None = None) -> dict:
@@ -291,7 +307,7 @@ class GaryCorpAgentRunner:
                     if isinstance(value, (int, float)):
                         usage[key] = usage.get(key, 0) + value
                 try:
-                    report = self._validate(agent, assignment_id, result.output)
+                    report = self._validate(agent, state, result.output)
                     break
                 except (ValidationError, ValueError, json.JSONDecodeError) as exc:
                     feedback = validation_message(exc) if isinstance(exc, ValidationError) else str(exc)

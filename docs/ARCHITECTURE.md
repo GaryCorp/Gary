@@ -36,7 +36,8 @@ Responsibilities:
 - Calendar, Gmail, and Joplin API execution.
 - Chief of Staff operations database (SQLite), approvals page, and backups.
 - Scheduled planning cycle (morning, midday, evening).
-- The specialist team (Susan, Dave, Linda) through CrewAI, and its `/team` page.
+- The specialist team (Susan, Dave, Linda, Catherine) through CrewAI, and its `/team` page.
+- Catherine's encrypted debit card vault and the `/finance` page.
 - Hourly new email check, and follow-up and overdue alerts.
 - Input validation.
 
@@ -347,11 +348,12 @@ Action handlers:
 | `schedule_task` | green | creates a Google Calendar event, then stores its ID and times on the task; audited as `calendar_changed` |
 | `move_calendar_event` | green, yellow for priority ≥ 8 or an open commitment | moves the task's event, then updates the task; audited as `calendar_changed` |
 | `send_external_email` | yellow | sends one plain-text email; audited as `email_sent` |
+| `card_purchase` | yellow, approvable only on the web page | Catherine's purchase request within the spending limits (rechecked at approval); recorded as approved, card not charged (no payment channel yet); audited as `card_purchase_approved` |
 | `spend_money`, `change_security_settings`, `access_password_manager`, `change_own_permissions`, `modify_permissions`, `delete_audit_log` | red | refused |
 
 ### 7. GaryCorp specialist team
 
-`backend/gary/agents/` adds three CrewAI specialists that Gary manages (see
+`backend/gary/agents/` adds four CrewAI specialists that Gary manages (see
 [Team](TEAM.md)):
 
 ```text
@@ -360,15 +362,22 @@ Gary tool (delegate_to_agent, run_management_review, ...)
   -> GaryCorpAgentRunner
        context package  (per department, least privilege)
        ToolGateway      (granted tools: read-only, plus notes in the agent's own
-                         Joplin notebook; every call checked and audited)
+                         Joplin notebook and Catherine's purchase requests;
+                         every call checked and audited)
        CrewAIExecutor   (separate single-agent crew per assignment)
-  -> validated ResearchReport / SecurityReport / OperationsReport
+  -> validated ResearchReport / SecurityReport / OperationsReport / FinanceReport
   -> agent_assignments, agent_runs, audit_log; voice announcement
 ```
 
 Gary's team tools: `team_list`, `delegate_to_agent`, `run_management_review`,
 `management_review_follow_up`, `agent_assignment_get`,
 `agent_assignments_list`, `management_review_get`.
+
+`backend/gary/finance/` holds Catherine's card: `cards.py` validates a card,
+encrypts it into `data/card_vault.enc`, and keeps brand, last four, expiry, and
+status in `payment_cards`; `purchases.py` defines the `card_purchase` action
+handler and the spending limits. Purchase requests reuse the actions,
+approvals, and audit tables.
 
 ### 8. Joplin proxy container
 

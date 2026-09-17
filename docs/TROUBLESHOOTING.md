@@ -268,6 +268,22 @@ docker compose exec backend python -m app.team_cli show <assignment_id>
 - Rate limit errors from OpenAI: specialists share your account's limits with
   Gary's voice and planning; reduce `MAX_CONCURRENT_AGENT_RUNS` to 1.
 
+## Catherine's card or purchases
+
+- `/finance` says to set `CARD_ENCRYPTION_KEY`: run `bash setup.sh` (it only
+  fills in missing values), then `docker compose up -d backend`.
+- `no debit card yet`, `is frozen`, or `has expired`: add, unfreeze, or replace
+  the card at `http://localhost:8000/finance`.
+- `over the per-purchase limit` or `would exceed the monthly limit`: the
+  request broke `CFO_PER_PURCHASE_LIMIT_USD` or `CFO_MONTHLY_LIMIT_USD`.
+  Pending requests count; reject ones you do not want on the approvals page.
+- Gary says a purchase can only be approved on the approvals page: by design,
+  card purchases cannot be approved by voice.
+- An approved purchase shows "not charged": no payment channel is connected
+  yet, so pay for it yourself.
+- `The card vault cannot be decrypted`: `CARD_ENCRYPTION_KEY` changed. Remove
+  the card on `/finance` and add it again.
+
 ## Google login loops
 
 Confirm the Google OAuth redirect URI exactly matches:
