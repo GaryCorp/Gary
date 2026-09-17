@@ -39,6 +39,18 @@ EXPECTED_TOOLS = {
     "agent_assignment_get",
     "agent_assignments_list",
     "management_review_get",
+    "engineering_create_ticket",
+    "engineering_get_ticket",
+    "engineering_list_tickets",
+    "engineering_mark_ready",
+    "engineering_mark_in_progress",
+    "engineering_mark_review",
+    "engineering_mark_security_review",
+    "engineering_mark_done",
+    "engineering_mark_blocked",
+    "engineering_add_comment",
+    "engineering_sync",
+    "engineering_status",
 }
 
 

@@ -413,6 +413,30 @@ Gary, have Susan check her notes on screen recording tools before researching mi
 Gary, have Lauren check her notes on AI voiceovers and review the sponsor read.
 ```
 
+## Engineering work
+
+Gary can turn a company objective into an engineering ticket for you: a private
+GitHub issue with the objective, requirements, and acceptance criteria,
+assigned to you and placed on the private Engineering Project at Status Ready,
+linked to one of his own tasks.
+
+```text
+Gary, we need Susan to have read-only web research. Make that an engineering ticket.
+Gary, what engineering tickets are open?
+Gary, mark the research integration ticket in progress.
+Gary, that ticket is blocked on the API key.
+Gary, is the engineering integration healthy?
+```
+
+Open the issue and work it with Claude Code; move the card on the Project
+board, and Gary picks the change up (every 30 minutes by default, or when you
+ask him to sync). When a ticket that required security review is done and the
+issue closes, his task completes too.
+
+Gary cannot change code, repository visibility, or GitHub permissions. If the
+repository or Project is ever public, he refuses to create anything and says
+so. See [Engineering](ENGINEERING.md) for setup and troubleshooting.
+
 ## Follow-up behavior
 
 After an assistant response, a short follow-up period remains active.

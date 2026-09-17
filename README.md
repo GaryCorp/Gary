@@ -29,6 +29,10 @@ projects and tasks. It uses:
   (and reading back) notes in their own Joplin notebook. Catherine holds an encrypted debit card
   and can request purchases, each approved only by you on the approvals page.
   Lauren reviews decisions with the EASE ethical decision-making framework.
+- **Engineering tickets**: Gary turns a company objective into a private GitHub
+  issue assigned to you, on a private Project board, and tracks it back into his
+  own task system. He cannot change code, repository visibility, or GitHub
+  permissions (see [`docs/ENGINEERING.md`](docs/ENGINEERING.md)).
 - **Docker Compose** with separate `voice`, `backend`, and `joplin-proxy`
   services, plus `ease-api`, `ease-worker`, and `ease-redis` for EASE.
 
@@ -102,6 +106,7 @@ planning is on by default; set `PLANNING_TIMES=` in `.env` to turn it off.
 - [`docs/USAGE.md`](docs/USAGE.md) — what to say to Gary
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — components, tools, and data flow
 - [`docs/TEAM.md`](docs/TEAM.md) — Susan, Dave, Linda, Catherine, and Lauren: roles, permissions, reviews, the debit card, EASE
+- [`docs/ENGINEERING.md`](docs/ENGINEERING.md) — private GitHub tickets: setup, permissions, lifecycle, sync
 - [`docs/SECURITY.md`](docs/SECURITY.md) — security decisions and limitations
 - [`docs/PRIVACY.md`](docs/PRIVACY.md) — where audio, email, and notes travel
 - [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — common failures and fixes

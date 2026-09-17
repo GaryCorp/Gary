@@ -35,6 +35,14 @@ from gary.agents.roster import AgentLimits, AgentRegistry
 from gary.agents.runner import GaryCorpAgentRunner
 from gary.agents.service import AgentService
 from gary.agents.ease import EaseFramework
+from gary.integrations.github import (
+    EnvTokenProvider,
+    GitHubClient,
+    GitHubConfig,
+    GitHubError,
+)
+from gary.integrations.github import configured as github_configured
+from gary.services.engineering_service import EngineeringTicketService
 from gary.agents.web import OpenAIWebResearch
 from gary.backup import backup_daily
 from gary.finance import cards as finance_cards
@@ -113,6 +121,12 @@ REALTIME_RATE_LIMIT_MAX_WAIT = 30
 # GaryCorp specialist team (Susan, Dave, Linda).
 GARY_EMPLOYEE_MODEL = os.getenv("GARY_EMPLOYEE_MODEL", "").strip() or PLANNING_MODEL
 AGENT_WEB_SEARCH_MODEL = os.getenv("AGENT_WEB_SEARCH_MODEL", "gpt-5.4-mini").strip()
+# Engineering tickets in the PRIVATE GaryCorp repository and Project. The
+# token is read here and never stored, logged, or put in a prompt or issue.
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "").strip()
+# How often unfinished tickets are synchronized from GitHub. 0 turns it off.
+GITHUB_SYNC_INTERVAL_MINUTES = float(os.getenv("GITHUB_SYNC_INTERVAL_MINUTES", "30"))
+
 # Lauren's EASE ethical decision-making service (the ease-api container).
 # Empty URL = Lauren applies the framework without the service.
 EASE_API_URL = os.getenv("EASE_API_URL", "").strip()
@@ -203,15 +217,22 @@ async def lifespan(app: FastAPI):
     scheduler = (
         asyncio.create_task(run_planning_scheduler()) if PLANNING_SCHEDULE else None
     )
+    # GitHub is checked in the background: an outage must not stop Gary starting.
+    engineering_sync = (
+        asyncio.create_task(run_engineering_sync())
+        if engineering_service and GITHUB_SYNC_INTERVAL_MINUTES > 0
+        else None
+    )
     try:
         yield
     finally:
-        if scheduler is not None:
-            scheduler.cancel()
-            try:
-                await scheduler
-            except (asyncio.CancelledError, Exception):
-                pass
+        for task in (scheduler, engineering_sync):
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
 
 app = FastAPI(title="Local AI Calendar Assistant", lifespan=lifespan)
@@ -1859,6 +1880,24 @@ def operations_announcement(alerts: dict) -> str | None:
     return " ".join(parts) + f" Say {WAKE_WORD_DISPLAY} to plan."
 
 
+async def run_engineering_sync() -> None:
+    """Pull GitHub state into SQLite on a timer. Webhooks can replace this
+    later; nothing else depends on the polling."""
+    # A short delay so startup is not spent waiting on GitHub.
+    await asyncio.sleep(30)
+    while True:
+        try:
+            result = await engineering_service.sync_all()
+            if result["checked"]:
+                logger.info(
+                    "Engineering sync: %s checked, %s synced, %s need reconciliation",
+                    result["checked"], result["synced"], len(result["needs_reconciliation"]),
+                )
+        except Exception:
+            logger.exception("Engineering ticket synchronization failed")
+        await asyncio.sleep(GITHUB_SYNC_INTERVAL_MINUTES * 60)
+
+
 async def announce_operations(websocket: WebSocket) -> None:
     while True:
         await asyncio.sleep(OPS_CHECK_INTERVAL_MINUTES * 60)
@@ -2179,7 +2218,8 @@ def system_configuration_summary() -> dict:
             "ease-worker and ease-redis": "EASE background job runner and its queue; not used by Gary",
         },
         "web_pages": ["/", "/login", "/events", "/approvals (CSRF-protected approve/reject)", "/team",
-                      "/finance (CSRF-protected: add, freeze, or remove Catherine's card)", "/health"],
+                      "/finance (CSRF-protected: add, freeze, or remove Catherine's card)",
+                      "/engineering/status (read-only privacy and health report)", "/health"],
         "web_authentication": "none; relies on loopback-only binding",
         "google_scopes": SCOPES,
         "joplin_access": (
@@ -2206,6 +2246,17 @@ def system_configuration_summary() -> dict:
             "per_purchase_limit": format_cents(SPENDING_LIMITS.per_purchase_cents),
             "monthly_limit": format_cents(SPENDING_LIMITS.monthly_cents),
         },
+        "engineering_github": {
+            "configured": engineering_service is not None,
+            "repository": f"{os.getenv('GITHUB_OWNER', '')}/{os.getenv('GITHUB_REPOSITORY', '')}".strip("/"),
+            "project_number": os.getenv("GITHUB_PROJECT_NUMBER", ""),
+            "engineer": os.getenv("GITHUB_ENGINEER_USERNAME", ""),
+            "requirement": "repository and Project must both be private; every write is refused otherwise",
+            "credential": "environment only (GITHUB_TOKEN), never stored in SQLite, Joplin, issues, or prompts",
+            "permissions": "repository Metadata read, Issues write, organization Projects write; "
+                            "no Contents, Actions, Administration, Workflows, or Secrets access",
+            "sync_interval_minutes": GITHUB_SYNC_INTERVAL_MINUTES,
+        },
         "crewai": "telemetry and tracing disabled; memory, planning, and code execution off",
         "ease": {
             "configured": bool(EASE_API_URL),
@@ -2231,6 +2282,27 @@ agent_services = AgentServices(
     spending_limits=SPENDING_LIMITS,
     ease=EaseFramework(EASE_API_URL, EASE_API_KEY) if EASE_API_URL else None,
 )
+
+
+def build_engineering_service() -> EngineeringTicketService | None:
+    """The engineering integration, or None when it is not configured.
+
+    Gary starts either way: without it the engineering tools report that the
+    integration is unavailable, and no ticket is ever claimed to exist.
+    """
+    if not github_configured():
+        logger.info("GitHub engineering integration is not configured; tickets are unavailable")
+        return None
+    try:
+        config = GitHubConfig.from_env()
+        client = GitHubClient(config, EnvTokenProvider(GITHUB_TOKEN))
+        return EngineeringTicketService(gary_ops, client, clock=gary_ops.planning.clock)
+    except GitHubError as exc:
+        logger.warning("GitHub engineering integration is misconfigured: %s", exc)
+        return None
+
+
+engineering_service = build_engineering_service()
 
 
 def build_agent_executor():
@@ -2281,6 +2353,8 @@ GARY_INTEGRATIONS = {
     "notebook": planning_notebook,
     "planning_cycle": planning_cycle,
     "agents": agent_service,
+    # Absent when GitHub is not configured: the tools then say so.
+    **({"engineering": engineering_service} if engineering_service else {}),
 }
 
 
@@ -2786,6 +2860,23 @@ DELETE_JOPLIN_NOTE_TOOL = {
 @app.get("/health")
 async def health():
     return {"ok": True}
+
+
+@app.get("/engineering/status")
+async def github_engineering_status():
+    """Health of the engineering integration, including the privacy audit.
+
+    Read-only: nothing here changes repository or Project visibility.
+    """
+    if engineering_service is None:
+        return {
+            "state": "unavailable",
+            "detail": "GitHub engineering integration is not configured on this deployment.",
+        }
+    try:
+        return await engineering_service.status()
+    except GitHubError as exc:
+        return {"state": getattr(exc, "status", "unavailable"), "detail": str(exc)}
 
 
 @app.get("/")
@@ -3674,6 +3765,39 @@ Map requests to tools:
   purchase is not charged; never say anything was bought or paid for.
 - Show me the management review: management_review_get.
 - Who is on the team, what are they working on: team_list.
+
+Engineering tickets:
+You can assign software and AI engineering work to {PRINCIPAL_NAME} through the
+Engineering Ticket system, which creates an issue in GaryCorp's private GitHub
+repository and private Engineering Project. When a company objective needs
+software changes: work out the objective, create or identify the internal task,
+define clear requirements and measurable acceptance criteria, name the
+dependencies, decide whether security review is required, then call
+engineering_create_ticket with that task. Schedule engineering time on the
+calendar when it helps, monitor the ticket, and adjust project plans when
+engineering work slips.
+
+Say what the company needs and any real constraints; do not dictate
+implementation details. {PRINCIPAL_NAME} decides how to build it. Do not create
+tickets for trivial work, and create at most one ticket per task.
+
+Map requests to tools: engineering_get_ticket and engineering_list_tickets to
+check status; engineering_mark_ready, engineering_mark_in_progress,
+engineering_mark_review, engineering_mark_security_review,
+engineering_mark_done and engineering_mark_blocked to move a ticket;
+engineering_add_comment for a meaningful update such as a priority change or a
+moved deadline, not for every thought; engineering_sync to read GitHub's current
+state; engineering_status to check the integration and whether the repository
+and Project are private.
+
+A ticket that requires security review cannot go straight from review to done:
+it passes security review first, and Dave's review is not connected yet, so
+never say he approved something. Only report a ticket as created or assigned
+when the tool says so; if the tool reports a warning or a failure, say that
+plainly instead. You cannot modify source code, change repository or Project
+visibility, expand GitHub permissions, or administer the repository or
+organization. GaryCorp's repository and Engineering Project are proprietary and
+private.
 Each specialist can write notes in their own Joplin notebook (Susan, Dave,
 Linda, Catherine, Lauren); when {PRINCIPAL_NAME} wants their work written up, include that in the
 objective. Assignments run in the background: say who is working on what, and

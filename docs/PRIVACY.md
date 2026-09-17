@@ -119,6 +119,17 @@ of their work, so do not keep anything in those notebooks you would not send to
 OpenAI. No other notebook is read.
 CrewAI telemetry and hosted tracing are disabled.
 
+## Engineering tickets
+
+Ticket titles, objectives, requirements, acceptance criteria, dependencies,
+estimates, deadlines, and the Gary task id are sent to GitHub as issue content,
+in the **private** repository and **private** Project named by `GITHUB_OWNER`,
+`GITHUB_REPOSITORY`, and `GITHUB_PROJECT_NUMBER`. Nothing is sent if either is
+public. Credentials, card details, email content, and anything shaped like a
+token or password are scrubbed before an issue is written. GitHub identifiers
+(issue number, node id, Project item id) come back into `data/gary.db`; the
+GitHub token stays in the environment.
+
 ## Debit card
 
 The card number, expiry, and name you enter at `/finance` stay on this machine,

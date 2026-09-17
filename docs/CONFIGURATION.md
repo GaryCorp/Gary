@@ -406,6 +406,25 @@ US dollars, such as `49.99`. The per-purchase limit cannot exceed the monthly
 limit; an invalid value stops the backend at startup. Every purchase also needs
 your approval on the approvals page (see [Team](TEAM.md#catherines-debit-card)).
 
+### Engineering tickets (GitHub)
+
+Gary's private engineering-ticket integration. Full detail in
+[Engineering](ENGINEERING.md). Leave `GITHUB_TOKEN` empty to run without it:
+Gary starts normally and the engineering tools report `unavailable`.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `GITHUB_TOKEN` | empty | Fine-grained token: repository **Metadata read** and **Issues write**, organization **Projects write**. No Contents, Actions, Administration, Workflows, or Secrets. |
+| `GITHUB_OWNER` | empty | Organization or user owning the **private** repository and Project |
+| `GITHUB_REPOSITORY` | empty | The **private** repository issues are created in |
+| `GITHUB_PROJECT_NUMBER` | empty | The **private** Engineering Project number, from its URL |
+| `GITHUB_ENGINEER_USERNAME` | empty | GitHub username issues are assigned to |
+| `GITHUB_SYNC_INTERVAL_MINUTES` | 30 | How often GitHub state is pulled into SQLite; `0` disables |
+
+The repository and Project must both be private: every write is refused
+otherwise, and nothing in Gary can change visibility. Verify the setup with
+`docker compose exec backend python -m gary.integrations.github.setup`.
+
 ### EASE
 
 Lauren's ethics framework runs as the `ease-api` container, with

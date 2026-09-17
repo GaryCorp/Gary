@@ -55,6 +55,15 @@ services:
       MAX_ACTIVE_AGENT_ASSIGNMENTS: "${MAX_ACTIVE_AGENT_ASSIGNMENTS:-6}"
       CFO_PER_PURCHASE_LIMIT_USD: "${CFO_PER_PURCHASE_LIMIT_USD:-50}"
       CFO_MONTHLY_LIMIT_USD: "${CFO_MONTHLY_LIMIT_USD:-200}"
+      # Engineering tickets in the PRIVATE GaryCorp repository and Project.
+      # Empty GITHUB_TOKEN = the engineering tools report "unavailable".
+      GITHUB_TOKEN: "${GITHUB_TOKEN:-}"
+      GITHUB_OWNER: "${GITHUB_OWNER:-}"
+      GITHUB_REPOSITORY: "${GITHUB_REPOSITORY:-}"
+      GITHUB_PROJECT_NUMBER: "${GITHUB_PROJECT_NUMBER:-}"
+      GITHUB_ENGINEER_USERNAME: "${GITHUB_ENGINEER_USERNAME:-}"
+      GITHUB_SYNC_INTERVAL_MINUTES: "${GITHUB_SYNC_INTERVAL_MINUTES:-30}"
+
       # Lauren's EASE ethics framework (the ease-api service below).
       EASE_API_URL: "${EASE_API_URL-http://ease-api:8000}"
       EASE_API_KEY: "${EASE_API_KEY:-}"

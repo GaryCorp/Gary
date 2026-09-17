@@ -282,6 +282,35 @@ Docker network, with no API key by default, so any process on this machine can
 use it and spend its model key; set `EASE_API_KEY` to require a key. It holds
 its own copy of the model key and runs with all capabilities dropped.
 
+## Engineering tickets (GitHub)
+
+Gary's GitHub credential is deliberately weak (details in
+[Engineering](ENGINEERING.md#minimum-github-permissions)):
+
+- the token is fine-grained: repository Metadata read, Issues write, and
+  organization Projects write, and nothing else. It cannot write repository
+  contents, so Gary cannot push commits, create branches, merge pull requests,
+  edit workflows, or change any code. Alex and Claude Code use a separate
+  development credential;
+- the integration contains no code for repository or organization
+  administration: no visibility changes, deletion, renaming, transfers,
+  collaborators, branch protection, Actions secrets, releases, packages, or
+  Pages;
+- **private-only, failing closed**: before every write the repository and the
+  Project are checked to be private and owned by `GITHUB_OWNER`, and a public
+  one raises `GitHubPrivacyError` before an issue, comment, or Project item is
+  created. An unreachable GitHub counts as unsafe. Only Alex can change
+  visibility, by hand;
+- Gary's tools are a fixed narrow set (create, read, move, comment, sync,
+  status). There is no raw REST or GraphQL passthrough;
+- the token is read from the environment only. It is never stored in SQLite,
+  Joplin, an issue body, a prompt, or CrewAI context, authorization headers are
+  redacted in logs, and issue text is scrubbed of anything shaped like a
+  credential;
+- a ticket needing security review cannot reach Done from Review, and an issue
+  closed in an unexpected state is flagged for reconciliation rather than
+  completing company work.
+
 ## Joplin tools
 
 - all note tools are confined to the Gary notebook (`JOPLIN_NOTEBOOK`) and its

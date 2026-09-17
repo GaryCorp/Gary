@@ -104,6 +104,17 @@ GaryCorp specialist team (see [Team](TEAM.md)):
 - `web.py` is the read-only web research service;
 - `ease.py` is the client for the EASE service, which condenses its analysis for Lauren.
 
+### `backend/gary/integrations/github/`
+
+The private engineering-ticket integration (see [Engineering](ENGINEERING.md)):
+`config.py` (settings and credential provider), `client.py` (REST + Projects v2
+GraphQL), `privacy.py` (the private-only gate), `projects.py` (Status field and
+board operations), `issues.py` (issue body and labels), `models.py`,
+`exceptions.py`, and `setup.py` (the verification command).
+`gary/services/engineering_service.py` owns the ticket lifecycle,
+`gary/db/repositories/engineering.py` its tables, and
+`gary/tools/engineering_tools.py` Gary's twelve tools.
+
 ### `backend/gary/finance/`
 
 Catherine's debit card (see [Team](TEAM.md#catherines-debit-card)):
@@ -127,7 +138,8 @@ container.
 pytest suite using temporary databases and fakes for Google, Joplin, OpenAI, and
 the agent framework: operations, planning, Chief of Staff behavior, tools, the
 specialist team (`test_agents.py`), Catherine's card and purchases
-(`test_finance.py`), and the CrewAI adapter (`test_crew.py`,
+(`test_finance.py`), the GitHub engineering tickets (`test_engineering.py`,
+with the in-memory GitHub in `fake_github.py`), and the CrewAI adapter (`test_crew.py`,
 including an opt-in live test with `GARY_LIVE_AGENT_TEST=1`).
 
 ### `backend/app/__init__.py`

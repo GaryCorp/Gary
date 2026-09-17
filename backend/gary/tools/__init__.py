@@ -8,9 +8,12 @@ edit or delete the audit log, or change the approval policy.
 import logging
 import sqlite3
 
+from gary.integrations.github.exceptions import GitHubError
+from gary.services.engineering_service import EngineeringError
 from gary.tools import (
     agent_tools,
     approval_tools,
+    engineering_tools,
     followup_tools,
     planning_tools,
     project_tools,
@@ -29,6 +32,7 @@ REGISTRY: dict[str, Tool] = {
         planning_tools,
         approval_tools,
         agent_tools,
+        engineering_tools,
     )
     for tool in module.TOOLS
 }
@@ -45,6 +49,11 @@ async def call_tool(name: str, arguments: dict, ctx: ToolContext) -> dict:
     try:
         result = await tool.handler(arguments or {}, ctx)
     except ValueError as exc:
+        return {"success": False, "error": str(exc)}
+    except (GitHubError, EngineeringError) as exc:
+        # GitHub refused or was unreachable: report the failure, never a
+        # success Gary could read out as a created ticket.
+        logger.warning("GitHub engineering tool %s failed: %s", name, exc)
         return {"success": False, "error": str(exc)}
     except sqlite3.IntegrityError as exc:
         # Constraints are a second line of defense behind validation.

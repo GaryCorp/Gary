@@ -39,6 +39,8 @@ Responsibilities:
 - The specialist team (Susan, Dave, Linda, Catherine, Lauren) through CrewAI, and its `/team` page.
 - Lauren's EASE client, which calls the `ease-api` service.
 - Catherine's encrypted debit card vault and the `/finance` page.
+- Engineering tickets in the private GitHub repository and Project, and the
+  read-only `/engineering/status` page.
 - Hourly new email check, and follow-up and overdue alerts.
 - Input validation.
 
