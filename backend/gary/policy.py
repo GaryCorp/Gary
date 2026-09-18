@@ -14,6 +14,11 @@ ACTION_POLICIES = {
     "update_internal_task": GREEN,
     "create_followup": GREEN,
     "schedule_task": GREEN,
+    # Commissioning a specialist's report costs model tokens but changes
+    # nothing by itself, so it runs without approval, under the caps in
+    # roster.py and, for scheduled cycles, planning_cycle.py.
+    "delegate_to_agent": GREEN,
+    "run_management_review": GREEN,
     # Moving a non-critical task block is green; a critical one (see
     # CRITICAL_TASK_PRIORITY) is escalated to yellow by its handler.
     "move_calendar_event": GREEN,

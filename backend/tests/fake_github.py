@@ -25,7 +25,12 @@ class FakeGitHub:
         ),
         owner: str = "garycorp",
         repository: str = "gary",
+        owner_type: str = "organization",
     ):
+        # GitHub answers a query for the wrong owner kind with a NOT_FOUND
+        # error ("Could not resolve to a User with the login of ..."), even
+        # when the same request asked about the right kind too.
+        self.owner_type = owner_type
         self.private = private
         self.project_public = project_public
         self.assignable = set(assignable)
@@ -106,6 +111,9 @@ class FakeGitHub:
     def _rest(self, method: str, url: str, payload: dict | None) -> Response:
         path = url.split("api.github.com", 1)[-1]
         repo_prefix = f"/repos/{self.owner}/{self.repository}"
+
+        if path == "/user" and method == "GET":
+            return self._ok({"login": "garycorp-bot"})
 
         if path == repo_prefix and method == "GET":
             self._count("get_repository")
@@ -231,14 +239,17 @@ class FakeGitHub:
         query = payload["query"]
         variables = payload.get("variables", {})
 
-        if "projectV2(number:" in query.replace(" ", "") or "projectV2(number: $number)" in query:
+        if "projectV2(number:" in query.replace(" ", ""):
             self._count("get_project")
             failed = self._maybe_fail("get_project")
             if failed:
                 return failed
+            asked = "organization" if "organization(login:" in query else "user"
+            if asked != self.owner_type:
+                return self._not_found(asked)
             if variables.get("number") != self.project_number:
-                return self._data({"organization": {"projectV2": None}, "user": None})
-            return self._data({"organization": {"projectV2": self.project_payload()}, "user": None})
+                return self._data({asked: {"projectV2": None}})
+            return self._data({asked: {"projectV2": self.project_payload()}})
 
         if "fields(first: 50)" in query:
             self._count("get_project_fields")
@@ -321,10 +332,24 @@ class FakeGitHub:
             self.project_number = 9
             return self._data({"createProjectV2": {"projectV2": self.project_payload()}})
 
-        if "organization(login: $owner) { id }" in query.replace("\n", " ") or "{ id }" in query:
-            return self._data({"organization": {"id": "O_owner"}, "user": None})
+        if "{ id }" in query:
+            asked = "organization" if "organization(login:" in query else "user"
+            if asked != self.owner_type:
+                return self._not_found(asked)
+            return self._data({asked: {"id": "O_owner"}})
 
         return Response(400, {}, json.dumps({"message": f"Unhandled GraphQL: {query[:80]}"}))
+
+    def _not_found(self, kind: str) -> Response:
+        label = "Organization" if kind == "organization" else "User"
+        return Response(200, {}, json.dumps({
+            "data": {kind: None},
+            "errors": [{
+                "type": "NOT_FOUND",
+                "path": [kind],
+                "message": f"Could not resolve to a {label} with the login of '{self.owner}'.",
+            }],
+        }))
 
     @staticmethod
     def _data(data: dict) -> Response:

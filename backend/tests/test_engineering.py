@@ -744,3 +744,39 @@ def test_project_field_ids_are_cached_not_rediscovered(gary):
         cached = Repositories.bind(conn).project_fields.load(github.project_id)
     assert cached["Status"]["id"] == "F_status"
     assert json.dumps(cached).count("opt-") >= 6
+
+
+def test_missing_repository_error_says_what_to_check(gary):
+    """A 404 on the repository is ambiguous at GitHub's end; the message must
+    name the likely causes instead of passing on 'Not Found'."""
+    service, github = build_service(gary, repository="does-not-exist")
+    with pytest.raises(Exception) as exc:
+        run(service.client.get_repository())
+    message = str(exc.value)
+    assert "garycorp/does-not-exist" in message
+    assert "GITHUB_OWNER" in message and "Metadata: read" in message
+
+
+def test_whoami_reports_the_authenticated_account(gary):
+    service, github = build_service(gary)
+    assert run(service.client.whoami()) == "garycorp-bot"
+
+
+@pytest.mark.parametrize("owner_type", ["organization", "user"])
+def test_project_is_found_for_either_owner_type(gary, owner_type):
+    """GraphQL reports the owner kind that does not exist as an error, so each
+    kind is asked for separately; a combined query always looks like a failure."""
+    service, github = build_service(gary, FakeGitHub(owner_type=owner_type))
+    project = run(service.client.get_project())
+    assert project.number == 7 and project.private is True
+    assert run(service.client.get_owner_id())[1] == owner_type
+
+    ticket = create(service, make_task(gary, title="Research integration"))
+    assert ticket.status is EngineeringStatus.READY
+    assert github.status_of(ticket.github_project_item_id) == "Ready"
+
+
+def test_missing_project_number_is_reported_clearly(gary):
+    service, _ = build_service(gary, FakeGitHub(), project_number=42)
+    with pytest.raises(Exception, match="No Project number 42"):
+        run(service.client.get_project())

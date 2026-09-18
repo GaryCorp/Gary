@@ -87,9 +87,19 @@ credential deliberately cannot change source code, branch protection,
 collaborators, releases, or visibility. Alex (and Claude Code) use a separate
 development credential for code. Separation of duties is the point.
 
-If Projects live on a personal account rather than an organization, the token
-needs the equivalent user Projects write permission; the client resolves either
-owner type.
+**The Project must be organization-owned.** Fine-grained tokens have a Projects
+permission only at the *organization* level: there is no account-level
+equivalent, so a fine-grained token cannot reach a Project owned by a user
+account. A user-owned Project answers GraphQL with `FORBIDDEN: Resource not
+accessible by personal access token`, whatever the token's other permissions
+are. Keep the repository and the Project in the same organization. (A classic
+token with only the `project` scope is the alternative, but it would need a
+second credential; the client supports either owner type, GitHub's permission
+model does not.)
+
+The organization must also allow the token: **Organization settings →
+Third-party Access → Personal access tokens**, then approve the token if
+approval is required.
 
 ## Private-only requirement
 
@@ -288,6 +298,8 @@ from a throwaway task.
 | `state: authentication_error` | Token missing, expired, or revoked. Reissue and restart the backend. |
 | `state: permission_error` | Token lacks Issues write or Projects write, or is not scoped to this repository. |
 | `No Project number N ... is visible` | Wrong `GITHUB_PROJECT_NUMBER`, or the token has no organization Projects access. |
+| `FORBIDDEN: Resource not accessible by personal access token` on the Project | The Project belongs to a user account, not an organization. Fine-grained tokens cannot access user-owned Projects; move it to the organization. |
+| Repository 404 although it exists | The token was not granted that repository, or the organization has not approved the token. |
 | Ticket stays `degraded` | Read `sync_error`; fix the cause, then retry. It never opens a second issue. |
 | `The Project has no 'Ready' Status option` | Add the missing Status options in the Project, then reconcile. |
 | Assignment not confirmed | `GITHUB_ENGINEER_USERNAME` cannot be assigned in that repository; give them access. |

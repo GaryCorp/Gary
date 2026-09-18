@@ -230,7 +230,7 @@ services:
     cpus: 0.25
 
   # EASE ethical decision-making API (EASE/). Reachable from the host at
-  # http://localhost:8001 and from other services at http://ease-api:8000.
+  # http://localhost:8002 and from other services at http://ease-api:8000.
   ease-api:
     build:
       context: ./EASE
@@ -255,7 +255,7 @@ services:
       REDIS_URL: redis://ease-redis:6379/0
 
     ports:
-      - "127.0.0.1:8001:8000"
+      - "127.0.0.1:8002:8000"
 
     networks:
       - assistant_net

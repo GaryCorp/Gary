@@ -277,7 +277,7 @@ assignments; it can still only affect that specialist's advisory reports, or,
 for Catherine, purchase requests that still need your approval. Review a
 specialist's notebook if their conclusions drift.
 
-EASE (`ease-api`) listens on host loopback (`127.0.0.1:8001`) and the assistant
+EASE (`ease-api`) listens on host loopback (`127.0.0.1:8002`) and the assistant
 Docker network, with no API key by default, so any process on this machine can
 use it and spend its model key; set `EASE_API_KEY` to require a key. It holds
 its own copy of the model key and runs with all capabilities dropped.

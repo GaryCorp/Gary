@@ -246,8 +246,25 @@ class GitHubClient:
     def _repo_path(self) -> str:
         return f"/repos/{self.config.owner}/{self.config.repository}"
 
+    async def whoami(self) -> str:
+        """The account the credential authenticates as."""
+        data = await self.rest("GET", "/user", what="reading the authenticated account")
+        return (data or {}).get("login", "")
+
     async def get_repository(self) -> Repository:
-        data = await self.rest("GET", self._repo_path, what="reading the repository")
+        try:
+            data = await self.rest("GET", self._repo_path, what="reading the repository")
+        except GitHubNotFoundError as exc:
+            # 404 here is ambiguous on purpose at GitHub's end: a repository
+            # the credential cannot see looks exactly like one that does not
+            # exist. Say what to check rather than passing that on.
+            raise GitHubNotFoundError(
+                f"GitHub has no repository {self.config.full_name} that this credential can "
+                "see. Either it does not exist, the owner or name in GITHUB_OWNER and "
+                "GITHUB_REPOSITORY is wrong, or the token was not granted access to that "
+                "repository (fine-grained tokens list repositories explicitly and need "
+                "Metadata: read)."
+            ) from exc
         return Repository(
             owner=(data.get("owner") or {}).get("login", self.config.owner),
             name=data.get("name", self.config.repository),
@@ -391,19 +408,29 @@ class GitHubClient:
     """
 
     async def get_project(self, number: int | None = None) -> Project:
+        """The configured Project, whether the owner is an organization or a
+        user. Each owner type is asked for separately: GraphQL reports
+        "Could not resolve to a User/Organization" as an error even when the
+        other half of a combined query succeeded."""
         number = number or self.config.project_number
-        query = """
-        query($owner: String!, $number: Int!) {
-          organization(login: $owner) { projectV2(number: $number) { %s } }
-          user(login: $owner) { projectV2(number: $number) { %s } }
-        }
-        """ % (self._PROJECT_FRAGMENT, self._PROJECT_FRAGMENT)
-        data = await self.graphql(
-            query, {"owner": self.config.owner, "number": number}, what="reading the Project"
-        )
-        node = (data.get("organization") or {}).get("projectV2") or (
-            data.get("user") or {}
-        ).get("projectV2")
+        node = None
+        for kind in ("organization", "user"):
+            query = """
+            query($owner: String!, $number: Int!) {
+              %s(login: $owner) { projectV2(number: $number) { %s } }
+            }
+            """ % (kind, self._PROJECT_FRAGMENT)
+            try:
+                data = await self.graphql(
+                    query,
+                    {"owner": self.config.owner, "number": number},
+                    what="reading the Project",
+                )
+            except GitHubNotFoundError:
+                continue  # not that kind of owner; try the other
+            node = (data.get(kind) or {}).get("projectV2")
+            if node:
+                break
         if not node:
             raise GitHubNotFoundError(
                 f"No Project number {number} owned by {self.config.owner} is visible to "
@@ -547,19 +574,17 @@ class GitHubClient:
 
     async def get_owner_id(self) -> tuple[str, str]:
         """The owner's node id and type, for creating the Project in setup."""
-        query = """
-        query($owner: String!) {
-          organization(login: $owner) { id }
-          user(login: $owner) { id }
-        }
-        """
-        data = await self.graphql(query, {"owner": self.config.owner}, what="reading the owner")
-        organization = (data.get("organization") or {}).get("id")
-        if organization:
-            return organization, "organization"
-        user = (data.get("user") or {}).get("id")
-        if user:
-            return user, "user"
+        for kind in ("organization", "user"):
+            query = "query($owner: String!) { %s(login: $owner) { id } }" % kind
+            try:
+                data = await self.graphql(
+                    query, {"owner": self.config.owner}, what="reading the owner"
+                )
+            except GitHubNotFoundError:
+                continue
+            owner_id = (data.get(kind) or {}).get("id")
+            if owner_id:
+                return owner_id, kind
         raise GitHubNotFoundError(f"No GitHub owner named {self.config.owner} is visible")
 
     async def create_project(self, owner_id: str, title: str) -> Project:

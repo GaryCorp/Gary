@@ -34,6 +34,7 @@ from gary.agents.gateway import AgentServices, validate_roster_tools
 from gary.agents.roster import AgentLimits, AgentRegistry
 from gary.agents.runner import GaryCorpAgentRunner
 from gary.agents.service import AgentService
+from app.realtime import ResponseGate, needs_follow_up
 from gary.agents.ease import EaseFramework
 from gary.integrations.github import (
     EnvTokenProvider,
@@ -43,6 +44,7 @@ from gary.integrations.github import (
 )
 from gary.integrations.github import configured as github_configured
 from gary.services.engineering_service import EngineeringTicketService
+from gary.services.team_actions import team_action_handlers
 from gary.agents.web import OpenAIWebResearch
 from gary.backup import backup_daily
 from gary.finance import cards as finance_cards
@@ -1827,6 +1829,8 @@ gary_ops = build_gary(
     action_handlers={
         **external_action_handlers(),
         "card_purchase": card_purchase_handler(SPENDING_LIMITS, ZoneInfo(LOCAL_TIMEZONE)),
+        # Resolved lazily: the team is wired after Gary's container exists.
+        **team_action_handlers(lambda: globals().get("agent_service")),
     },
     work_week=WORK_WEEK,
 )
@@ -2213,7 +2217,7 @@ def system_configuration_summary() -> dict:
             "backend": "FastAPI on 127.0.0.1:8000 (loopback only); holds the OpenAI key, Google OAuth tokens (encrypted at rest), and the Joplin token",
             "voice": "local microphone and wake word; holds only the voice bridge token",
             "joplin-proxy": "host network, listens only on the Docker network gateway, forwards to Joplin's local API",
-            "ease-api": "EASE ethical decision-making API for Lauren, on the assistant network and host 127.0.0.1:8001; "
+            "ease-api": "EASE ethical decision-making API for Lauren, on the assistant network and host 127.0.0.1:8002; "
                         "holds its own LLM key; stateless (no database)",
             "ease-worker and ease-redis": "EASE background job runner and its queue; not used by Gary",
         },
@@ -2347,6 +2351,8 @@ agent_runner = GaryCorpAgentRunner(
     on_finished=announce_assignment_finished,
 )
 agent_service = AgentService(gary_ops, agent_registry, agent_runner)
+# Scheduled cycles can now see the team and act on the reports that came back.
+planning_cycle.team = agent_service
 
 GARY_INTEGRATIONS = {
     "calendar": planning_calendar,
@@ -3933,6 +3939,8 @@ async def internal_voice(websocket: WebSocket):
             self.dropped = False
             # Consecutive responses retried after an OpenAI rate limit.
             self.rate_limit_retries = 0
+            # Whose turn it is: only one response may be active at a time.
+            self.gate = ResponseGate()
 
         async def connect(self):
             async with self.connecting:
@@ -3971,6 +3979,11 @@ async def internal_voice(websocket: WebSocket):
             try:
                 async for raw in connection:
                     event = json.loads(raw)
+                    self.gate.observe(event)
+                    # A follow-up rejected while nothing is active now would
+                    # otherwise never be retried, leaving a tool result unsaid.
+                    if event.get("type") == "error" and self.gate.take_pending():
+                        await self.request_response(connection)
 
                     # Preferred Realtime tool-call completion event.
                     if event.get("type") == "response.function_call_arguments.done":
@@ -3997,12 +4010,23 @@ async def internal_voice(websocket: WebSocket):
                     self.connection = None
                     self.dropped = True
 
+        async def request_response(self, connection) -> None:
+            """Ask for a response, or queue the request when one is active.
+
+            Server VAD starts its own responses, so a follow-up after a slow
+            tool call can arrive while the user's new turn is being answered.
+            Sending it anyway is rejected and the tool result is never spoken.
+            """
+            if self.gate.request():
+                await connection.send(json.dumps({"type": "response.create"}))
+
         async def after_response(self, connection, response: dict) -> None:
             # Tool results were all sent, in order, as their calls arrived; ask
             # the model to continue once the response that made them is done.
-            if any(item.get("type") == "function_call" for item in response.get("output", [])):
+            # A follow-up queued while another response was active is owed now.
+            if needs_follow_up(response) or self.gate.take_pending():
                 self.rate_limit_retries = 0
-                await connection.send(json.dumps({"type": "response.create"}))
+                await self.request_response(connection)
                 return
 
             error = (response.get("status_details") or {}).get("error") or {}
@@ -4038,7 +4062,7 @@ async def internal_voice(websocket: WebSocket):
                 await asyncio.sleep(delay)
                 if self.connection is connection:
                     try:
-                        await connection.send(json.dumps({"type": "response.create"}))
+                        await self.request_response(connection)
                     except websockets.exceptions.ConnectionClosed:
                         pass
 

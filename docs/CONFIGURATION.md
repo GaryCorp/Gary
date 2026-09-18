@@ -429,7 +429,7 @@ otherwise, and nothing in Gary can change visibility. Verify the setup with
 
 Lauren's ethics framework runs as the `ease-api` container, with
 `ease-worker` and `ease-redis`. It is reachable from the host at
-`http://localhost:8001` (interactive docs at `/docs`).
+`http://localhost:8002` (interactive docs at `/docs`).
 
 | Setting | Default | Meaning |
 |---|---|---|

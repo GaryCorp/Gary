@@ -3,7 +3,7 @@ from typing import Any
 
 from pydantic import Field, field_validator, model_validator
 
-from gary.models.common import EntityId, RequestModel, Timestamp
+from gary.models.common import EntityId, Priority, RequestModel, Timestamp
 
 # One plain address; the same rule as the voice email tools.
 EMAIL_ADDRESS_PATTERN = re.compile(
@@ -45,6 +45,26 @@ class ScheduleTaskPayload(TimeRangeMixin):
 
     def range(self):
         return self.start, self.end
+
+
+class DelegateToAgentPayload(RequestModel):
+    """Give one GaryCorp specialist an assignment. Advisory work only: a
+    specialist returns a report and changes nothing by itself."""
+
+    agent_id: str = Field(min_length=1, max_length=32)
+    objective: str = Field(min_length=10, max_length=2000)
+    project_id: EntityId | None = None
+    task_id: EntityId | None = None
+    priority: Priority = 5
+
+
+class RunManagementReviewPayload(RequestModel):
+    """Ask several specialists to review one topic independently."""
+
+    topic: str = Field(min_length=10, max_length=2000)
+    agents: list[str] = Field(min_length=2, max_length=5)
+    project_id: EntityId | None = None
+    task_id: EntityId | None = None
 
 
 class MoveCalendarEventPayload(TimeRangeMixin):

@@ -52,7 +52,25 @@ __all__ = [
 
 SCHEDULED_TYPES = ("morning", "midday", "evening")
 CYCLE_TYPES = ("morning", "midday", "evening", "manual", "event_triggered")
-CYCLE_ACTION_TYPES = ("schedule_task", "move_calendar_event", "create_followup")
+CYCLE_ACTION_TYPES = (
+    "schedule_task",
+    "move_calendar_event",
+    "create_followup",
+    "create_internal_task",
+    "delegate_to_agent",
+    "run_management_review",
+)
+# Caps for unattended cycles. The company runs itself between conversations,
+# so the limits are what stops a cycle commissioning work all day: a cycle
+# may start a little, a day may start a little more.
+MAX_CYCLE_TASKS = 3
+MAX_CYCLE_DELEGATIONS = 2
+MAX_CYCLE_REVIEWS = 1
+MAX_DAILY_DELEGATIONS = 4
+MAX_DAILY_REVIEWS = 1
+# An objective close enough to recent work for the same specialist is a loop,
+# not a new question.
+REPEAT_ASSIGNMENT_DAYS = 3
 CATCH_UP_MINUTES = 90
 MIN_LEAD_MINUTES = 10
 MIN_BLOCK_MINUTES = 15
@@ -61,6 +79,10 @@ MAX_BLOCK_MINUTES = 240
 MIN_MOVE_MINUTES = 30
 FOLLOWUP_HORIZON_DAYS = 7
 MAX_RELEVANT_NOTES = 5
+OBJECTIVE_STOPWORDS = frozenset(
+    "about with what which their there this that from into been have been would could "
+    "should company gary garycorp report review research assess evaluate please".split()
+)
 PREFERENCES_NOTE_TITLE = "Preferences"
 DAILY_SUMMARY_PREFIX = "Daily summary "
 # Which brief each cycle type is built on.
@@ -90,6 +112,16 @@ class BusyCalendar(Protocol):
 
 class EmailSource(Protocol):
     async def unread_summaries(self) -> list[dict]: ...
+
+
+class TeamSource(Protocol):
+    """The specialist team, as a planning cycle sees it: who exists, who is
+    busy, and which reports have come back."""
+
+    def team(self) -> dict: ...
+
+    def list_assignments(self, agent_id: str | None = None, status: str | None = None,
+                         limit: int = 10) -> list[dict]: ...
 
 
 # ---------------------------------------------------------------- settings
@@ -169,6 +201,33 @@ def overlaps(start: str, end: str, intervals: list[tuple[str, str]]) -> bool:
     return any(start < other_end and other_start < end for other_start, other_end in intervals)
 
 
+def objective_key(text: str) -> frozenset[str]:
+    """Content words of an objective, for spotting work already commissioned."""
+    words = {
+        word
+        for word in normalize_title(text).split()
+        if len(word) > 3 and word not in OBJECTIVE_STOPWORDS
+    }
+    return frozenset(words)
+
+
+def looks_like_repeat(new: frozenset[str], existing: list[frozenset[str]]) -> bool:
+    """True when most of an objective's content words match earlier work."""
+    if not new:
+        return False
+    for other in existing:
+        if not other:
+            continue
+        overlap = len(new & other) / len(new)
+        if overlap >= 0.6:
+            return True
+    return False
+
+
+def _bounded_priority(value) -> int:
+    return min(10, max(1, value)) if isinstance(value, int) else 5
+
+
 def validate_cycle_actions(
     gary: Gary,
     actions: list[dict],
@@ -179,11 +238,16 @@ def validate_cycle_actions(
     week: WorkWeek,
     horizon_hours: int,
     max_actions: int,
+    team: dict | None = None,
+    day_start: str = "",
 ) -> tuple[list[dict], list[dict]]:
     """Deterministic checks on every proposed action. Returns (accepted
     proposals ready for the action service, rejected with reasons)."""
     accepted, rejected, planned = [], [], []
     seen_tasks, seen_followups = set(), set()
+    seen_titles: set[str] = set()
+    counts = {"create_internal_task": 0, "delegate_to_agent": 0, "run_management_review": 0}
+    delegated_agents: set[str] = set()
     earliest = format_utc(to_datetime(now) + dt.timedelta(minutes=MIN_LEAD_MINUTES))
     latest = format_utc(to_datetime(now) + dt.timedelta(hours=horizon_hours))
     followup_latest = format_utc(to_datetime(now) + dt.timedelta(days=FOLLOWUP_HORIZON_DAYS))
@@ -194,6 +258,27 @@ def validate_cycle_actions(
         pending_followups = {
             normalize_title(f["title"]) for f in repos.followups.list_pending()
         }
+        open_task_titles = {normalize_title(t["title"]) for t in repos.tasks.list_open()}
+        # What the team is already doing, so a cycle cannot re-commission it.
+        since = format_utc(to_datetime(now) - dt.timedelta(days=REPEAT_ASSIGNMENT_DAYS))
+        recent_assignments: dict[str, list[frozenset[str]]] = {}
+        busy_agents: set[str] = set()
+        daily_delegations = daily_reviews = 0
+        for row in repos.assignments.list_recent(None, None, 60):
+            agent_id = row["assigned_to"]
+            if row["status"] in ("queued", "running"):
+                busy_agents.add(agent_id)
+            if row["created_at"] >= since:
+                recent_assignments.setdefault(agent_id, []).append(objective_key(row["objective"]))
+            if row["created_at"] >= day_start:
+                if row["review_id"]:
+                    daily_reviews += 1
+                else:
+                    daily_delegations += 1
+        if team is not None:
+            known_agents = set(team.get("employee_ids") or [])
+        else:
+            known_agents = set()
 
         for proposal in actions:
             def reject(reason: str):
@@ -205,6 +290,139 @@ def validate_cycle_actions(
                 continue
             if len(accepted) >= max_actions:
                 reject(f"more than {max_actions} actions proposed")
+                continue
+
+            if action_type == "create_internal_task":
+                title = " ".join(str(proposal.get("title") or "").split())[:300]
+                if not title:
+                    reject("a task needs a title")
+                    continue
+                if counts[action_type] >= MAX_CYCLE_TASKS:
+                    reject(f"at most {MAX_CYCLE_TASKS} new tasks per cycle")
+                    continue
+                key = normalize_title(title)
+                if key in open_task_titles | seen_titles:
+                    reject("an open task with that title already exists")
+                    continue
+                project_id = proposal.get("project_id") or None
+                if project_id and repos.projects.get(project_id) is None:
+                    reject("unknown project")
+                    continue
+                payload = {"title": title, "priority": _bounded_priority(proposal.get("priority"))}
+                if project_id:
+                    payload["project_id"] = project_id
+                minutes = proposal.get("estimated_minutes")
+                if isinstance(minutes, int) and 0 < minutes <= 100_000:
+                    payload["estimated_minutes"] = minutes
+                accepted.append(
+                    {
+                        "action_type": action_type,
+                        "payload": payload,
+                        "reason": str(proposal.get("reason") or "")[:1000] or None,
+                        "task_id": None,
+                        "project_id": project_id,
+                        "task_title": title,
+                    }
+                )
+                seen_titles.add(key)
+                counts[action_type] += 1
+                continue
+
+            if action_type in ("delegate_to_agent", "run_management_review"):
+                if team is None:
+                    reject("the GaryCorp team is not available in this deployment")
+                    continue
+                if action_type == "delegate_to_agent":
+                    agent_id = str(proposal.get("agent_id") or "").strip().lower()
+                    objective = " ".join(str(proposal.get("objective") or "").split())[:2000]
+                    if agent_id not in known_agents:
+                        reject(f"unknown specialist {agent_id!r}")
+                        continue
+                    if len(objective) < 10:
+                        reject("an assignment needs an objective")
+                        continue
+                    if counts[action_type] >= MAX_CYCLE_DELEGATIONS:
+                        reject(f"at most {MAX_CYCLE_DELEGATIONS} assignments per cycle")
+                        continue
+                    if daily_delegations + counts[action_type] >= MAX_DAILY_DELEGATIONS:
+                        reject(f"at most {MAX_DAILY_DELEGATIONS} assignments a day")
+                        continue
+                    if agent_id in busy_agents or agent_id in delegated_agents:
+                        reject(f"{agent_id} already has an assignment in progress")
+                        continue
+                    if looks_like_repeat(
+                        objective_key(objective), recent_assignments.get(agent_id, [])
+                    ):
+                        reject(
+                            f"{agent_id} was asked something very like this in the last "
+                            f"{REPEAT_ASSIGNMENT_DAYS} days"
+                        )
+                        continue
+                    project_id = proposal.get("project_id") or None
+                    if project_id and repos.projects.get(project_id) is None:
+                        reject("unknown project")
+                        continue
+                    payload = {"agent_id": agent_id, "objective": objective}
+                    if project_id:
+                        payload["project_id"] = project_id
+                    accepted.append(
+                        {
+                            "action_type": action_type,
+                            "payload": payload,
+                            "reason": str(proposal.get("reason") or "")[:1000] or None,
+                            "task_id": None,
+                            "project_id": project_id,
+                            "task_title": f"{agent_id}: {objective[:80]}",
+                        }
+                    )
+                    delegated_agents.add(agent_id)
+                    counts[action_type] += 1
+                    continue
+
+                topic = " ".join(str(proposal.get("topic") or "").split())[:2000]
+                agents = [
+                    str(a).strip().lower()
+                    for a in (proposal.get("agents") or [])
+                    if str(a).strip()
+                ]
+                agents = list(dict.fromkeys(agents))
+                if len(topic) < 10:
+                    reject("a review needs a topic")
+                    continue
+                if counts[action_type] >= MAX_CYCLE_REVIEWS or daily_reviews >= MAX_DAILY_REVIEWS:
+                    reject(f"at most {MAX_DAILY_REVIEWS} management review a day")
+                    continue
+                unknown = [a for a in agents if a not in known_agents]
+                if unknown:
+                    reject(f"unknown specialists: {', '.join(unknown)}")
+                    continue
+                if len(agents) < 2:
+                    reject("a review needs at least two specialists")
+                    continue
+                if busy_agents.intersection(agents):
+                    reject(
+                        "already working: "
+                        + ", ".join(sorted(busy_agents.intersection(agents)))
+                    )
+                    continue
+                project_id = proposal.get("project_id") or None
+                if project_id and repos.projects.get(project_id) is None:
+                    reject("unknown project")
+                    continue
+                payload = {"topic": topic, "agents": agents}
+                if project_id:
+                    payload["project_id"] = project_id
+                accepted.append(
+                    {
+                        "action_type": action_type,
+                        "payload": payload,
+                        "reason": str(proposal.get("reason") or "")[:1000] or None,
+                        "task_id": None,
+                        "project_id": project_id,
+                        "task_title": f"review: {topic[:80]}",
+                    }
+                )
+                counts[action_type] += 1
                 continue
 
             task_id = proposal.get("task_id") or None
@@ -371,12 +589,16 @@ class PlanningCycle:
         *,
         max_actions: int = 5,
         horizon_hours: int = 72,
+        team: "TeamSource | None" = None,
     ):
         self.gary = gary
         self.planner = planner
         self.notebook = notebook
         self.calendar = calendar
         self.email = email
+        # The GaryCorp specialists. Without it a cycle plans Alex's own work
+        # only, and every delegation is rejected.
+        self.team = team
         self.max_actions = max_actions
         self.horizon_hours = horizon_hours
         # One cycle at a time, even if a scheduled and a requested run collide.
@@ -396,6 +618,80 @@ class PlanningCycle:
                 if not key.endswith("_json")
             }
         return value
+
+    async def _team_state(self, now: str) -> tuple[dict | None, list[dict], str | None]:
+        """Who the specialists are, what they are already doing, and the
+        reports that arrived since the last cycle. A team that cannot be read
+        is reported, and delegation is then refused rather than guessed at."""
+        if self.team is None:
+            return None, [], None
+        try:
+            return await asyncio.to_thread(self._read_team, now)
+        except Exception as exc:
+            logger.warning("Team state unavailable for planning: %s", exc)
+            return None, [], str(exc) or type(exc).__name__
+
+    def _read_team(self, now: str) -> tuple[dict, list[dict], None]:
+        since = self.gary.planning.last_cycle_finished_at()
+        overview = self.team.team()
+        members, employee_ids = [], []
+        for member in overview.get("members", []):
+            if not member.get("can_delegate") and member.get("status") == "active":
+                employee_ids.append(member["agent_id"])
+                members.append(
+                    {
+                        "agent_id": member["agent_id"],
+                        "name": member["name"],
+                        "title": member["title"],
+                        "department": member["department"],
+                        "assignments": member.get("assignments", {}),
+                    }
+                )
+
+        working, reports = [], []
+        for assignment in self.team.list_assignments(limit=25):
+            if assignment["status"] in ("queued", "running"):
+                working.append(
+                    {
+                        "agent": assignment["agent"],
+                        "objective": assignment["objective"][:200],
+                        "status": assignment["status"],
+                    }
+                )
+                continue
+            # Reports Gary has not seen yet: they came in after the last cycle.
+            finished = assignment.get("completed_at")
+            if (
+                assignment["status"] == "completed"
+                and assignment.get("report")
+                and finished
+                and (since is None or to_datetime(finished) >= to_datetime(since))
+            ):
+                report = assignment["report"]
+                reports.append(
+                    {
+                        "assignment_id": assignment["assignment_id"],
+                        "agent": assignment["agent"],
+                        "objective": assignment["objective"][:200],
+                        "summary": (report.get("summary") or "")[:800],
+                        "recommendation": str(
+                            report.get("recommendation")
+                            or report.get("recommended_option")
+                            or ""
+                        )[:500],
+                        "decisions_needed": (report.get("decisions_needed") or [])[:3],
+                    }
+                )
+        return (
+            {
+                "employee_ids": employee_ids,
+                "members": members,
+                "working_on": working,
+                "note": "Specialists are advisory: a report changes nothing by itself.",
+            },
+            reports[:5],
+            None,
+        )
 
     async def minutes_since_last_cycle(self) -> float | None:
         latest = await asyncio.to_thread(self.gary.planning.last_cycle_finished_at)
@@ -450,6 +746,8 @@ class PlanningCycle:
             )
             notes, busy, emails = notes or [], busy or [], emails or []
 
+            team_state, reports, team_error = await self._team_state(now)
+
             operations = {key: value for key, value in context.items() if key != "planning_run_id"}
             planning_input = {
                 "planning_type": planning_type,
@@ -470,6 +768,8 @@ class PlanningCycle:
                 "operations": self._localize(operations),
                 "planning_notes": notes,
                 "unread_email": emails,
+                "team": team_state,
+                "department_reports": reports,
             }
 
             plan = await self.planner.create_plan(planning_input)
@@ -484,6 +784,10 @@ class PlanningCycle:
                 week=self.gary.week,
                 horizon_hours=self.horizon_hours,
                 max_actions=self.max_actions,
+                team=team_state,
+                day_start=format_utc(
+                    dt.datetime.combine(today, dt.time(), self.gary.timezone)
+                ),
             )
 
             results = []
@@ -514,6 +818,8 @@ class PlanningCycle:
                 "notes_error": notes_error,
                 "calendar_error": calendar_error,
                 "email_error": email_error,
+                "team_error": team_error,
+                "reports_read": [report["assignment_id"] for report in reports],
             }
             await asyncio.to_thread(self.gary.planning.complete_cycle, run_id, record)
         except Exception as exc:
