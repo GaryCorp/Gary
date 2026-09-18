@@ -156,6 +156,14 @@ FOCUS = {
         "work if that makes room."
     ),
     "manual": "Replan the rest of the day on request.",
+    "management": (
+        "Management check between the scheduled cycles. Something changed: read "
+        "department_reports that came back, act on them, and keep the company "
+        "moving. Do the smallest useful thing. Commission work only when a "
+        "department's answer would change what happens next, and propose no "
+        "actions at all when nothing needs doing: an empty plan is the right "
+        "answer most of the time."
+    ),
 }
 
 

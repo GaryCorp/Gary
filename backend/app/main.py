@@ -44,6 +44,12 @@ from gary.integrations.github import (
 )
 from gary.integrations.github import configured as github_configured
 from gary.services.engineering_service import EngineeringTicketService
+from gary.services.management_loop import (
+    MIN_GAP_MINUTES,
+    DailyBudget,
+    completed_since,
+    find_triggers,
+)
 from gary.services.team_actions import team_action_handlers
 from gary.agents.web import OpenAIWebResearch
 from gary.backup import backup_daily
@@ -62,6 +68,7 @@ from gary.services.calendar_blocks import working_time_problem
 from gary.services.common import require_task
 from gary.services.planning_cycle import (
     PlanningCycle,
+    PlanningCycleError,
     WorkWeek,
     daily_summary_title,
     due_planning_types,
@@ -72,7 +79,7 @@ from gary.services.planning_cycle import (
     previous_summary,
     select_relevant_notes,
 )
-from gary.timeutil import parse_timestamp, to_datetime, to_local
+from gary.timeutil import format_utc, parse_timestamp, to_datetime, to_local
 from gary.tools import TOOL_NAMES as GARY_TOOL_NAMES
 from gary.tools import TOOL_SCHEMAS as GARY_TOOL_SCHEMAS
 from gary.tools import ToolContext as GaryToolContext
@@ -123,6 +130,15 @@ REALTIME_RATE_LIMIT_MAX_WAIT = 30
 # GaryCorp specialist team (Susan, Dave, Linda).
 GARY_EMPLOYEE_MODEL = os.getenv("GARY_EMPLOYEE_MODEL", "").strip() or PLANNING_MODEL
 AGENT_WEB_SEARCH_MODEL = os.getenv("AGENT_WEB_SEARCH_MODEL", "gpt-5.4-mini").strip()
+# The continuous management loop: how often Gary checks whether anything
+# changed. 0 turns it off and leaves only the three scheduled cycles.
+MANAGEMENT_TICK_MINUTES = float(os.getenv("MANAGEMENT_TICK_MINUTES", "15"))
+# Weekdays the management loop runs on. Default matches the planning cycle;
+# set MANAGEMENT_WEEKDAYS=mon,tue,wed,thu,fri,sat,sun to run through a weekend.
+MANAGEMENT_WEEKDAYS = parse_weekdays(
+    os.getenv("MANAGEMENT_WEEKDAYS", "") or os.getenv("PLANNING_WEEKDAYS", "mon,tue,wed,thu,fri")
+)
+
 # Engineering tickets in the PRIVATE GaryCorp repository and Project. The
 # token is read here and never stored, logged, or put in a prompt or issue.
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "").strip()
@@ -141,6 +157,10 @@ def env_int(name: str, default: int, low: int, high: int) -> int:
         raise ValueError(f"{name} must be between {low} and {high}")
     return value
 
+
+# Ceiling on unattended management cycles in one local day, so a stuck state
+# cannot spend the night calling the model.
+MAX_MANAGEMENT_CYCLES_PER_DAY = env_int("MAX_MANAGEMENT_CYCLES_PER_DAY", 24, 0, 200)
 
 AGENT_LIMITS = AgentLimits(
     max_iterations=env_int("MAX_AGENT_ITERATIONS", 8, 1, 25),
@@ -225,10 +245,14 @@ async def lifespan(app: FastAPI):
         if engineering_service and GITHUB_SYNC_INTERVAL_MINUTES > 0
         else None
     )
+    # The company keeps running between the scheduled cycles.
+    management = (
+        asyncio.create_task(run_management_loop()) if MANAGEMENT_TICK_MINUTES > 0 else None
+    )
     try:
         yield
     finally:
-        for task in (scheduler, engineering_sync):
+        for task in (scheduler, engineering_sync, management):
             if task is not None:
                 task.cancel()
                 try:
@@ -2328,6 +2352,8 @@ async def announce_assignment_finished(assignment: dict) -> None:
                 f"Say {WAKE_WORD_DISPLAY}, show me the management review."
             )
         return
+    # Gary reads the report on the next management tick, which is now.
+    wake_management_loop()
     agent = agent_registry.get(assignment["assigned_to"])
     if assignment["status"] == "completed":
         requested = len(json.loads(assignment["result_json"] or "{}").get("purchase_request_ids", []))
@@ -2372,6 +2398,70 @@ async def announce_to_voice(message: str) -> None:
             )
         except Exception:
             voice_connections.discard(websocket)
+
+
+# Set when something happens that Gary should see promptly, such as a
+# specialist's report landing, so the loop does not wait out its interval.
+management_wakeup = asyncio.Event()
+management_budget = DailyBudget(MAX_MANAGEMENT_CYCLES_PER_DAY, ZoneInfo(LOCAL_TIMEZONE))
+
+
+def wake_management_loop() -> None:
+    management_wakeup.set()
+
+
+async def run_management_loop() -> None:
+    """Keep the company running between the scheduled cycles.
+
+    Each tick asks a cheap question in SQLite: has anything changed since the
+    last cycle? Only then does Gary think. A quiet company costs nothing.
+    """
+    timezone = ZoneInfo(LOCAL_TIMEZONE)
+    interval = MANAGEMENT_TICK_MINUTES * 60
+    while True:
+        try:
+            await asyncio.wait_for(management_wakeup.wait(), timeout=interval)
+        except asyncio.TimeoutError:
+            pass
+        management_wakeup.clear()
+
+        try:
+            now_local = dt.datetime.now(timezone)
+            if now_local.weekday() not in MANAGEMENT_WEEKDAYS:
+                continue
+            since_minutes = await planning_cycle.minutes_since_last_cycle()
+            if since_minutes is not None and since_minutes < MIN_GAP_MINUTES:
+                continue
+            if not management_budget.remaining(now_local):
+                continue
+
+            now = format_utc(gary_ops.planning.clock())
+            since = await asyncio.to_thread(gary_ops.planning.last_cycle_finished_at)
+            reports = await asyncio.to_thread(completed_since, planning_cycle.team, since)
+            triggers = await asyncio.to_thread(
+                find_triggers, gary_ops, now=now, since=since, completed_reports=reports
+            )
+            if not triggers:
+                logger.debug("Management tick: %s", triggers.describe())
+                continue
+            if not management_budget.take(now_local):
+                logger.warning(
+                    "Management loop reached its daily ceiling of %s cycles",
+                    MAX_MANAGEMENT_CYCLES_PER_DAY,
+                )
+                continue
+
+            logger.info("Management cycle: %s", triggers.describe())
+            result = await planning_cycle.run("management")
+            briefing = result["briefing"]
+            if briefing and not in_quiet_hours(dt.datetime.now(timezone)):
+                await announce_to_voice(briefing)
+        except asyncio.CancelledError:
+            raise
+        except PlanningCycleError as exc:
+            logger.warning("Management cycle failed: %s", exc)
+        except Exception:
+            logger.exception("Management loop check failed")
 
 
 async def run_planning_scheduler() -> None:
@@ -2866,6 +2956,36 @@ DELETE_JOPLIN_NOTE_TOOL = {
 @app.get("/health")
 async def health():
     return {"ok": True}
+
+
+@app.get("/management/status")
+async def management_status():
+    """What the continuous loop is doing: its cadence, what it has spent
+    today, and whether anything is waiting for Gary right now. Read-only."""
+    timezone = ZoneInfo(LOCAL_TIMEZONE)
+    now_local = dt.datetime.now(timezone)
+    now = format_utc(gary_ops.planning.clock())
+    since = await asyncio.to_thread(gary_ops.planning.last_cycle_finished_at)
+    reports = await asyncio.to_thread(completed_since, planning_cycle.team, since)
+    triggers = await asyncio.to_thread(
+        find_triggers, gary_ops, now=now, since=since, completed_reports=reports
+    )
+    return {
+        "enabled": MANAGEMENT_TICK_MINUTES > 0,
+        "tick_minutes": MANAGEMENT_TICK_MINUTES,
+        "runs_today": {
+            "used": management_budget.used_today,
+            "remaining": management_budget.remaining(now_local),
+            "ceiling": MAX_MANAGEMENT_CYCLES_PER_DAY,
+        },
+        "runs_on_weekdays": sorted(MANAGEMENT_WEEKDAYS),
+        "running_today": now_local.weekday() in MANAGEMENT_WEEKDAYS,
+        "last_cycle_finished": to_local(since, timezone) if since else None,
+        "new_reports": reports,
+        "team_connected": planning_cycle.team is not None,
+        "would_run_now": bool(triggers),
+        "triggers": triggers.reasons,
+    }
 
 
 @app.get("/engineering/status")

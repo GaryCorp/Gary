@@ -43,6 +43,13 @@ services:
       WORK_HOURS: "${WORK_HOURS:-9-17}"
       PROTECTED_TIMES: "${PROTECTED_TIMES-12:00-13:00}"
       PLANNING_EMAIL: "${PLANNING_EMAIL:-snippets}"
+
+      # Continuous operation: how often Gary checks whether anything changed
+      # between the scheduled cycles. 0 leaves only the three daily cycles.
+      MANAGEMENT_TICK_MINUTES: "${MANAGEMENT_TICK_MINUTES:-15}"
+      MAX_MANAGEMENT_CYCLES_PER_DAY: "${MAX_MANAGEMENT_CYCLES_PER_DAY:-24}"
+      # Defaults to PLANNING_WEEKDAYS; set all seven days to run through a weekend.
+      MANAGEMENT_WEEKDAYS: "${MANAGEMENT_WEEKDAYS-}"
       PRINCIPAL_NAME: "${PRINCIPAL_NAME:-Alex}"
 
       # GaryCorp specialists (Susan, Dave, Linda, Catherine, Lauren). Empty model = PLANNING_MODEL.

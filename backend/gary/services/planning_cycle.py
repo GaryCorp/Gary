@@ -51,7 +51,16 @@ __all__ = [
 ]
 
 SCHEDULED_TYPES = ("morning", "midday", "evening")
-CYCLE_TYPES = ("morning", "midday", "evening", "manual", "event_triggered")
+CYCLE_TYPES = (
+    "morning",
+    "midday",
+    "evening",
+    "manual",
+    "event_triggered",
+    # The continuous loop between the scheduled cycles: short, reactive, and
+    # only run when something actually changed.
+    "management",
+)
 CYCLE_ACTION_TYPES = (
     "schedule_task",
     "move_calendar_event",
@@ -92,8 +101,13 @@ BRIEF_KIND = {
     "evening": "evening",
     "manual": "midday",
     "event_triggered": "midday",
+    "management": "midday",
 }
-SUMMARY_TITLE = {"manual": "Replan", "event_triggered": "Replan after a change"}
+SUMMARY_TITLE = {
+    "manual": "Replan",
+    "event_triggered": "Replan after a change",
+    "management": "Management check",
+}
 
 
 class Planner(Protocol):
