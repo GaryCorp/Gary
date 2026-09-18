@@ -61,6 +61,12 @@ FOLLOWUP_GRACE_SECONDS = float(
     os.getenv("FOLLOWUP_GRACE_SECONDS", "10")
 )
 
+# How long the microphone stays open after Gary asks something unprompted.
+# Longer than a follow-up: Alex has to notice he was asked before answering.
+ANSWER_GRACE_SECONDS = float(
+    os.getenv("ANSWER_GRACE_SECONDS", "20")
+)
+
 PIPER_VOICE_PATH = os.getenv(
     "PIPER_VOICE_PATH",
     "/models/piper/en_US-ryan-medium.onnx",
@@ -492,16 +498,23 @@ async def receiver(
 
         elif event_type == "bridge.announce":
             message = event.get("message", "")
+            expects_reply = bool(event.get("expects_reply"))
             print(
-                f"\n[new email] {message}",
+                f"\n[gary] {message}",
                 flush=True,
             )
 
             if state["active"]:
                 # Don't talk over a conversation; speak it on going to sleep.
-                state["announcements"].append(message)
+                state["announcements"].append(
+                    {"message": message, "expects_reply": expects_reply}
+                )
             else:
                 speak(message)
+                # Gary asked something: listen for the answer as soon as he
+                # stops speaking, so it needs no wake word.
+                if expects_reply:
+                    state["pending_listen"] = True
 
         elif event_type == "bridge.notice":
             print(
@@ -548,6 +561,9 @@ async def run():
                     "last_response_done": 0.0,
                     "tts_text": "",
                     "announcements": [],
+                    # Set when Gary asked something unprompted: the session
+                    # opens by itself once he has finished speaking.
+                    "pending_listen": False,
                 }
 
                 receiver_task = asyncio.create_task(
@@ -655,8 +671,10 @@ async def run():
                                     flush=True,
                                 )
 
-                                for message in state["announcements"]:
-                                    speak(message)
+                                for announcement in state["announcements"]:
+                                    speak(announcement["message"])
+                                    if announcement["expects_reply"]:
+                                        state["pending_listen"] = True
                                 state["announcements"].clear()
 
                             continue
@@ -666,6 +684,27 @@ async def run():
                             # named Gary); don't let Gary wake himself up.
                             pre_roll.clear()
                             wake_window.clear()
+                            continue
+
+                        if state["pending_listen"]:
+                            # Gary has finished asking. Open the session for
+                            # the answer without making Alex say the wake word.
+                            state["pending_listen"] = False
+                            state["active"] = True
+                            state["hard_deadline"] = (
+                                now + ACTIVE_SESSION_SECONDS
+                            )
+                            state["followup_deadline"] = (
+                                now + ANSWER_GRACE_SECONDS
+                            )
+
+                            pre_roll.clear()
+                            wake_window.clear()
+
+                            print(
+                                "[listening for your answer]",
+                                flush=True,
+                            )
                             continue
 
                         pre_roll.append(

@@ -354,17 +354,52 @@ not Gary, decides their risk:
 | Yellow | Waits for your approval | send an email Gary initiated, move the calendar block of a priority 8+ task or one tied to a commitment |
 | Red | Refused | spend money, change security settings, access a password manager |
 
-Approve or reject a yellow action by voice:
+Gary raises a yellow action with you out loud as soon as he proposes it, even
+if you are not in a conversation, so nothing waits to be discovered on a web
+page:
 
 ```text
-Assistant: Emailing Sam with the subject "Draft" needs your approval. Should I send it?
+Assistant: I need your approval for something. Email Sam with the subject "Draft".
+           Say yes to approve or no to reject.
 User: Yes, approve it.
 Assistant: Approved and sent.
 ```
 
-or at `http://localhost:8000/approvals`, which shows the exact recipient, text,
-or times. Unanswered approvals expire after 72 hours. Gary only reports an
-action as done when it actually succeeded.
+After he asks, the microphone opens on its own for about twenty seconds
+(`ANSWER_GRACE_SECONDS`), so you can answer without saying the wake word.
+
+You can still use `http://localhost:8000/approvals`, which shows the exact
+recipient, text, or times, and it remains the only way to approve a card
+purchase or a hire. Unanswered approvals expire after 72 hours. Gary only
+reports an action as done when it actually succeeded.
+
+## When Gary starts the conversation
+
+Gary speaks first when something genuinely needs you: a decision only you can
+make, a commitment about to be missed, an approval about to expire, a hire he
+wants to propose. He will not interrupt you with status updates, and a
+planning cycle may raise at most one thing.
+
+Because speech does not persist, everything he says unprompted is recorded
+first and written to a **Spoken** notebook in Joplin, one note a day:
+
+```text
+- **2:45 PM** Gary said: I need your decision on something. Hire Nina as Director of
+  Customer Insight. _(waiting on your answer)_
+```
+
+So if you were out of the room, nothing is lost. Ask him directly:
+
+```text
+Gary, what did you say?
+Gary, what did I miss?
+Gary, say that again.
+```
+
+He can repeat something up to three times, after which he points you at the
+notebook. If the voice service was down or it was quiet hours
+(`EMAIL_CHECK_QUIET_HOURS`), the message stays queued and he says it at the
+first opportunity rather than dropping it.
 
 ## The team: Susan, Dave, Linda, Catherine, and Lauren
 
@@ -436,6 +471,36 @@ issue closes, his task completes too.
 Gary cannot change code, repository visibility, or GitHub permissions. If the
 repository or Project is ever public, he refuses to create anything and says
 so. See [Engineering](ENGINEERING.md) for setup and troubleshooting.
+
+## Testing the autonomous loop
+
+Before letting GaryCorp run unattended, watch it decide without letting it
+act. `--act` is the switch that makes it real.
+
+```bash
+# What is the loop doing, and would it run right now? Free, no model call.
+curl -s localhost:8000/management/status
+
+# One real cycle: real model, real company data, nothing changes.
+docker compose exec backend python -m app.dry_run
+
+# Several in a row, or one of the scheduled cycle types.
+docker compose exec backend python -m app.dry_run --cycles 3 --type morning
+
+# Let it actually act: calendar, specialists, tokens.
+docker compose exec backend python -m app.dry_run --act
+```
+
+Observe-only runs print what Gary *would* have done and why, write no daily
+summary, and touch neither the calendar nor the team. An empty plan is a good
+sign, not a broken one: most management ticks should find nothing to do.
+
+To watch the live loop instead, lower `MANAGEMENT_TICK_MINUTES`, restart the
+backend, and follow the log:
+
+```bash
+docker compose logs -f backend | grep -i management
+```
 
 ## Follow-up behavior
 

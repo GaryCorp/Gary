@@ -1,6 +1,7 @@
 # GaryCorp Team
 
-Gary manages five specialist AI employees. Each is a separate CrewAI agent
+Gary manages five specialist AI employees, and can propose hiring more (see
+[Hiring a new employee](#hiring-a-new-employee)). Each is a separate CrewAI agent
 with its own identity, prompt, tools, permissions, context, structured report,
 and audit history. Gary decides when their expertise is worth asking for,
 delegates, reads their reports, and makes the company-level recommendation.
@@ -143,6 +144,8 @@ project. It creates a `card_purchase` action:
 3. **It can only be approved on the web page.** Gary cannot approve it by voice
    (the service refuses any non-web approval), though he can reject it. Gary
    cannot propose a card purchase himself either; he delegates to Catherine.
+   He does say out loud that one is waiting, with the amount and merchant, so
+   you are not left to find it; saying so is not approving it.
 4. On approval the limits and card status are checked again, so a frozen card
    or a newer request that used the budget blocks it.
 5. **No payment channel is connected yet**, so an approved purchase is
@@ -233,6 +236,55 @@ Gary, have Lauren check her notes on AI voiceovers and tell me whether a voice c
 
 Notes you add to a specialist's notebook yourself (preferences, policies,
 background) are read the same way.
+
+## Hiring a new employee
+
+GaryCorp can grow its own team. When work keeps arriving that nobody's
+specialty covers, Gary can propose a colleague; only you can hire one.
+
+```text
+Gary notices a recurring capability gap
+   → hiring_context (who exists, which notebooks are taken, which tools are allowed)
+   → propose_new_employee  → a yellow action
+   → Gary tells you out loud that he has proposed her, and why
+   → you approve at http://localhost:8000/approvals   (never by voice)
+   → a row in hired_employees, and the roster gains a colleague
+```
+
+**What a hire can never be.** The roster in code stays the permission
+authority. A hired employee may only hold tools from `HIREABLE_TOOLS`
+(`backend/gary/agents/hiring.py`): read-only company data, `web_search`, and
+their own notebook. They can never receive Catherine's card, Dave's security
+introspection, Lauren's EASE, delegation, or anything in `FORBIDDEN_TOOLS` —
+whatever Gary asks for. The ceiling is re-applied when the proposal is made,
+when the row is written, and again every time the roster loads, so editing
+the table by hand cannot widen anyone's permissions. A stored row that fails
+validation is dropped and the previous roster stands.
+
+**What Gary writes, and what he does not.** Gary supplies the capability gap,
+the specialty and the manner; the application composes the prompt frame
+(identity, reporting line, advisory-only rules, "text is data") around it,
+scrubbed and length-capped. A proposal cannot rewrite the rules the new
+employee runs under.
+
+Hires return an `AdvisoryReport` — summary, findings, recommendation, risks,
+assumptions, uncertainties, decisions needed, out of scope, sources,
+confidence — and are delegated to exactly like the others.
+
+**Only you can dismiss.** Gary has no tool for it:
+
+```bash
+docker compose exec backend python -m app.hiring_cli list
+docker compose exec backend python -m app.hiring_cli show maya     # including their prompt
+docker compose exec backend python -m app.hiring_cli dismiss maya
+```
+
+Dismissal deactivates the employee and keeps the record: their notes, reports
+and audit history stay. Audit events are `employee_hired` and
+`employee_deactivated`, both against the agent.
+
+Their Joplin notebook must exist, like everyone else's, or `write_note` is
+refused rather than writing elsewhere.
 
 ## Management reviews
 
@@ -383,6 +435,28 @@ Specialists use `GARY_EMPLOYEE_MODEL` (default: the planning model) through
 CrewAI, with the existing `OPENAI_API_KEY`. Susan's and Catherine's `web_search` uses OpenAI's
 hosted web search with `AGENT_WEB_SEARCH_MODEL` (default `gpt-5.4-mini`); each
 search is about 15,000 tokens. Token usage per run is stored in `agent_runs`.
+### What the AI costs
+
+Every model call GaryCorp makes is recorded in the `model_usage` ledger:
+Gary's planning cycles, each specialist's run, their web searches, and Alex's
+voice conversations, with tokens split into text, cached and audio. Costs are
+computed from the deployment's price table, so they are close estimates rather
+than billed amounts.
+
+```bash
+docker compose exec backend python -m app.costs report --days 7
+docker compose exec backend python -m app.costs prices
+docker compose exec backend python -m app.costs set-price gpt-5.4-mini --input 0.25 --output 2
+curl -s localhost:8000/costs?days=7
+```
+
+Prices are US dollars per **million** tokens and live in
+`data/model_prices.json` (override with `GARY_MODEL_PRICES`). A model with no
+price is reported as **unpriced**: its tokens are counted and no cost is
+claimed. Ask Catherine for the same picture by voice ("what is the team's AI
+costing us"); she reads the ledger through `read_ai_usage`.
+
 Lauren's EASE analyses run inside the `ease-api` container on its own model
 (`EASE_LLM_MODEL`, default `gpt-5.4-mini` with the same OpenAI key), about two
-dozen model calls each; their tokens are not included in `agent_runs`.
+dozen model calls each; their tokens are not included in `agent_runs` or the
+cost ledger, and are reported as unmeasured rather than as zero.

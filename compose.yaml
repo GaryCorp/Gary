@@ -34,6 +34,7 @@ services:
       GARY_BACKUP_DIR: /data/backups
       GARY_BACKUP_KEEP: "${GARY_BACKUP_KEEP:-14}"
       OPS_CHECK_INTERVAL_MINUTES: "${OPS_CHECK_INTERVAL_MINUTES:-5}"
+      SPOKEN_DELIVERY_SECONDS: "${SPOKEN_DELIVERY_SECONDS:-60}"
 
       # Scheduled planning cycle. Set PLANNING_TIMES empty to turn it off.
       PLANNING_TIMES: "${PLANNING_TIMES-morning=08:00,midday=12:30,evening=17:30}"
@@ -43,6 +44,12 @@ services:
       WORK_HOURS: "${WORK_HOURS:-9-17}"
       PROTECTED_TIMES: "${PROTECTED_TIMES-12:00-13:00}"
       PLANNING_EMAIL: "${PLANNING_EMAIL:-snippets}"
+
+      # Read-only admin key with the api.usage.read scope, so Catherine can
+      # read what OpenAI actually billed. Optional: without it, costs are
+      # estimated from the price table instead.
+      OPENAI_ADMIN_KEY: "${OPENAI_ADMIN_KEY:-}"
+      GARY_MODEL_PRICES_FILE: /data/model_prices.json
 
       # Continuous operation: how often Gary checks whether anything changed
       # between the scheduled cycles. 0 leaves only the three daily cycles.
@@ -168,6 +175,7 @@ services:
 
       ACTIVE_SESSION_SECONDS: "${ACTIVE_SESSION_SECONDS:-45}"
       FOLLOWUP_GRACE_SECONDS: "${FOLLOWUP_GRACE_SECONDS:-10}"
+      ANSWER_GRACE_SECONDS: "${ANSWER_GRACE_SECONDS:-20}"
 
       PULSE_SERVER: unix:/run/pulse/native
 

@@ -103,6 +103,8 @@ class AgentServices:
     spending_limits: SpendingLimits | None = None
     # The EASE ethical decision-making service, for Lauren.
     ease: EthicsFramework | None = None
+    # The model-usage ledger, for Catherine's cost reporting.
+    usage: "UsageLedger | None" = None
 
 
 @dataclass
@@ -604,17 +606,41 @@ def _read_purchases(call: ToolCall):
 
 
 def _read_ai_usage(call: ToolCall):
+    """What GaryCorp's thinking cost: every model call the company made."""
+    days = call.args.days
     with call.services.gary.db.read() as conn:
-        rows = Repositories.bind(conn).finance.agent_usage_since(_since(call, call.args.days))
+        specialist_runs = Repositories.bind(conn).finance.agent_usage_since(_since(call, days))
+
+    if call.services.usage is None:
+        return {
+            "days": days,
+            "specialist_runs": specialist_runs,
+            "costs": "not available",
+            "note": (
+                "The usage ledger is not configured on this deployment, so only "
+                "specialist token counts are available, without costs."
+            ),
+        }
+
+    summary = call.services.usage.summary(days)
     return {
-        "days": call.args.days,
-        "specialist_runs": rows,
-        "note": (
-            "Token usage of GaryCorp specialist runs, including their web searches. "
-            "reported_cost_usd is only present when the provider reported a cost; "
-            "otherwise estimate from tokens and the model's published prices. Gary's "
-            "voice conversations and planning runs are not included."
-        ),
+        "days": days,
+        "total_cost_usd": summary["total"]["cost_usd"],
+        "total_tokens": summary["total"]["total_tokens"],
+        "average_per_day_usd": summary["average_per_day_usd"],
+        "today": summary["today"],
+        "by_source": summary["by_source"],
+        "by_model": summary["by_model"],
+        "daily": summary["daily"][-14:],
+        "unpriced_models": summary["unpriced_models"],
+        "specialist_runs": specialist_runs,
+        "notes": summary["notes"]
+        + [
+            "Sources: planning_cycle is Gary's own thinking, specialist is an "
+            "employee's run, web_search their searches, voice Alex's conversations.",
+            "Costs are computed from the deployment's price table, not billed "
+            "amounts: treat them as close estimates and check the provider's invoice.",
+        ],
     }
 
 
@@ -785,7 +811,9 @@ TOOL_CATALOG: dict[str, ToolSpec] = {
         ),
         ToolSpec(
             "read_ai_usage",
-            "Read token usage and any reported cost of GaryCorp specialist runs, by agent and model.",
+            "Read what GaryCorp's AI actually costs: dollars and tokens by department "
+            "(planning, specialists, web search, voice), by model, and by day, plus today's "
+            "spend and any models with no price set.",
             UsageArgs,
             _sync(_read_ai_usage),
         ),
@@ -831,6 +859,12 @@ FORBIDDEN_TOOLS = frozenset(
         "delegate_to_agent",
         "charge_card",
         "read_card_number",
+        # Only Gary talks to Alex. A specialist's report is advice for Gary,
+        # not a channel to the principal, and cannot become one.
+        "ask_user",
+        "spoken_recent",
+        "spoken_repeat",
+        "question_answer",
     }
 )
 

@@ -20,7 +20,15 @@ UPCOMING_FOLLOWUP_HOURS = 24
 RECENT_ACTION_HOURS = 48
 STALE_PLANNING_RUN_HOURS = 2
 CONTEXT_LIST_LIMIT = 25
-PLANNING_TYPES = ("morning", "midday", "evening", "event_triggered", "manual")
+PLANNING_TYPES = (
+    "morning",
+    "midday",
+    "evening",
+    "event_triggered",
+    "manual",
+    # The continuous loop's short reactive cycle.
+    "management",
+)
 
 
 class RecordPlanRequest(RequestModel):

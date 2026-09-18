@@ -124,3 +124,17 @@ def test_daily_budget_caps_unattended_thinking_and_resets():
 def test_skipped_triggers_are_not_actionable():
     result = Triggers(reasons=["a report came back"], skipped="daily ceiling reached")
     assert not result
+
+
+def test_a_management_cycle_can_be_recorded(gary):
+    """The loop's own cycle type must be accepted by the service and the
+    database, or every trigger fails at the first step."""
+    context = gary.planning.get_planning_context("management")
+    run_id = context["planning_run_id"]
+    gary.planning.complete_cycle(run_id, {"summary": "Nothing needed doing.", "results": []})
+
+    with gary.db.read() as conn:
+        row = conn.execute(
+            "SELECT planning_type, status FROM planning_runs WHERE id = ?", (run_id,)
+        ).fetchone()
+    assert (row["planning_type"], row["status"]) == ("management", "completed")

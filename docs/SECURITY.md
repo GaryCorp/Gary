@@ -145,6 +145,30 @@ chmod 700 data
 - Use a virtual or limited card where possible, and freeze it at `/finance`
   when not needed.
 
+## Gary speaking first
+
+Gary can start a conversation (`ask_user`). Speaking changes nothing by
+itself, so it is a green action, but it spends the user's attention, which is
+the thing being protected here:
+
+- at most 3 unanswered questions at once, and at most 6 raised a day by the
+  unattended loops, on top of the caps those loops already have;
+- a planning cycle may raise at most one thing per cycle, and a question too
+  similar to one already open is refused, so a stuck state cannot turn into
+  repeated interruptions;
+- repeating a message is capped at 3, so "say that again" cannot loop;
+- the text is stripped of markdown and held to 600 characters before it
+  reaches the speaker;
+- questions expire unanswered after 72 hours, on the same clock as approvals;
+- nothing is marked spoken until a voice client has taken it, so a failed
+  delivery is retried rather than silently dropped, and the Joplin note in
+  **Gary › Spoken** gives an independent record of what was said and when.
+
+Only Gary talks to the user. `ask_user`, `spoken_recent`, `spoken_repeat` and
+`question_answer` are in `FORBIDDEN_TOOLS`, so no specialist and no future
+hire can be granted a channel to the principal, whatever a roster edit or a
+hiring proposal asks for.
+
 ## OAuth state
 
 The application validates the OAuth `state` parameter to reduce CSRF risk.
@@ -207,6 +231,12 @@ emails.
   want to read in full first.
 - The approvals page is local-only and protects its form with a per-session
   CSRF token and an origin check.
+- Every yellow action is now also raised with the user out loud when it is
+  proposed, so an approval is not left to be discovered. That is a
+  notification, not a new approval channel: `WEB_ONLY_APPROVAL_ACTIONS` is
+  unchanged, and a hire or a card purchase still cannot be approved by voice.
+  Announcing is best effort and wrapped in its own error handling, so an
+  approval stands whether or not the user could be told.
 - The audit log is append-only, enforced by database triggers, and no tool
   can delete records, the database, or the audit log.
 - `data/gary.db` and its backups are created owner-only (600, folder 700).
@@ -310,6 +340,31 @@ Gary's GitHub credential is deliberately weak (details in
 - a ticket needing security review cannot reach Done from Review, and an issue
   closed in an unexpected state is flagged for reconciliation rather than
   completing company work.
+
+## Hiring
+
+GaryCorp can add employees to itself, which is the one place the roster grows
+at runtime. The guarantees that make it safe:
+
+- a hire is a **yellow, web-page-only approval**: Gary proposes, only Alex
+  hires, and a misheard "yes" by voice cannot add a colleague. Gary now says
+  out loud that he has proposed one, so it is not found by accident, but
+  telling Alex is not approving: the approval still happens on the page;
+- what a hire may do is capped by `HIREABLE_TOOLS` in code — read-only company
+  data, web search and their own notebook. Money, security introspection,
+  EASE, delegation and every forbidden tool are out of reach whatever the
+  proposal asks for;
+- the ceiling is enforced three times: at proposal, when the row is written,
+  and on every roster load, so a hand-edited `hired_employees` row cannot
+  widen permissions. An invalid row is dropped and the previous roster stands;
+- the prompt frame is composed in code around Gary's text, which is scrubbed
+  of control characters, role headers and "ignore previous instructions"
+  phrasing, so a proposal cannot rewrite the employee's rules;
+- Gary cannot dismiss anyone: only Alex, from the command line.
+
+The residual risk is judgement, not privilege: Gary could propose a colleague
+the company does not need, which costs Alex the time to read and reject it,
+and model tokens if approved.
 
 ## Joplin tools
 

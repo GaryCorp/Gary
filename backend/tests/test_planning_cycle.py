@@ -390,3 +390,101 @@ def test_summary_includes_risks(gary):
     assert "- Commitment: Send Sam the draft is due Thu 5:00 PM." in markdown
     assert "**Tomorrow:**" in markdown
     assert task["id"]
+
+
+# --------------------------------------------------- raising it with the user
+
+
+def raise_it(message, reason="Only Alex can decide this", expects_reply=True):
+    return {
+        "action_type": "ask_user",
+        "message": message,
+        "expects_reply": expects_reply,
+        "reason": reason,
+    }
+
+
+def spoken(gary):
+    with gary.db.read() as conn:
+        return [
+            dict(row)
+            for row in conn.execute("SELECT * FROM spoken_messages ORDER BY created_at")
+        ]
+
+
+def test_a_cycle_can_decide_to_speak_to_the_user(gary):
+    planner = FakePlanner(
+        {
+            "summary": "s",
+            "briefing": "",
+            "actions": [raise_it("The landlord needs an answer on the lease by Friday.")],
+        }
+    )
+    result = run(cycle(gary, planner).run("management"))
+
+    assert result["rejected"] == []
+    messages = spoken(gary)
+    assert len(messages) == 1
+    assert messages[0]["text"] == "The landlord needs an answer on the lease by Friday."
+    assert messages[0]["source"] == "planning_cycle", "the cycle says where it came from, not the model"
+    assert messages[0]["status"] == "pending", "nothing is spoken until a voice client takes it"
+
+
+def test_a_cycle_interrupts_the_user_about_one_thing_at_most(gary):
+    planner = FakePlanner(
+        {
+            "summary": "s",
+            "briefing": "",
+            "actions": [
+                raise_it("The landlord needs an answer on the lease by Friday."),
+                raise_it("Should the newsletter project be closed for good?"),
+            ],
+        }
+    )
+    result = run(cycle(gary, planner).run("management"))
+
+    assert len(spoken(gary)) == 1
+    assert result["rejected"][0]["reason"] == "at most 1 thing raised with the user per cycle"
+
+
+def test_a_cycle_does_not_ask_what_is_already_open(gary):
+    first = FakePlanner(
+        {"summary": "s", "briefing": "", "actions": [raise_it("Should the newsletter project be closed?")]}
+    )
+    run(cycle(gary, first).run("management"))
+
+    later = FakePlanner(
+        {
+            "summary": "s",
+            "briefing": "",
+            "actions": [raise_it("Should the newsletter project be closed for good?")],
+        }
+    )
+    result = run(cycle(gary, later).run("management"))
+
+    assert len(spoken(gary)) == 1
+    assert result["rejected"][0]["reason"] == (
+        "the user has already been asked something very like this"
+    )
+
+
+def test_a_cycle_cannot_speak_in_markdown(gary):
+    planner = FakePlanner(
+        {
+            "summary": "s",
+            "briefing": "",
+            "actions": [raise_it("**The landlord** needs an answer on the _lease_ by Friday.")],
+        }
+    )
+    run(cycle(gary, planner).run("management"))
+
+    text = spoken(gary)[0]["text"]
+    assert "*" not in text and "_" not in text
+
+
+def test_a_cycle_needs_something_to_say(gary):
+    planner = FakePlanner({"summary": "s", "briefing": "", "actions": [raise_it("ok")]})
+    result = run(cycle(gary, planner).run("management"))
+
+    assert spoken(gary) == []
+    assert "at least" in result["rejected"][0]["reason"]

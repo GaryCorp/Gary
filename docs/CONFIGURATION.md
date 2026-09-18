@@ -229,6 +229,35 @@ Default:
 After a response finishes, the assistant remains active briefly so a follow-up
 can be spoken without another wake word.
 
+### `ANSWER_GRACE_SECONDS`
+
+Default:
+
+```text
+20
+```
+
+When Gary raises something with you unprompted and wants an answer, the voice
+service opens the microphone by itself once he has finished speaking, so you
+can reply without saying the wake word. This is how long it waits before going
+back to sleep. Longer than `FOLLOWUP_GRACE_SECONDS` because you have to notice
+you were asked before you can answer.
+
+### `SPOKEN_DELIVERY_SECONDS`
+
+Default:
+
+```text
+60
+```
+
+How often the backend retries what Gary decided to say but could not deliver,
+because no voice service was connected or it was quiet hours, and retries the
+Joplin note for anything already said. A message is recorded before it is
+spoken and marked spoken only once a voice client has taken it, so nothing is
+lost while this is waiting. See [USAGE.md](USAGE.md) for what this sounds
+like and where to read it afterwards.
+
 ## New email check
 
 ### `EMAIL_CHECK_INTERVAL_MINUTES`

@@ -13,8 +13,10 @@ from gary.services.engineering_service import EngineeringError
 from gary.tools import (
     agent_tools,
     approval_tools,
+    conversation_tools,
     engineering_tools,
     followup_tools,
+    hiring_tools,
     planning_tools,
     project_tools,
     task_tools,
@@ -32,7 +34,9 @@ REGISTRY: dict[str, Tool] = {
         planning_tools,
         approval_tools,
         agent_tools,
+        conversation_tools,
         engineering_tools,
+        hiring_tools,
     )
     for tool in module.TOOLS
 }

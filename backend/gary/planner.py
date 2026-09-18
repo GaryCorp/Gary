@@ -110,6 +110,29 @@ REVIEW_SCHEMA = {
     },
 }
 
+ASK_USER_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["action_type", "message", "expects_reply", "reason"],
+    "properties": {
+        "action_type": {"type": "string", "enum": ["ask_user"]},
+        "message": {
+            "type": "string",
+            "description": (
+                "Exactly what to say out loud, in plain spoken words. Only for "
+                "something that genuinely needs the user: a decision only they "
+                "can make, a commitment about to be missed, an approval about "
+                "to expire. Never a status update, which belongs in the briefing."
+            ),
+        },
+        "expects_reply": {
+            "type": "boolean",
+            "description": "True to ask a question and wait for an answer.",
+        },
+        "reason": _REASON,
+    },
+}
+
 PLAN_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -127,6 +150,7 @@ PLAN_SCHEMA = {
                     CREATE_TASK_SCHEMA,
                     DELEGATE_SCHEMA,
                     REVIEW_SCHEMA,
+                    ASK_USER_SCHEMA,
                 ]
             },
         },
@@ -205,6 +229,11 @@ Return:
   create_internal_task adds work that needs doing but is not yet a task.
   delegate_to_agent commissions one specialist's report; run_management_review
   asks several to review one question independently.
+  ask_user speaks to {principal} directly, outside any conversation, and is
+  only for something that genuinely needs him now: a decision only he can
+  make, a commitment about to be missed, an approval about to expire. It is
+  an interruption, so at most one a cycle, and never for a status update or
+  anything that can wait for the briefing.
   Delegate only when a department's expertise would change what the company
   does next, and say exactly what you need. Do not commission work you already
   have a report for, work already assigned to that specialist, or work nobody
@@ -320,4 +349,9 @@ class OpenAIPlanner:
         except (urllib.error.URLError, TimeoutError) as exc:
             raise PlannerError(f"Could not reach OpenAI: {exc}") from exc
 
-        return parse_plan(response_text(data))
+        plan = parse_plan(response_text(data))
+        # Carried out so the cycle can record what the call cost. Underscored
+        # because it is not part of the plan the model produced.
+        plan["_usage"] = data.get("usage") or {}
+        plan["_model"] = data.get("model") or self.model
+        return plan

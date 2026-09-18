@@ -8,6 +8,7 @@ from gary.services.approval_service import ApprovalService
 from gary.services.briefing import BriefingService
 from gary.services.calendar_blocks import WorkWeek
 from gary.services.common import Clock, default_clock
+from gary.services.conversation_service import ConversationService, ask_user_handler
 from gary.services.followup_service import CommitmentService, FollowupService
 from gary.services.internal_actions import internal_action_handlers
 from gary.services.planning_service import PlanningService
@@ -27,6 +28,7 @@ class Gary:
     actions: ActionService
     approvals: ApprovalService
     briefing: BriefingService
+    conversation: ConversationService
     week: WorkWeek
 
 
@@ -42,10 +44,16 @@ def build_gary(
     if migrate:
         apply_migrations(db)
 
-    handlers = {**internal_action_handlers(), **(action_handlers or {})}
-    actions = ActionService(db, handlers, clock)
     zone = ZoneInfo(timezone)
     week = work_week or WorkWeek()
+    conversation = ConversationService(db, zone, clock)
+
+    handlers = {
+        **internal_action_handlers(),
+        **ask_user_handler(conversation),
+        **(action_handlers or {}),
+    }
+    actions = ActionService(db, handlers, clock)
 
     return Gary(
         db=db,
@@ -58,5 +66,6 @@ def build_gary(
         actions=actions,
         approvals=ApprovalService(db, actions, clock),
         briefing=BriefingService(db, zone, week, clock),
+        conversation=conversation,
         week=week,
     )

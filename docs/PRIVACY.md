@@ -64,6 +64,20 @@ planning cycle below, and `planning_get_context` in conversation) reads
 Planning notes titled like an active project or "Preferences", and Gary's
 previous daily summary.
 
+## What Gary says out loud
+
+Everything Gary says when you did not ask him something — a new email, an
+operations alert, a briefing, an approval he needs, a question of his own — is
+recorded in `data/gary.db` before it is spoken and then written to a **Gary ›
+Spoken** notebook in your local Joplin app, one note a day, holding the time
+and the words. Nothing leaves your machine to get there: the record and the
+note are both local, and the text was already going to be spoken in the room.
+
+Open questions are sent to OpenAI at the start of a conversation, so the model
+knows what you are answering. They expire unanswered after 72 hours. Delete a
+day's note in Joplin as you would any other; the database keeps its own record
+for the audit log.
+
 ## Projects and tasks
 
 The operations database stays on your machine in `data/gary.db`, with daily

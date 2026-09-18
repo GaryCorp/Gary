@@ -5,11 +5,18 @@ This module is the authority for permissions. The agents table in SQLite
 mirrors identity for the org chart only; nothing reads permissions from the
 database, and no tool can change this module.
 
+GaryCorp can also hire employees for itself (gary/agents/hiring.py). Those
+add to *who* exists, never to what is possible: a hire's tools are re-checked
+against HIREABLE_TOOLS on every load, they cannot delegate, and a stored row
+that fails validation is dropped rather than trusted. The company can grow
+past what Alex wrote; it cannot grow past what Alex shipped.
+
 New departments are added here as new definitions with their own
 capabilities.
 """
 
 from dataclasses import dataclass
+from typing import Callable
 
 from gary.agents.models import GaryCorpAgentDefinition
 
@@ -307,22 +314,33 @@ class UnknownAgentError(ValueError):
 
 
 class AgentRegistry:
-    """Read-only roster lookup."""
+    """Read-only roster lookup: the static roster plus any validated hires."""
 
     def __init__(
         self,
         definitions: tuple[GaryCorpAgentDefinition, ...] = (GARY, SUSAN, DAVE, LINDA, CATHERINE, LAUREN),
         limits: AgentLimits | None = None,
+        hired_source: "Callable[[], tuple[GaryCorpAgentDefinition, ...]] | None" = None,
+        refresh_seconds: float = 30.0,
     ):
+        self._static = tuple(definitions)
+        self._hired_source = hired_source
+        self._refresh_seconds = refresh_seconds
+        self._loaded_at: float | None = None
+        self.limits = limits or AgentLimits()
+        self._definitions = self._build(definitions)
+        self.refresh()
+
+    def _build(self, definitions) -> dict:
+        """Validate a roster and return it, or raise. Nothing partial."""
         ids = [definition.agent_id for definition in definitions]
         if len(ids) != len(set(ids)):
             raise ValueError("agent ids must be unique")
-        self.limits = limits or AgentLimits()
-        self._definitions = {
+        built = {
             definition.agent_id: self._apply_limits(definition) for definition in definitions
         }
-        for definition in self._definitions.values():
-            if definition.reports_to and definition.reports_to not in self._definitions:
+        for definition in built.values():
+            if definition.reports_to and definition.reports_to not in built:
                 raise ValueError(f"{definition.agent_id} reports to unknown {definition.reports_to}")
             if definition.is_employee and definition.can_delegate:
                 # Only the manager delegates in this version.
@@ -330,9 +348,38 @@ class AgentRegistry:
             for tool in ("write_note", "list_own_notes", "read_own_note"):
                 if tool in definition.allowed_tools and not definition.notebook:
                     raise ValueError(f"{definition.agent_id} has {tool} but no notebook")
-        notebooks = [d.notebook.casefold() for d in self._definitions.values() if d.notebook]
+        notebooks = [d.notebook.casefold() for d in built.values() if d.notebook]
         if len(notebooks) != len(set(notebooks)):
             raise ValueError("each agent needs its own notebook")
+        return built
+
+    # ------------------------------------------------------------- hiring
+
+    def refresh(self, force: bool = False) -> None:
+        """Reload hired employees. A roster that fails validation is not
+        applied: the previous one stands and the failure is logged."""
+        import logging
+        import time
+
+        if self._hired_source is None:
+            return
+        now = time.monotonic()
+        if not force and self._loaded_at is not None and now - self._loaded_at < self._refresh_seconds:
+            return
+        self._loaded_at = now
+        try:
+            hired = tuple(self._hired_source())
+            candidate = self._build((*self._static, *hired))
+        except Exception as exc:
+            logging.getLogger("gary.agents.roster").error(
+                "Keeping the previous roster: hired employees failed validation: %s", exc
+            )
+            return
+        self._definitions = candidate
+
+    def _fresh(self) -> dict:
+        self.refresh()
+        return self._definitions
 
     def _apply_limits(self, definition: GaryCorpAgentDefinition) -> GaryCorpAgentDefinition:
         if not definition.is_employee:
@@ -346,7 +393,7 @@ class AgentRegistry:
         )
 
     def get(self, agent_id: str) -> GaryCorpAgentDefinition:
-        definition = self._definitions.get((agent_id or "").strip().lower())
+        definition = self._fresh().get((agent_id or "").strip().lower())
         if definition is None:
             raise UnknownAgentError(
                 f"Unknown agent {agent_id!r}. GaryCorp employees: {', '.join(self.employee_ids())}"
@@ -362,13 +409,16 @@ class AgentRegistry:
         return definition
 
     def all(self) -> list[GaryCorpAgentDefinition]:
-        return list(self._definitions.values())
+        return list(self._fresh().values())
 
     def employees(self) -> list[GaryCorpAgentDefinition]:
-        return [d for d in self._definitions.values() if d.is_employee]
+        return [d for d in self._fresh().values() if d.is_employee]
 
     def employee_ids(self) -> list[str]:
         return [d.agent_id for d in self.employees() if d.active]
 
     def manager(self) -> GaryCorpAgentDefinition:
-        return self._definitions[MANAGER_ID]
+        return self._fresh()[MANAGER_ID]
+
+    def hired(self) -> list[GaryCorpAgentDefinition]:
+        return [d for d in self._fresh().values() if d.hired]

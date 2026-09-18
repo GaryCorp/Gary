@@ -55,6 +55,12 @@ REPORT_GUIDANCE = {
         "savings_opportunities; risks; decisions_needed; recommendation; confidence "
         "from 0 to 1. Mention any purchase you requested in the summary."
     ),
+    "advisory": (
+        "Return an AdvisoryReport: summary; findings; recommendation; risks; "
+        "assumptions; uncertainties; decisions_needed (what Alex must decide); "
+        "out_of_scope (anything that belongs to another department); sources "
+        "(URLs or records you relied on); confidence from 0 to 1."
+    ),
     "ethics": (
         "Return an EthicsReport: summary; ethical_assessment (acceptable, "
         "acceptable_with_safeguards, needs_revision, unacceptable); stakeholders "
@@ -113,10 +119,13 @@ class GaryCorpAgentRunner:
         model: str,
         limits: AgentLimits | None = None,
         on_finished: Callable[[dict], Awaitable[None]] | None = None,
+        usage=None,
     ):
         self.services = services
         self.executor = executor
         self.model = model
+        # The model-usage ledger; runs are uncosted without it.
+        self.usage = usage
         self.limits = limits or services.registry.limits
         self.on_finished = on_finished
         self._semaphore = asyncio.Semaphore(self.limits.max_concurrent_runs)
@@ -293,6 +302,36 @@ class GaryCorpAgentRunner:
             data["ease_analyses"] = state.ease_analyses
         return REPORT_MODELS[agent.report_kind].model_validate(data).model_dump(mode="json")
 
+    def _record_usage(self, agent, state: RunState, usage: dict, model: str | None) -> None:
+        """The specialist's own model call and, separately, its web searches:
+        they run on different models and are priced differently."""
+        if self.usage is None:
+            return
+        from gary.finance.pricing import usage_from_tokens
+
+        numbers = _usage_numbers(usage)
+        self.usage.record(
+            "specialist",
+            model or self.model,
+            usage_from_tokens(numbers["prompt_tokens"] or 0, numbers["completion_tokens"] or 0),
+            reported_cost_usd=numbers["cost_usd"],
+            entity_type="agent_assignment",
+            entity_id=state.assignment_id,
+            detail=agent.agent_id,
+        )
+        if state.tool_usage.get("total_tokens"):
+            self.usage.record(
+                "web_search",
+                getattr(self.services.web, "model", None) or "unknown",
+                usage_from_tokens(
+                    state.tool_usage.get("input_tokens", 0),
+                    state.tool_usage.get("output_tokens", 0),
+                ),
+                entity_type="agent_assignment",
+                entity_id=state.assignment_id,
+                detail=f"{agent.agent_id} web search",
+            )
+
     async def run_assignment(self, assignment_id: str, shared_reports: list[dict] | None = None) -> dict:
         async with self._semaphore:
             return await self._run(assignment_id, shared_reports)
@@ -338,6 +377,7 @@ class GaryCorpAgentRunner:
                     if attempts > self.limits.output_retries:
                         raise _InvalidOutput(feedback) from exc
 
+            self._record_usage(agent, state, usage, result.model)
             usage["prompt_tokens"] = usage.get("prompt_tokens", 0) + state.tool_usage.get("input_tokens", 0)
             usage["completion_tokens"] = usage.get("completion_tokens", 0) + state.tool_usage.get("output_tokens", 0)
             usage["total_tokens"] = usage.get("total_tokens", 0) + state.tool_usage.get("total_tokens", 0)

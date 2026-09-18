@@ -32,6 +32,12 @@ from gary.services.calendar_blocks import (
     parse_work_hours,
     protected_intervals,
 )
+from gary.models.conversation import MESSAGE_MAX, MESSAGE_MIN, spoken_text
+from gary.services.common import (
+    looks_like_repeat,
+    normalize_title,
+    objective_key,
+)
 from gary.services.readiness import CLOSED_STATUSES, task_readiness
 from gary.timeutil import format_utc, parse_timestamp, to_datetime, to_local
 from gary.tools.base import TIMESTAMP_FIELDS
@@ -68,6 +74,8 @@ CYCLE_ACTION_TYPES = (
     "create_internal_task",
     "delegate_to_agent",
     "run_management_review",
+    # Gary deciding the cycle found something Alex himself needs to hear.
+    "ask_user",
 )
 # Caps for unattended cycles. The company runs itself between conversations,
 # so the limits are what stops a cycle commissioning work all day: a cycle
@@ -75,6 +83,9 @@ CYCLE_ACTION_TYPES = (
 MAX_CYCLE_TASKS = 3
 MAX_CYCLE_DELEGATIONS = 2
 MAX_CYCLE_REVIEWS = 1
+# A cycle may interrupt Alex about one thing, not several. The rest keeps
+# until the next briefing.
+MAX_CYCLE_QUESTIONS = 1
 MAX_DAILY_DELEGATIONS = 4
 MAX_DAILY_REVIEWS = 1
 # An objective close enough to recent work for the same specialist is a loop,
@@ -88,10 +99,6 @@ MAX_BLOCK_MINUTES = 240
 MIN_MOVE_MINUTES = 30
 FOLLOWUP_HORIZON_DAYS = 7
 MAX_RELEVANT_NOTES = 5
-OBJECTIVE_STOPWORDS = frozenset(
-    "about with what which their there this that from into been have been would could "
-    "should company gary garycorp report review research assess evaluate please".split()
-)
 PREFERENCES_NOTE_TITLE = "Preferences"
 DAILY_SUMMARY_PREFIX = "Daily summary "
 # Which brief each cycle type is built on.
@@ -176,10 +183,6 @@ def due_planning_types(
 
 # ------------------------------------------------------------------- notes
 
-def normalize_title(value: str) -> str:
-    return " ".join(value.split()).casefold()
-
-
 def select_relevant_notes(notes: list[dict], project_names: list[str]) -> list[dict]:
     """Planning notes titled like an active project, or "Preferences"."""
     wanted = {normalize_title(name) for name in project_names}
@@ -215,29 +218,6 @@ def overlaps(start: str, end: str, intervals: list[tuple[str, str]]) -> bool:
     return any(start < other_end and other_start < end for other_start, other_end in intervals)
 
 
-def objective_key(text: str) -> frozenset[str]:
-    """Content words of an objective, for spotting work already commissioned."""
-    words = {
-        word
-        for word in normalize_title(text).split()
-        if len(word) > 3 and word not in OBJECTIVE_STOPWORDS
-    }
-    return frozenset(words)
-
-
-def looks_like_repeat(new: frozenset[str], existing: list[frozenset[str]]) -> bool:
-    """True when most of an objective's content words match earlier work."""
-    if not new:
-        return False
-    for other in existing:
-        if not other:
-            continue
-        overlap = len(new & other) / len(new)
-        if overlap >= 0.6:
-            return True
-    return False
-
-
 def _bounded_priority(value) -> int:
     return min(10, max(1, value)) if isinstance(value, int) else 5
 
@@ -260,7 +240,13 @@ def validate_cycle_actions(
     accepted, rejected, planned = [], [], []
     seen_tasks, seen_followups = set(), set()
     seen_titles: set[str] = set()
-    counts = {"create_internal_task": 0, "delegate_to_agent": 0, "run_management_review": 0}
+    seen_messages: list[frozenset[str]] = []
+    counts = {
+        "create_internal_task": 0,
+        "delegate_to_agent": 0,
+        "run_management_review": 0,
+        "ask_user": 0,
+    }
     delegated_agents: set[str] = set()
     earliest = format_utc(to_datetime(now) + dt.timedelta(minutes=MIN_LEAD_MINUTES))
     latest = format_utc(to_datetime(now) + dt.timedelta(hours=horizon_hours))
@@ -273,6 +259,9 @@ def validate_cycle_actions(
             normalize_title(f["title"]) for f in repos.followups.list_pending()
         }
         open_task_titles = {normalize_title(t["title"]) for t in repos.tasks.list_open()}
+        # What Gary has already put to Alex and is still waiting on, so a
+        # cycle cannot ask the same thing again.
+        open_message_keys = [objective_key(m["topic_key"]) for m in repos.spoken.list_open()]
         # What the team is already doing, so a cycle cannot re-commission it.
         since = format_utc(to_datetime(now) - dt.timedelta(days=REPEAT_ASSIGNMENT_DAYS))
         recent_assignments: dict[str, list[frozenset[str]]] = {}
@@ -436,6 +425,37 @@ def validate_cycle_actions(
                         "task_title": f"review: {topic[:80]}",
                     }
                 )
+                counts[action_type] += 1
+                continue
+
+            if action_type == "ask_user":
+                message = spoken_text(str(proposal.get("message") or ""))[:MESSAGE_MAX]
+                if len(message) < MESSAGE_MIN:
+                    reject(f"a message to the user needs at least {MESSAGE_MIN} characters")
+                    continue
+                if counts[action_type] >= MAX_CYCLE_QUESTIONS:
+                    reject(f"at most {MAX_CYCLE_QUESTIONS} thing raised with the user per cycle")
+                    continue
+                key = objective_key(message)
+                if looks_like_repeat(key, open_message_keys + seen_messages):
+                    reject("the user has already been asked something very like this")
+                    continue
+                accepted.append(
+                    {
+                        "action_type": action_type,
+                        "payload": {
+                            "message": message,
+                            "expects_reply": bool(proposal.get("expects_reply", True)),
+                            # Python decides where this came from, not the model.
+                            "source": "planning_cycle",
+                        },
+                        "reason": str(proposal.get("reason") or "")[:1000] or None,
+                        "task_id": None,
+                        "project_id": None,
+                        "task_title": message[:80],
+                    }
+                )
+                seen_messages.append(key)
                 counts[action_type] += 1
                 continue
 
@@ -604,6 +624,7 @@ class PlanningCycle:
         max_actions: int = 5,
         horizon_hours: int = 72,
         team: "TeamSource | None" = None,
+        usage=None,
     ):
         self.gary = gary
         self.planner = planner
@@ -613,6 +634,8 @@ class PlanningCycle:
         # The GaryCorp specialists. Without it a cycle plans Alex's own work
         # only, and every delegation is rejected.
         self.team = team
+        # The model-usage ledger. Without it cycles still run, uncosted.
+        self.usage = usage
         self.max_actions = max_actions
         self.horizon_hours = horizon_hours
         # One cycle at a time, even if a scheduled and a requested run collide.
@@ -632,6 +655,21 @@ class PlanningCycle:
                 if not key.endswith("_json")
             }
         return value
+
+    def _record_usage(self, plan: dict, run_id: str, planning_type: str) -> None:
+        """What this cycle's model call cost, if the ledger is connected."""
+        if self.usage is None:
+            return
+        from gary.finance.pricing import usage_from_openai
+
+        self.usage.record(
+            "planning_cycle",
+            plan.get("_model") or "unknown",
+            usage_from_openai(plan.get("_usage")),
+            entity_type="planning_run",
+            entity_id=run_id,
+            detail=f"{planning_type} cycle",
+        )
 
     async def _team_state(self, now: str) -> tuple[dict | None, list[dict], str | None]:
         """Who the specialists are, what they are already doing, and the
@@ -787,6 +825,7 @@ class PlanningCycle:
             }
 
             plan = await self.planner.create_plan(planning_input)
+            self._record_usage(plan, run_id, planning_type)
 
             accepted, rejected = await asyncio.to_thread(
                 validate_cycle_actions,

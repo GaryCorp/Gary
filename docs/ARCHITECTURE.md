@@ -42,6 +42,8 @@ Responsibilities:
 - Engineering tickets in the private GitHub repository and Project, and the
   read-only `/engineering/status` page.
 - Hourly new email check, and follow-up and overdue alerts.
+- Everything Gary says unprompted: recorded in SQLite, delivered to the voice
+  service, and mirrored to the Gary › Spoken notebook.
 - Input validation.
 
 ### 3. Google Calendar
@@ -186,6 +188,9 @@ service (see [Joplin proxy](#8-joplin-proxy-container)).
 
 Note safeguards:
 
+- Gary › Spoken is written by the backend, not by a tool: one note a day
+  holding what Gary said out loud and when. Gary reads his own record from
+  SQLite (`spoken_recent`), never from Joplin.
 - No tool reads note text. `list_joplin_notes` returns titles, notebook names,
   and update times (up to 20, newest first). Notes cannot be edited or moved,
   and notebooks cannot be deleted. Only the scheduled planning cycle reads
@@ -462,6 +467,38 @@ pre-roll + microphone PCM24k
        v
    speakers
 ```
+
+### Gary speaking first
+
+Gary can also start the exchange, with no wake word and nobody having asked
+him anything. Deciding to speak and actually speaking are deliberately
+separate, because a voice service that is not listening must delay a message
+rather than lose it:
+
+```text
+ approval requested / planning cycle / ask_user / new email / ops alert
+            |
+            v
+   spoken_messages row  (status: pending)      <-- recorded before anything is said
+            |
+            v
+      SpokenDelivery
+       |          |
+       |          +--> Gary > Spoken note in Joplin   (retried until written)
+       v
+ voice container --> local Piper TTS --> speakers
+       |
+       +-- expects_reply: microphone opens by itself
+                |
+                v
+          the answer, without a wake word
+```
+
+A message becomes `spoken` only once a voice client has taken it. Nothing
+connected, or quiet hours, leaves it `pending` for the next delivery pass, and
+a Joplin outage leaves `joplin_written_at` NULL and is retried. The caps on
+how often Gary may do this live in `gary/services/conversation_service.py`;
+see [SECURITY.md](SECURITY.md).
 
 ## Realtime tool calls
 

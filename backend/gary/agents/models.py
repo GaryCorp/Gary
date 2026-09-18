@@ -11,7 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-ReportKind = Literal["research", "security", "operations", "finance", "ethics"]
+ReportKind = Literal["research", "security", "operations", "finance", "ethics", "advisory"]
 
 LIST_LIMIT = 20
 TEXT_LIMIT = 4000
@@ -49,6 +49,10 @@ class GaryCorpAgentDefinition(BaseModel):
 
     context_profile: ReportKind | None = None
     report_kind: ReportKind | None = None
+
+    # True for an employee GaryCorp hired for itself, rather than one Alex
+    # wrote into the roster. Their capabilities are capped by HIREABLE_TOOLS.
+    hired: bool = False
 
     max_iterations: int = Field(default=8, ge=1, le=25)
     max_execution_seconds: int | None = Field(default=300, ge=1, le=1800)
@@ -276,12 +280,44 @@ class EthicsReport(EthicsFindings):
         return _bounded_items(value)
 
 
+# ------------------------------------------------------------------ advisory
+# The report a hired employee returns: general enough for any specialty Gary
+# invents, still structured and validated like every other report.
+
+
+class AdvisoryFindings(ReportModel):
+    summary: str
+    findings: list[str]
+    recommendation: str
+    risks: list[str]
+    assumptions: list[str]
+    uncertainties: list[str]
+    decisions_needed: list[str]
+    out_of_scope: list[str]
+    sources: list[str]
+    confidence: float
+
+
+class AdvisoryReport(AdvisoryFindings):
+    assignment_id: str
+    summary: str = Field(min_length=1, max_length=TEXT_LIMIT)
+    recommendation: str = Field(min_length=1, max_length=TEXT_LIMIT)
+    confidence: float = Field(ge=0, le=1)
+
+    @field_validator("findings", "risks", "assumptions", "uncertainties",
+                     "decisions_needed", "out_of_scope", "sources")
+    @classmethod
+    def bounded(cls, value):
+        return _bounded_items(value)
+
+
 FINDINGS_MODELS: dict[str, type[ReportModel]] = {
     "research": ResearchFindings,
     "security": SecurityFindings,
     "operations": OperationsFindings,
     "finance": FinanceFindings,
     "ethics": EthicsFindings,
+    "advisory": AdvisoryFindings,
 }
 REPORT_MODELS: dict[str, type[ReportModel]] = {
     "research": ResearchReport,
@@ -289,6 +325,7 @@ REPORT_MODELS: dict[str, type[ReportModel]] = {
     "operations": OperationsReport,
     "finance": FinanceReport,
     "ethics": EthicsReport,
+    "advisory": AdvisoryReport,
 }
 
 
@@ -301,5 +338,8 @@ class ManagementReview(BaseModel):
     operations: OperationsReport | None = None
     finance: FinanceReport | None = None
     ethics: EthicsReport | None = None
+    # Reports from hired employees, by agent id: the review model cannot have
+    # a field per specialty Gary might invent.
+    advisory: dict[str, AdvisoryReport] = Field(default_factory=dict)
     follow_ups: list[dict] = Field(default_factory=list)
     assignments: list[dict] = Field(default_factory=list)

@@ -36,6 +36,7 @@ REVIEW_FRAMING = {
     "security": "Threat-model it and determine the minimum safe permission set and required controls.",
     "operations": "Assess its operational value, what implementing it would require, and whether the timing is realistic.",
     "finance": "Assess what it would cost up front and over time, whether it fits the budget, and cheaper alternatives. Do not request any purchase.",
+    "advisory": "Assess it within your specialty and say what the company should do about it.",
     "ethics": "Run the EASE framework on it and assess who it affects, its ethical risks, and the safeguards it needs.",
 }
 
@@ -378,8 +379,13 @@ class AgentService:
             if assignment["review_round"] == 2:
                 result.follow_ups.append(presented)
             elif assignment["status"] == "completed":
-                setattr(result, agent.report_kind,
-                        REPORT_MODELS[agent.report_kind].model_validate_json(assignment["result_json"]))
+                report = REPORT_MODELS[agent.report_kind].model_validate_json(
+                    assignment["result_json"]
+                )
+                if agent.report_kind == "advisory":
+                    result.advisory[agent.agent_id] = report
+                else:
+                    setattr(result, agent.report_kind, report)
         return result
 
     def team(self) -> dict:

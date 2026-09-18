@@ -117,6 +117,13 @@ class ApprovalService:
                     "awaiting_approval",
                     "approved" if decision == "approved" else "rejected",
                 )
+            # Gary may have put this to the user out loud and be waiting on an
+            # answer. However it was actually settled -- by voice or on the
+            # page -- he has his answer now and should stop asking.
+            question = repos.spoken.get_by_approval(approval_id)
+            if question is not None and question["status"] == "spoken":
+                repos.spoken.answer(question["id"], f"{decision} on the {channel}", now)
+
             repos.audit.write(
                 actor,
                 f"approval_{decision}",

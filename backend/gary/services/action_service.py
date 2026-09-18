@@ -59,10 +59,16 @@ class ActionService:
         db: Database,
         handlers: dict[str, ActionHandler],
         clock: Clock = default_clock,
+        on_approval_requested: Callable[[dict], Awaitable[None]] | None = None,
     ):
         self.db = db
         self.handlers = handlers
         self.clock = clock
+        # Told about every yellow action, after the approval is committed, so
+        # the application can raise it with the user instead of leaving it to
+        # be found on the approvals page. Never affects the proposal: an
+        # approval that was recorded stands whether or not it was announced.
+        self.on_approval_requested = on_approval_requested
 
     def supported_action_types(self) -> list[str]:
         return sorted(
@@ -184,6 +190,20 @@ class ActionService:
         if risk == GREEN:
             return {**await self.execute(action["id"]), "risk_level": risk}
 
+        await self._announce_approval(
+            {
+                "approval_id": approval["id"],
+                "action_id": action["id"],
+                "action_type": action_type,
+                "summary": summary,
+                "risk_level": risk,
+                "reason": request.reason,
+                # So the application can say something more speakable than the
+                # page's summary, which is written to be read rather than heard.
+                "payload": payload_data,
+            }
+        )
+
         return {
             "action_id": action["id"],
             "approval_id": approval["id"],
@@ -191,6 +211,18 @@ class ActionService:
             "risk_level": risk,
             "summary": summary,
         }
+
+    async def _announce_approval(self, approval: dict) -> None:
+        if self.on_approval_requested is None:
+            return
+        try:
+            await self.on_approval_requested(approval)
+        except Exception:
+            # Telling the user is best effort; the approval is already
+            # recorded and the approvals page still has it.
+            logger.exception(
+                "Could not raise approval %s with the user", approval["approval_id"]
+            )
 
     async def execute(self, action_id: str, actor: str = GARY_ACTOR) -> dict:
         """Run an approved action once."""

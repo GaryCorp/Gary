@@ -173,8 +173,12 @@ class FakeWeb:
                 "_usage": {"input_tokens": 900, "output_tokens": 100, "total_tokens": 1000}}
 
 
-def build_team(gary, executor=None, limits=None, finished=None):
-    registry = AgentRegistry(limits=limits or AgentLimits(max_execution_seconds=5))
+def build_team(gary, executor=None, limits=None, finished=None, hired_source=None):
+    registry = AgentRegistry(
+        limits=limits or AgentLimits(max_execution_seconds=5),
+        hired_source=hired_source,
+        refresh_seconds=0,
+    )
     validate_roster_tools(registry)
     services = AgentServices(
         gary=gary,
@@ -385,7 +389,7 @@ def test_gateway_tools_filter_sensitive_data(gary):
     assert {a["agent_id"] for a in permissions["agents"]} == {"gary", "susan", "dave", "linda", "catherine", "lauren"}
     assert policy["action_policies"]["spend_money"] == "red"
     assert policy["action_policies"]["card_purchase"] == "yellow"
-    assert policy["web_only_approval_actions"] == ["card_purchase"]
+    assert policy["web_only_approval_actions"] == ["card_purchase", "hire_employee"]
     assert all("details_json" not in e and "details" not in e for e in audit["events"])
 
 

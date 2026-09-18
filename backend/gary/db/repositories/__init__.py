@@ -17,10 +17,13 @@ from gary.db.repositories.engineering import (
     GitHubProjectFieldRepository,
 )
 from gary.db.repositories.finance import FinanceRepository
+from gary.db.repositories.hiring import HiredEmployeeRepository
 from gary.db.repositories.followups import FollowupRepository
 from gary.db.repositories.planning_runs import PlanningRunRepository
 from gary.db.repositories.projects import ProjectRepository
+from gary.db.repositories.spoken import SpokenMessageRepository
 from gary.db.repositories.tasks import TaskRepository
+from gary.db.repositories.usage import ModelUsageRepository
 
 
 @dataclass
@@ -43,6 +46,9 @@ class Repositories:
     agent_runs: AgentRunRepository
     finance: FinanceRepository
     engineering: EngineeringTicketRepository
+    usage: ModelUsageRepository
+    hires: HiredEmployeeRepository
+    spoken: SpokenMessageRepository
     project_fields: GitHubProjectFieldRepository
 
     @classmethod
@@ -63,6 +69,9 @@ class Repositories:
             agent_runs=AgentRunRepository(conn),
             finance=FinanceRepository(conn),
             engineering=EngineeringTicketRepository(conn),
+            usage=ModelUsageRepository(conn),
+            hires=HiredEmployeeRepository(conn),
+            spoken=SpokenMessageRepository(conn),
             project_fields=GitHubProjectFieldRepository(conn),
         )
 
@@ -80,9 +89,12 @@ __all__ = [
     "EngineeringTicketRepository",
     "GitHubProjectFieldRepository",
     "FinanceRepository",
+    "HiredEmployeeRepository",
     "FollowupRepository",
+    "ModelUsageRepository",
     "PlanningRunRepository",
     "ProjectRepository",
+    "SpokenMessageRepository",
     "Repositories",
     "TaskRepository",
 ]
