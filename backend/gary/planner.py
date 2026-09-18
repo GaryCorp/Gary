@@ -127,7 +127,10 @@ ASK_USER_SCHEMA = {
         },
         "expects_reply": {
             "type": "boolean",
-            "description": "True to ask a question and wait for an answer.",
+            "description": (
+                "True to ask a question and wait for an answer. The user answers "
+                "when he next says the wake word, so the message must ask him to."
+            ),
         },
         "reason": _REASON,
     },

@@ -2501,20 +2501,18 @@ def spoken_note_line(message: dict, again: bool = False) -> str:
 
 
 async def send_announcement(text: str, expects_reply: bool = False) -> bool:
-    """Push one line to every connected voice client. True if any took it."""
+    """Push one line to every connected voice client. True if any took it.
+
+    ``expects_reply`` is part of the VoiceSender protocol and is recorded
+    against the message, but it is deliberately not sent to the client: the
+    microphone opens on the wake word and nothing else. Gary asks, and Alex
+    answers when he chooses to.
+    """
     delivered = False
     for websocket in list(voice_connections):
         try:
             await websocket.send_text(
-                json.dumps(
-                    {
-                        "type": "bridge.announce",
-                        "message": text,
-                        # The client opens the microphone after speaking this,
-                        # so Alex can answer without the wake word.
-                        "expects_reply": expects_reply,
-                    }
-                )
+                json.dumps({"type": "bridge.announce", "message": text})
             )
             delivered = True
         except Exception:
@@ -2576,7 +2574,10 @@ def approval_announcement(approval: dict) -> str:
             f"Say {WAKE_WORD_DISPLAY} and tell me no to turn it down, or approve "
             "it on the approvals page at localhost port 8000 slash approvals."
         )
-    return f"I need your approval for something. {said} Say yes to approve or no to reject."
+    return (
+        f"I need your approval for something. {said} "
+        f"Say {WAKE_WORD_DISPLAY} when you want to answer, and tell me yes or no."
+    )
 
 
 async def raise_approval_with_user(approval: dict) -> None:
@@ -4149,8 +4150,11 @@ can make, a commitment about to be missed, an approval about to expire, a
 proposal of yours waiting on his answer. Never for a status update, never to
 report that work is going fine, and never for anything that can wait for the
 next briefing. An interruption you did not need to make costs more than it
-gives. Set expects_reply when you want an answer, and he can reply without
-saying {WAKE_WORD_DISPLAY}; leave it off when there is nothing to answer.
+gives. Set expects_reply when you want an answer, and leave it off when there
+is nothing to answer. You cannot open the microphone: he answers when he says
+{WAKE_WORD_DISPLAY}, which may be minutes or hours later, so a question must
+make sense on its own and must end by asking him to say {WAKE_WORD_DISPLAY}.
+Until then it stays open, and you raise it again rather than assume an answer.
 
 Everything you say out loud, whether he asked or not, is written to the Spoken
 notebook in Joplin, one note a day. When he asks what you said, what he

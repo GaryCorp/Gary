@@ -45,11 +45,13 @@ class AskUserPayload(RequestModel):
     """
 
     message: str = Field(min_length=MESSAGE_MIN, max_length=MESSAGE_MAX)
-    # A question opens the microphone and stays open until answered; a notice
-    # is Gary keeping Alex informed and closes itself.
+    # A question stays open until Alex answers it, which he does by saying
+    # the wake word in his own time; a notice is Gary keeping Alex informed
+    # and closes itself.
     expects_reply: bool = True
-    # "now" interrupts at the next opportunity; "next_time" waits for the
-    # next conversation. Neither overrides quiet hours.
+    # "now" is said at the next opportunity; "next_time" waits for the next
+    # conversation. Neither overrides quiet hours, and neither opens the
+    # microphone: nothing does but the wake word.
     urgency: str = "now"
     source: str = "voice"
     approval_id: EntityId | None = None

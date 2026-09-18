@@ -203,12 +203,15 @@ def test_nothing_is_marked_spoken_that_nobody_heard(gary, notebook):
     assert silent.said == [("Do you want me to move tomorrow's demo block to the morning?", True)]
 
 
-def test_a_question_opens_the_microphone_and_a_notice_does_not(gary, delivery, voice):
+def test_delivery_says_whether_an_answer_is_wanted(gary, delivery, voice):
+    """The flag reaches the sender and is kept against the message. It does
+    not open the microphone: only the wake word does that."""
     ask(gary, "Do you want me to move tomorrow's demo block to the morning?")
     ask(gary, "The engineering sync finished without errors.", expects_reply=False)
     run(delivery.deliver_pending())
 
     assert [expects_reply for _, expects_reply in voice.said] == [True, False]
+    assert len(gary.conversation.awaiting_answer()) == 1
 
 
 def test_speaking_is_audited_once(gary, delivery):

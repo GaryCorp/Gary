@@ -229,20 +229,6 @@ Default:
 After a response finishes, the assistant remains active briefly so a follow-up
 can be spoken without another wake word.
 
-### `ANSWER_GRACE_SECONDS`
-
-Default:
-
-```text
-20
-```
-
-When Gary raises something with you unprompted and wants an answer, the voice
-service opens the microphone by itself once he has finished speaking, so you
-can reply without saying the wake word. This is how long it waits before going
-back to sleep. Longer than `FOLLOWUP_GRACE_SECONDS` because you have to notice
-you were asked before you can answer.
-
 ### `SPOKEN_DELIVERY_SECONDS`
 
 Default:

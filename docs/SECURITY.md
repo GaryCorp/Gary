@@ -162,7 +162,10 @@ the thing being protected here:
 - questions expire unanswered after 72 hours, on the same clock as approvals;
 - nothing is marked spoken until a voice client has taken it, so a failed
   delivery is retried rather than silently dropped, and the Joplin note in
-  **Gary › Spoken** gives an independent record of what was said and when.
+  **Gary › Spoken** gives an independent record of what was said and when;
+- **speaking never opens the microphone.** Gary can say something unprompted,
+  but only the local wake word starts a session, so nothing he decides to do
+  can begin recording. He asks, and waits.
 
 Only Gary talks to the user. `ask_user`, `spoken_recent`, `spoken_repeat` and
 `question_answer` are in `FORBIDDEN_TOOLS`, so no specialist and no future

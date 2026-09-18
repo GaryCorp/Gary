@@ -487,12 +487,17 @@ rather than lose it:
        |          +--> Gary > Spoken note in Joplin   (retried until written)
        v
  voice container --> local Piper TTS --> speakers
-       |
-       +-- expects_reply: microphone opens by itself
-                |
-                v
-          the answer, without a wake word
+                                            |
+                                            v
+                              Alex says the wake word, in his own time
+                                            |
+                                            v
+                               the normal active-state flow above
 ```
+
+The microphone is never opened by the backend. A question Gary asks stays
+open until Alex answers it or it expires, so the spoken text has to tell him
+to say the wake word.
 
 A message becomes `spoken` only once a voice client has taken it. Nothing
 connected, or quiet hours, leaves it `pending` for the next delivery pass, and

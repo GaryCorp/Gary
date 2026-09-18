@@ -125,8 +125,9 @@ TOOLS = [
             {
                 "message": string("Exactly what to say, in plain spoken words."),
                 "expects_reply": boolean(
-                    "True to ask a question and open the microphone for his answer; "
-                    "false to tell him something that needs no reply."
+                    "True to ask a question you will wait on: he answers when he "
+                    "next says the wake word, so say in the message that he should. "
+                    "False to tell him something that needs no reply."
                 ),
                 "urgency": string(
                     "now to raise it at the next opportunity, next_time to wait "

@@ -360,13 +360,14 @@ page:
 
 ```text
 Assistant: I need your approval for something. Email Sam with the subject "Draft".
-           Say yes to approve or no to reject.
-User: Yes, approve it.
+           Say Gary when you want to answer, and tell me yes or no.
+User: Gary, yes, approve it.
 Assistant: Approved and sent.
 ```
 
-After he asks, the microphone opens on its own for about twenty seconds
-(`ANSWER_GRACE_SECONDS`), so you can answer without saying the wake word.
+The microphone only ever opens on the wake word, including here: Gary tells
+you something needs you and then waits. He does not start listening on his
+own, and the question stays open until you get to it.
 
 You can still use `http://localhost:8000/approvals`, which shows the exact
 recipient, text, or times, and it remains the only way to approve a card
