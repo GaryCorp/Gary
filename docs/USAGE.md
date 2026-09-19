@@ -402,6 +402,21 @@ notebook. If the voice service was down or it was quiet hours
 (`EMAIL_CHECK_QUIET_HOURS`), the message stays queued and he says it at the
 first opportunity rather than dropping it.
 
+**Not everything interrupts you.** Gary decides whether something is worth
+speaking now or worth holding. Anything he holds is never announced; it waits
+and he works it into the next conversation you start:
+
+```text
+User: Gary, what's on this afternoon?
+Assistant: Two blocks, filming at two and the edit at four. While you're here —
+           the lease renewal is due in three weeks and needs an answer from you.
+```
+
+**And he drops it once you've answered.** What you say back is recorded and
+goes into his planning, so he acts on it instead of asking again; a question
+you have settled stays settled for three days. If you never get to a question,
+it expires after 72 hours rather than following you around.
+
 ## The team: Susan, Dave, Linda, Catherine, and Lauren
 
 Gary can ask specialists for help: Susan for research and strategy, Dave for

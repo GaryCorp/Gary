@@ -499,6 +499,18 @@ The microphone is never opened by the backend. A question Gary asks stays
 open until Alex answers it or it expires, so the spoken text has to tell him
 to say the wake word.
 
+A message with `urgency: next_time` skips this path entirely. It is never
+announced; it stays `pending` and is handed to the next voice session
+(`send_outstanding_questions`), which marks it spoken and writes it to the
+notebook because Gary is being told to raise it now. The same handover carries
+questions still awaiting an answer, so a bare "yes" hours later is not a
+mystery to the model.
+
+Answers close the loop: `collect_operations` reports `open_questions` and
+`answered_questions` to every planning cycle and to `planning_get_context`, so
+what Alex said reaches Gary's planning, and `find_triggers` wakes the
+management loop when a question is answered or is about to expire.
+
 A message becomes `spoken` only once a voice client has taken it. Nothing
 connected, or quiet hours, leaves it `pending` for the next delivery pass, and
 a Joplin outage leaves `joplin_written_at` NULL and is retried. The caps on

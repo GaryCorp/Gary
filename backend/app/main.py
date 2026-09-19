@@ -4156,6 +4156,15 @@ is nothing to answer. You cannot open the microphone: he answers when he says
 make sense on its own and must end by asking him to say {WAKE_WORD_DISPLAY}.
 Until then it stays open, and you raise it again rather than assume an answer.
 
+Choose urgency honestly. Use now only when it cannot wait; use next_time for
+anything that can, and it is held and put to him when you next speak instead
+of interrupting. When a conversation starts you are told what you held back:
+raise it once the immediate request is dealt with.
+
+When {PRINCIPAL_NAME} answers a question, act on the answer. Do not ask it
+again: a question he has settled is closed for three days, and your planning
+cycles are given both what is still open and what he answered.
+
 Everything you say out loud, whether he asked or not, is written to the Spoken
 notebook in Joplin, one note a day. When he asks what you said, what he
 missed, or what you have been telling him, call spoken_recent and tell him. If
@@ -4336,26 +4345,52 @@ async def internal_voice(websocket: WebSocket):
     }
 
     async def send_outstanding_questions(connection) -> None:
-        """Put what Gary already asked into the new session.
+        """Open the session knowing what is already between them.
 
-        He may have asked unprompted while nobody was in the room; without
-        this the model has no idea what Alex is answering, and would treat a
-        bare "yes" as coming out of nowhere.
+        Two kinds of message: questions Gary asked out loud and is still
+        waiting on, so a bare "yes" is not a mystery; and messages he
+        deliberately held back (urgency next_time) for exactly this moment.
+        The held ones count as said once they are handed over, because he is
+        being told to raise them now.
         """
         try:
-            questions = await asyncio.to_thread(gary_ops.conversation.awaiting_answer)
+            messages = await asyncio.to_thread(gary_ops.conversation.to_mention)
         except Exception:
-            logger.exception("Could not read the questions Gary is waiting on")
+            logger.exception("Could not read what Gary has outstanding with the user")
             return
-        if not questions:
+        if not messages:
             return
 
+        held = [m for m in messages if m["status"] == "pending"]
+        asked = [m for m in messages if m["status"] == "spoken"]
+        for message in held:
+            await spoken_delivery.mention_in_conversation(message)
+
         # Only these can be answered or repeated in this conversation.
-        session.setdefault("spoken_ids", set()).update(q["id"] for q in questions)
-        asked = " ".join(
-            f"({q['id']}) at {spoken_clock(q['spoken_at'])}: {single_line(q['text'])}"
-            for q in questions
-        )
+        session.setdefault("spoken_ids", set()).update(m["id"] for m in messages)
+
+        parts = []
+        if asked:
+            said = " ".join(
+                f"({m['id']}) at {spoken_clock(m['spoken_at'])}: {single_line(m['text'])}"
+                for m in asked
+            )
+            parts.append(
+                f"Earlier, without being asked, I said this to {PRINCIPAL_NAME} and am "
+                f"still waiting on an answer: {said}. If this turn answers one of them, "
+                "record it with question_answer using that message_id."
+            )
+        if held:
+            waiting = " ".join(
+                f"({m['id']}) {single_line(m['text'])}" for m in held
+            )
+            parts.append(
+                "I also held these back rather than interrupt him, to raise when we "
+                f"next spoke, which is now: {waiting}. Work them into this "
+                "conversation once the immediate request is dealt with, and record "
+                "any answer with question_answer."
+            )
+
         await connection.send(
             json.dumps(
                 {
@@ -4363,18 +4398,7 @@ async def internal_voice(websocket: WebSocket):
                     "item": {
                         "type": "message",
                         "role": "assistant",
-                        "content": [
-                            {
-                                "type": "output_text",
-                                "text": (
-                                    "Earlier, without being asked, I said this to "
-                                    f"{PRINCIPAL_NAME} and am still waiting on an "
-                                    f"answer: {asked}. If this turn answers one of "
-                                    "them, record it with question_answer using that "
-                                    "message_id."
-                                ),
-                            }
-                        ],
+                        "content": [{"type": "output_text", "text": " ".join(parts)}],
                     },
                 }
             )

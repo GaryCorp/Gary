@@ -83,6 +83,54 @@ def test_an_expiring_approval_wakes_gary(gary, clock):
     assert "about to expire" in triggers(gary, since=NOW).describe()
 
 
+def ask_and_say(gary, text, created_at=NOW):
+    """A question Gary has already put to Alex out loud."""
+    with gary.db.transaction() as conn:
+        repos = Repositories.bind(conn)
+        message = repos.spoken.create(
+            text=text, kind="question", expects_reply=True, now=created_at
+        )
+        repos.spoken.mark_spoken(message["id"], created_at)
+    return message["id"]
+
+
+def test_an_answered_question_wakes_gary_once(gary):
+    """Alex's own answer is the one input Gary cannot get any other way."""
+    message_id = ask_and_say(gary, "Shall I close the newsletter project?")
+    with gary.db.transaction() as conn:
+        Repositories.bind(conn).spoken.answer(message_id, "No, keep it open", LATER)
+
+    assert "1 question answered" in triggers(gary, since=NOW).describe()
+    # And not again on the next tick, once the cycle has looked.
+    assert not triggers(gary, since=LATER)
+
+
+def test_a_question_about_to_expire_wakes_gary(gary):
+    from gary.policy import APPROVAL_EXPIRY_HOURS
+
+    nearly_expired = iso(START - dt.timedelta(hours=APPROVAL_EXPIRY_HOURS - 1))
+    ask_and_say(gary, "Shall I close the newsletter project?", created_at=nearly_expired)
+
+    assert "1 question about to expire" in triggers(gary, since=NOW).describe()
+
+
+def test_a_notice_nobody_owes_an_answer_to_does_not_wake_gary(gary):
+    from gary.policy import APPROVAL_EXPIRY_HOURS
+
+    nearly_expired = iso(START - dt.timedelta(hours=APPROVAL_EXPIRY_HOURS - 1))
+    with gary.db.transaction() as conn:
+        repos = Repositories.bind(conn)
+        message = repos.spoken.create(
+            text="The engineering sync finished without errors.",
+            kind="notice",
+            expects_reply=False,
+            now=nearly_expired,
+        )
+        repos.spoken.mark_spoken(message["id"], nearly_expired)
+
+    assert not triggers(gary, since=NOW)
+
+
 def test_completed_since_counts_only_new_reports():
     finished_early = {"status": "completed", "report": {"summary": "x"},
                       "completed_at": iso(START - dt.timedelta(hours=1))}

@@ -130,8 +130,11 @@ TOOLS = [
                     "False to tell him something that needs no reply."
                 ),
                 "urgency": string(
-                    "now to raise it at the next opportunity, next_time to wait "
-                    "for the next conversation.",
+                    "now speaks it aloud at the next opportunity and interrupts "
+                    "whatever he is doing. next_time never interrupts: it is held "
+                    "and put to him the next time he talks to you. Prefer "
+                    "next_time unless it genuinely cannot wait, and note that a "
+                    "held message still expires unanswered after 72 hours.",
                     ["now", "next_time"],
                 ),
                 "reason": string("Why this needs him, in one sentence."),

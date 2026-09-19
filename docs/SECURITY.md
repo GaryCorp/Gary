@@ -157,6 +157,11 @@ the thing being protected here:
   similar to one already open is refused, so a stuck state cannot turn into
   repeated interruptions;
 - repeating a message is capped at 3, so "say that again" cannot loop;
+- a question the user has answered is refused for 3 days (`ANSWERED_QUIET_DAYS`,
+  the same window as `REPEAT_ASSIGNMENT_DAYS`), in both the caps and the
+  planning cycle, so answering cannot be turned into a way to be asked again;
+- `urgency: next_time` is never announced at all: it is held and handed to the
+  next conversation, and expires with everything else if none happens;
 - the text is stripped of markdown and held to 600 characters before it
   reaches the speaker;
 - questions expire unanswered after 72 hours, on the same clock as approvals;

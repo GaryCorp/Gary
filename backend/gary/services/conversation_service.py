@@ -48,6 +48,10 @@ MAX_DAILY_UNATTENDED = 6
 UNATTENDED_SOURCES = ("planning_cycle", "management_loop", "approval")
 # "Say that again" is a reasonable request; saying it forever is not.
 MAX_REPEATS = 3
+# Once Alex has answered something, Gary leaves it alone this long. The same
+# window as REPEAT_ASSIGNMENT_DAYS in planning_cycle.py, so "Gary already
+# covered this" means one thing across the company.
+ANSWERED_QUIET_DAYS = 3
 # How long Gary keeps looking at what he has already said.
 RECENT_HOURS = 12
 # An unanswered question goes stale on the same clock as an approval.
@@ -80,6 +84,40 @@ def expire_stale_messages(repos: Repositories, now: str) -> list[str]:
     return expired
 
 
+def quiet_since(now: str) -> str:
+    """How far back a settled question still counts as settled."""
+    return format_utc(to_datetime(now) - dt.timedelta(days=ANSWERED_QUIET_DAYS))
+
+
+def close_settled_questions(repos: Repositories, now: str) -> list[str]:
+    """Stop waiting on a question whose approval has already been decided.
+
+    Resolving an approval closes its question directly, so this is a safety
+    net for anything settled another way. Without it Gary would open the next
+    conversation asking about a decision the user has already made.
+    """
+    closed = []
+    for message in repos.spoken.list_open_with_settled_approval():
+        decision = message["approval_status"]
+        if message["status"] == "pending":
+            # Never said, and no longer worth saying.
+            if not repos.spoken.expire(message["id"], now):
+                continue
+        elif not repos.spoken.answer(message["id"], f"{decision} on the approvals page", now):
+            continue
+        repos.audit.write(
+            SYSTEM_ACTOR,
+            "spoken_message_settled",
+            f"Already {decision}, so Gary stopped waiting: {message['text'][:120]}",
+            "spoken_message",
+            message["id"],
+            {"approval_id": message["approval_id"], "decision": decision},
+            now=now,
+        )
+        closed.append(message["id"])
+    return closed
+
+
 def check_message_caps(
     repos: Repositories,
     payload: AskUserPayload,
@@ -109,6 +147,16 @@ def check_message_caps(
     if looks_like_repeat(key, open_keys):
         raise ValueError("Gary has already asked Alex something very like this; it is still open.")
 
+    settled = [
+        objective_key(topic)
+        for topic in repos.spoken.answered_topic_keys(quiet_since(now))
+    ]
+    if looks_like_repeat(key, settled):
+        raise ValueError(
+            "Alex has already answered something very like this in the last "
+            f"{ANSWERED_QUIET_DAYS} days. Act on his answer instead of asking again."
+        )
+
 
 
 class ConversationService:
@@ -134,6 +182,7 @@ class ConversationService:
         kind: str = "notice",
         source: str = "operations",
         expects_reply: bool = False,
+        urgency: str = "now",
         approval_id: str | None = None,
         action_id: str | None = None,
         project_id: str | None = None,
@@ -156,6 +205,7 @@ class ConversationService:
                 kind=kind,
                 source=source,
                 expects_reply=expects_reply,
+                urgency=urgency,
                 topic_key=topic_key_for(text),
                 approval_id=approval_id,
                 action_id=action_id,
@@ -169,8 +219,19 @@ class ConversationService:
         now = clock_now(self.clock)
         with self.db.transaction() as conn:
             repos = Repositories.bind(conn)
+            close_settled_questions(repos, now)
             expire_stale_messages(repos, now)
             return repos.spoken.list_pending(limit)
+
+    def to_mention(self) -> list[dict]:
+        """What a new conversation should open knowing: messages held for
+        exactly this moment, and questions still waiting on an answer."""
+        now = clock_now(self.clock)
+        with self.db.transaction() as conn:
+            repos = Repositories.bind(conn)
+            close_settled_questions(repos, now)
+            expire_stale_messages(repos, now)
+            return repos.spoken.list_to_mention()
 
     def awaiting_answer(self) -> list[dict]:
         with self.db.read() as conn:
@@ -311,6 +372,20 @@ class SpokenDelivery:
         await self.deliver(message)
         return self.conversation.get(message["id"]) or message
 
+    async def mention_in_conversation(self, message: dict) -> bool:
+        """Hand a held message to a conversation Gary is now in.
+
+        He says it himself, in his own words, so the voice sender is not
+        called: broadcasting it would speak it twice. It still counts as said,
+        and still goes in the notebook.
+        """
+        if message["status"] != "pending":
+            return False
+        if not await asyncio.to_thread(self.conversation.mark_spoken, message["id"]):
+            return False
+        await self.mirror(self.conversation.get(message["id"]))
+        return True
+
     async def deliver(self, message: dict) -> bool:
         if message["status"] != "pending":
             return False
@@ -372,6 +447,7 @@ def ask_user_handler(conversation: ConversationService) -> dict[str, ActionHandl
 
     def _check(repos: Repositories, payload: AskUserPayload) -> dict:
         now = clock_now(conversation.clock)
+        close_settled_questions(repos, now)
         expire_stale_messages(repos, now)
         require_project(repos, payload.project_id)
         require_task(repos, payload.task_id)
@@ -390,6 +466,7 @@ def ask_user_handler(conversation: ConversationService) -> dict[str, ActionHandl
             kind="question" if payload.expects_reply else "notice",
             source=payload.source,
             expects_reply=payload.expects_reply,
+            urgency=payload.urgency,
             topic_key=topic_key_for(payload.message),
             approval_id=payload.approval_id,
             project_id=payload.project_id,
@@ -410,6 +487,7 @@ def ask_user_handler(conversation: ConversationService) -> dict[str, ActionHandl
 
 
 __all__ = [
+    "ANSWERED_QUIET_DAYS",
     "ConversationService",
     "SpokenDelivery",
     "MAX_DAILY_UNATTENDED",
@@ -419,6 +497,7 @@ __all__ = [
     "SOURCES",
     "ask_user_handler",
     "check_message_caps",
+    "close_settled_questions",
     "expire_stale_messages",
     "topic_key_for",
 ]

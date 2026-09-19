@@ -488,3 +488,43 @@ def test_a_cycle_needs_something_to_say(gary):
 
     assert spoken(gary) == []
     assert "at least" in result["rejected"][0]["reason"]
+
+
+def test_a_cycle_does_not_ask_what_alex_already_settled(gary, clock):
+    """An answered question is off-limits for a few days, so a cycle cannot
+    reopen a decision Alex has already given."""
+    from gary.services.conversation_service import ANSWERED_QUIET_DAYS
+
+    first = FakePlanner(
+        {"summary": "s", "briefing": "", "actions": [raise_it("Should the newsletter project be closed?")]}
+    )
+    run(cycle(gary, first).run("management"))
+    gary.conversation.mark_spoken(spoken(gary)[0]["id"])
+    gary.conversation.answer(spoken(gary)[0]["id"], "No, keep it open")
+
+    clock.advance(days=ANSWERED_QUIET_DAYS - 1)
+    later = FakePlanner(
+        {
+            "summary": "s",
+            "briefing": "",
+            "actions": [raise_it("Should the newsletter project be closed for good?")],
+        }
+    )
+    result = run(cycle(gary, later).run("management"))
+
+    assert len(spoken(gary)) == 1
+    assert result["rejected"][0]["reason"] == (
+        "the user has already been asked something very like this"
+    )
+
+    # Once the window passes it may be raised again.
+    clock.advance(days=2)
+    again = FakePlanner(
+        {
+            "summary": "s",
+            "briefing": "",
+            "actions": [raise_it("Should the newsletter project be closed for good?")],
+        }
+    )
+    assert run(cycle(gary, again).run("management"))["rejected"] == []
+    assert len(spoken(gary)) == 2

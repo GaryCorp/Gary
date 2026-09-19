@@ -154,6 +154,28 @@ def collect_operations(repos: Repositories, now: str) -> dict:
         "open_commitments": open_commitments[:CONTEXT_LIST_LIMIT],
         "pending_approvals": repos.approvals.list_pending()[:CONTEXT_LIST_LIMIT],
         "recent_actions": repos.actions.list_recent(shift(now, hours=-RECENT_ACTION_HOURS)),
+        # What Gary has put to Alex himself. Without these a cycle re-asks
+        # what is already open and never acts on what Alex answered.
+        "open_questions": [
+            {
+                "message_id": message["id"],
+                "asked": message["text"],
+                "asked_at": message["spoken_at"],
+                "status": message["status"],
+            }
+            for message in repos.spoken.list_open()
+        ][:CONTEXT_LIST_LIMIT],
+        "answered_questions": [
+            {
+                "message_id": message["id"],
+                "asked": message["text"],
+                "answer": message["answer"],
+                "answered_at": message["answered_at"],
+            }
+            for message in repos.spoken.list_answered_since(
+                shift(now, hours=-RECENT_ACTION_HOURS), CONTEXT_LIST_LIMIT
+            )
+        ],
         "truncated_lists": {
             name: count
             for name, count in {

@@ -105,6 +105,31 @@ def find_triggers(
                 f"{len(expiring)} approval{'s' if len(expiring) != 1 else ''} about to expire"
             )
 
+        # Alex answered something Gary asked. That is new information from the
+        # one person whose answer Gary cannot get any other way, so it is
+        # worth a cycle rather than waiting for the next scheduled one.
+        answered = [
+            message
+            for message in repos.spoken.list_answered_since(since or "")
+            if since is None or (message["answered_at"] or "") > since
+        ]
+        if answered:
+            triggers.reasons.append(
+                f"{len(answered)} question{'s' if len(answered) != 1 else ''} answered"
+            )
+
+        # And a question of his own about to lapse unanswered, on the same
+        # clock as an approval.
+        lapsing = [
+            message
+            for message in repos.spoken.list_open_created_before(approval_cutoff)
+            if message["expects_reply"]
+        ]
+        if lapsing:
+            triggers.reasons.append(
+                f"{len(lapsing)} question{'s' if len(lapsing) != 1 else ''} about to expire"
+            )
+
     return triggers
 
 

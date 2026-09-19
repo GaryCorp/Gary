@@ -28,6 +28,7 @@ class SpokenMessageRepository:
         kind: str = "notice",
         source: str = "voice",
         expects_reply: bool = False,
+        urgency: str = "now",
         topic_key: str = "",
         approval_id: str | None = None,
         action_id: str | None = None,
@@ -44,6 +45,7 @@ class SpokenMessageRepository:
                 "kind": kind,
                 "text": text,
                 "expects_reply": 1 if expects_reply else 0,
+                "urgency": urgency,
                 "source": source,
                 "topic_key": topic_key,
                 "approval_id": approval_id,
@@ -77,16 +79,34 @@ class SpokenMessageRepository:
         )
 
     def list_pending(self, limit: int = 20) -> list[dict]:
-        """Decided but not yet said: what the delivery pass speaks next."""
+        """Decided but not yet said: what the delivery pass speaks next.
+
+        Only 'now' messages. A 'next_time' message is deliberately never
+        announced; it waits for a conversation (see list_to_mention).
+        """
         return rows_to_dicts(
             self.conn.execute(
                 """
                 SELECT * FROM spoken_messages
-                WHERE status = 'pending'
+                WHERE status = 'pending' AND urgency = 'now'
                 ORDER BY created_at
                 LIMIT ?
                 """,
                 (limit,),
+            )
+        )
+
+    def list_to_mention(self) -> list[dict]:
+        """What a new conversation should start knowing: everything held back
+        for exactly this moment, and every question still unanswered."""
+        return rows_to_dicts(
+            self.conn.execute(
+                """
+                SELECT * FROM spoken_messages
+                WHERE (status = 'pending' AND urgency = 'next_time')
+                   OR (status = 'spoken' AND expects_reply = 1)
+                ORDER BY created_at
+                """
             )
         )
 
@@ -151,6 +171,53 @@ class SpokenMessageRepository:
                 OPEN_STATUSES,
             )
         ]
+
+    def list_open_with_settled_approval(self) -> list[dict]:
+        """Questions about an approval that has since been decided elsewhere.
+
+        The approval service closes these as it resolves them. This catches
+        any that were settled by another path, so Gary never raises a
+        decision the user has already made.
+        """
+        return rows_to_dicts(
+            self.conn.execute(
+                f"""
+                SELECT m.*, a.status AS approval_status
+                FROM spoken_messages m
+                JOIN approvals a ON a.id = m.approval_id
+                WHERE m.status IN ({", ".join("?" for _ in OPEN_STATUSES)})
+                AND a.status != 'pending'
+                """,
+                OPEN_STATUSES,
+            )
+        )
+
+    def answered_topic_keys(self, since: str) -> list[str]:
+        """What Alex has settled lately, so Gary does not raise it again."""
+        return [
+            row["topic_key"]
+            for row in self.conn.execute(
+                """
+                SELECT topic_key FROM spoken_messages
+                WHERE status = 'answered' AND answered_at >= ? AND topic_key != ''
+                """,
+                (since,),
+            )
+        ]
+
+    def list_answered_since(self, since: str, limit: int = 20) -> list[dict]:
+        """Questions Alex answered recently, with what he said."""
+        return rows_to_dicts(
+            self.conn.execute(
+                """
+                SELECT * FROM spoken_messages
+                WHERE status = 'answered' AND answered_at >= ?
+                ORDER BY answered_at DESC
+                LIMIT ?
+                """,
+                (since, limit),
+            )
+        )
 
     def mark_spoken(self, message_id: str, now: str | None = None) -> bool:
         """Only after a voice client actually received it."""

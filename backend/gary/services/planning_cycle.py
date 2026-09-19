@@ -33,6 +33,7 @@ from gary.services.calendar_blocks import (
     protected_intervals,
 )
 from gary.models.conversation import MESSAGE_MAX, MESSAGE_MIN, spoken_text
+from gary.services.conversation_service import quiet_since
 from gary.services.common import (
     looks_like_repeat,
     normalize_title,
@@ -259,9 +260,14 @@ def validate_cycle_actions(
             normalize_title(f["title"]) for f in repos.followups.list_pending()
         }
         open_task_titles = {normalize_title(t["title"]) for t in repos.tasks.list_open()}
-        # What Gary has already put to Alex and is still waiting on, so a
-        # cycle cannot ask the same thing again.
-        open_message_keys = [objective_key(m["topic_key"]) for m in repos.spoken.list_open()]
+        # What Gary has already put to Alex, so a cycle cannot ask it again:
+        # still waiting on an answer, or settled in the last few days.
+        open_message_keys = [
+            objective_key(m["topic_key"]) for m in repos.spoken.list_open()
+        ] + [
+            objective_key(topic)
+            for topic in repos.spoken.answered_topic_keys(quiet_since(now))
+        ]
         # What the team is already doing, so a cycle cannot re-commission it.
         since = format_utc(to_datetime(now) - dt.timedelta(days=REPEAT_ASSIGNMENT_DAYS))
         recent_assignments: dict[str, list[frozenset[str]]] = {}

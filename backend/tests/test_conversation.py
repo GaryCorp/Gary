@@ -12,12 +12,14 @@ import pytest
 from gary.models.action import ProposeActionRequest
 from gary.models.conversation import AskUserPayload
 from gary.services.conversation_service import (
+    ANSWERED_QUIET_DAYS,
     MAX_DAILY_UNATTENDED,
     MAX_OPEN_QUESTIONS,
     MAX_REPEATS,
     MESSAGE_EXPIRY_HOURS,
     SpokenDelivery,
 )
+from gary.db.repositories import Repositories
 from gary.tools import ToolContext, call_tool
 
 from conftest import audit_events, run
@@ -153,12 +155,22 @@ def test_the_same_question_is_not_asked_twice_while_one_is_open(gary):
         ask(gary, "Should Catherine review the Anthropic subscription cost again?")
 
 
-def test_the_same_question_may_be_asked_once_the_first_is_answered(gary, delivery, voice):
+def test_an_answered_question_stays_settled_for_a_few_days(gary, delivery, clock):
+    """Answering used to make a question immediately askable again, which is
+    how Gary turns into a nag."""
     ask(gary, "Should I ask Catherine to review the Anthropic subscription cost?")
     run(delivery.deliver_pending())
     gary.conversation.answer(open_messages(gary)[0]["id"], "Not this week")
 
-    assert ask(gary, "Should Catherine review the Anthropic subscription cost now?")["status"] == "succeeded"
+    clock.advance(days=ANSWERED_QUIET_DAYS - 1)
+    with pytest.raises(ValueError, match="already answered"):
+        ask(gary, "Should Catherine review the Anthropic subscription cost now?")
+
+    # Once the window passes, it is a fair question again.
+    clock.advance(days=2)
+    assert ask(gary, "Should Catherine review the Anthropic subscription cost now?")[
+        "status"
+    ] == "succeeded"
 
 
 def test_the_unattended_loops_have_a_daily_ceiling(gary, delivery):
@@ -475,3 +487,133 @@ def test_settling_an_approval_stops_gary_waiting_on_it(gary, delivery):
 
     assert gary.conversation.awaiting_answer() == []
     assert open_messages(gary)[0]["answer"] == "rejected on the web"
+
+
+# ------------------------------------------------------- holding it back
+
+
+def test_a_held_message_is_never_spoken_unprompted(gary, delivery, voice, notebook):
+    """next_time means exactly that: Gary judged it worth raising but not
+    worth interrupting for."""
+    ask(gary, "The lease renewal is due in three weeks, whenever you have a moment.",
+        urgency="next_time")
+
+    for _ in range(3):
+        assert run(delivery.deliver_pending()) == 0
+
+    message = open_messages(gary)[0]
+    assert message["urgency"] == "next_time"
+    assert message["status"] == "pending"
+    assert voice.said == []
+    assert notebook.lines == []
+
+
+def test_a_held_message_is_handed_to_the_next_conversation(gary, delivery, voice, notebook):
+    ask(gary, "The lease renewal is due in three weeks, whenever you have a moment.",
+        urgency="next_time")
+
+    waiting = gary.conversation.to_mention()
+    assert [m["id"] for m in waiting] == [open_messages(gary)[0]["id"]]
+
+    assert run(delivery.mention_in_conversation(waiting[0])) is True
+
+    message = open_messages(gary)[0]
+    assert message["status"] == "spoken"
+    # Gary says it himself in the conversation, so it is not broadcast too.
+    assert voice.said == []
+    # It is still written down like everything else he says.
+    assert [text for text, _ in notebook.lines] == [message["text"]]
+
+    # And it is only handed over once.
+    assert run(delivery.mention_in_conversation(message)) is False
+
+
+def test_an_urgent_message_is_unaffected(gary, delivery, voice):
+    ask(gary, "The landlord needs an answer on the lease by Friday.", urgency="now")
+
+    assert run(delivery.deliver_pending()) == 1
+    assert len(voice.said) == 1
+    assert open_messages(gary)[0]["status"] == "spoken"
+
+
+def test_a_conversation_also_gets_questions_still_unanswered(gary, delivery):
+    ask(gary, "The landlord needs an answer on the lease by Friday.")
+    run(delivery.deliver_pending())
+    ask(gary, "Shall I close the stalled newsletter project?", urgency="next_time")
+
+    waiting = gary.conversation.to_mention()
+    assert {m["status"] for m in waiting} == {"spoken", "pending"}
+    assert len(waiting) == 2
+
+
+# ------------------------------------------------- what the planner sees
+
+
+def operations(gary) -> dict:
+    return gary.planning.snapshot()
+
+
+def test_the_planner_sees_what_gary_asked_and_what_alex_said(gary, delivery, clock):
+    ask(gary, "Shall I move tomorrow's demo block to nine in the morning?")
+    run(delivery.deliver_pending())
+
+    open_now = operations(gary)["open_questions"]
+    assert len(open_now) == 1
+    assert "demo block" in open_now[0]["asked"]
+    assert operations(gary)["answered_questions"] == []
+
+    message_id = open_messages(gary)[0]["id"]
+    gary.conversation.answer(message_id, "Yes, move it to nine")
+
+    answered = operations(gary)["answered_questions"]
+    assert operations(gary)["open_questions"] == []
+    assert len(answered) == 1
+    assert answered[0]["answer"] == "Yes, move it to nine"
+    assert answered[0]["message_id"] == message_id
+
+
+def test_an_old_answer_drops_out_of_the_planner_context(gary, delivery, clock):
+    ask(gary, "Shall I move tomorrow's demo block to nine in the morning?")
+    run(delivery.deliver_pending())
+    gary.conversation.answer(open_messages(gary)[0]["id"], "Yes, move it to nine")
+
+    clock.advance(hours=49)  # past RECENT_ACTION_HOURS
+    assert operations(gary)["answered_questions"] == []
+
+
+def test_gary_stops_waiting_on_a_decision_already_made(gary, delivery):
+    """A settled approval must not come back as an open question: that is how
+    Gary ends up asking about a hire you already approved."""
+    async def raise_it(approval):
+        await delivery.speak(
+            f"I need your approval. {approval['summary']}.",
+            kind="question",
+            source="approval",
+            expects_reply=True,
+            approval_id=approval["approval_id"],
+        )
+
+    gary.actions.on_approval_requested = raise_it
+    result = run(
+        gary.actions.propose(
+            ProposeActionRequest(
+                action_type="send_external_email",
+                payload={"to": "sam@example.com", "subject": "Draft", "body": "Hi"},
+                reason="Commitment due today",
+            )
+        )
+    )
+    message_id = open_messages(gary)[0]["id"]
+
+    # Settle it behind the service's back, as an older approval was.
+    with gary.db.transaction() as conn:
+        Repositories.bind(conn).approvals.resolve(
+            result["approval_id"], "approved", None, "2026-09-16T14:30:00+00:00"
+        )
+    assert len(gary.conversation.awaiting_answer()) == 1, "still open until swept"
+
+    assert gary.conversation.to_mention() == []
+    message = open_messages(gary)[0]
+    assert message["status"] == "answered"
+    assert message["answer"] == "approved on the approvals page"
+    assert audit_events(gary, "spoken_message", message_id)[-1] == "spoken_message_settled"
