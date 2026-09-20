@@ -146,6 +146,29 @@ labels. `--create-labels` creates the GaryCorp labels; `--create-project`
 creates the Project **as private** if it does not exist. If anything that must
 be private is public, it stops and explains, and changes nothing.
 
+## Who creates tickets
+
+Both Gary in conversation and Gary's unattended planning cycles. Creating a
+ticket and re-prioritising one are **green** actions: a ticket is a
+specification in GaryCorp's own private repository, not a change to the
+outside world, so neither waits for Alex's approval. What bounds them are the
+caps in `planning_cycle.py`:
+
+| Cap | Value |
+|---|---|
+| `MAX_CYCLE_TICKETS` | 1 new ticket per cycle |
+| `MAX_DAILY_TICKETS` | 3 new tickets per local day |
+| `MAX_CYCLE_PRIORITY_CHANGES` | 2 priority changes per cycle |
+
+A cycle can only ticket a task that **already exists** and has no ticket: it
+proposes actions as one batch, so a task created in the same cycle has no id
+yet. In practice Gary creates the task in one cycle and tickets it in a later
+one, which also gives Alex a chance to see it first. Open tickets appear in
+the planner's `operations.engineering_tickets`, which is what stops a cycle
+ticketing the same work twice and lets it schedule engineering blocks
+knowingly — an engineering ticket's task is an ordinary task, so it is
+scheduled with `schedule_task` like anything else.
+
 ## Ticket lifecycle
 
 ```text
@@ -176,6 +199,25 @@ failure part way can be retried without duplicating anything:
 A ticket that did not finish is stored as `degraded` with the reason, and
 Gary's tool output carries a warning so Gary reports the truth rather than
 "created and assigned". `retry_incomplete(ticket_id)` finishes it.
+
+### An issue that leaves the board
+
+A Project item deleted on GitHub leaves an item id in SQLite that will never
+resolve again. The Project item is therefore read on its own during sync: a
+`GitHubNotFoundError` there clears `github_project_item_id`, audits
+`github_project_item_lost`, and lets the issue finish syncing rather than
+failing the whole ticket. `sync_all` then puts the issue straight back on the
+board through the ordinary creation path and reports it under `repaired`. An
+outage is *not* treated as a deletion — only a not-found is, so a 500 leaves
+the id alone.
+
+### Priority
+
+`engineering_set_priority` changes the stored priority, the issue label and
+the Project's Priority field together. GitHub is written first, so a board
+that will not accept the value leaves the ticket exactly as it was rather
+than half-changed, and re-setting the priority a ticket already has is
+refused instead of written.
 
 ### Allowed transitions
 
@@ -230,13 +272,14 @@ in any other state is marked `needs_reconciliation`, audited as
 `engineering_list_tickets`, `engineering_mark_ready`,
 `engineering_mark_in_progress`, `engineering_mark_review`,
 `engineering_mark_security_review`, `engineering_mark_done`,
-`engineering_mark_blocked`, `engineering_add_comment`, `engineering_sync`,
-`engineering_status`.
+`engineering_mark_blocked`, `engineering_set_priority`,
+`engineering_add_comment`, `engineering_sync`, `engineering_status`.
 
 There is no raw GitHub request tool, no GraphQL passthrough, and nothing for
 repository or organization administration. Comments are for meaningful
-operational updates (priority change, moved deadline, new dependency), not
-running commentary.
+operational updates (a moved deadline, a new dependency), not running
+commentary — and **not** for priority, which `engineering_set_priority`
+actually changes.
 
 ## Audit events
 
@@ -244,6 +287,7 @@ running commentary.
 `github_project_item_added`, `engineering_ticket_assigned`,
 `engineering_status_changed`, `engineering_ticket_blocked`,
 `engineering_ticket_completed`, `engineering_ticket_commented`,
+`engineering_priority_changed`, `github_project_item_lost`,
 `github_sync_failed`, `github_privacy_check_failed`. All on entity type
 `engineering_ticket`. The token never appears in an audit row.
 

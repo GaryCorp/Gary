@@ -136,6 +136,57 @@ ASK_USER_SCHEMA = {
     },
 }
 
+ENGINEERING_TICKET_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "action_type", "task_id", "title", "objective",
+        "requirements", "acceptance_criteria", "priority", "kind",
+        "security_review_required", "reason",
+    ],
+    "properties": {
+        "action_type": {"type": "string", "enum": ["create_engineering_ticket"]},
+        "task_id": {
+            "type": "string",
+            "description": "An existing open task_id from operations, with no ticket yet.",
+        },
+        "title": {"type": "string", "description": "Short engineering title."},
+        "objective": {
+            "type": "string",
+            "description": "The result needed and why. Say what the company needs, not how to build it.",
+        },
+        "requirements": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "What the change must do, one per item.",
+        },
+        "acceptance_criteria": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Checkable conditions that mean it is finished.",
+        },
+        "priority": {"type": "string", "enum": ["P0", "P1", "P2", "P3"]},
+        "kind": {"type": "string", "enum": ["feature", "bug"]},
+        "security_review_required": {"type": "boolean"},
+        "reason": _REASON,
+    },
+}
+
+SET_PRIORITY_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["action_type", "ticket_id", "priority", "reason"],
+    "properties": {
+        "action_type": {"type": "string", "enum": ["set_engineering_priority"]},
+        "ticket_id": {
+            "type": "string",
+            "description": "ticket_id from engineering_tickets in operations.",
+        },
+        "priority": {"type": "string", "enum": ["P0", "P1", "P2", "P3"]},
+        "reason": _REASON,
+    },
+}
+
 PLAN_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -154,6 +205,8 @@ PLAN_SCHEMA = {
                     DELEGATE_SCHEMA,
                     REVIEW_SCHEMA,
                     ASK_USER_SCHEMA,
+                    ENGINEERING_TICKET_SCHEMA,
+                    SET_PRIORITY_SCHEMA,
                 ]
             },
         },
@@ -207,8 +260,10 @@ You receive JSON with:
 - operations: projects, ready, in-progress, blocked, overdue tasks ranked by
   planning_score, missed scheduled blocks and the tasks they hold up,
   deadlines, follow-ups, commitments, pending approvals, recent actions,
-  open_questions (what you have already put to {principal} and are waiting on)
-  and answered_questions (what he answered, in his words);
+  open_questions (what you have already put to {principal} and are waiting on),
+  answered_questions (what he answered, in his words), and
+  engineering_tickets ({principal}'s engineering queue: what is ticketed, at
+  what priority, and whether it is on the calendar);
 - busy_times, working hours, working days, and protected times;
 - planning_notes: {principal}'s planning notes for active projects and preferences,
   and your previous daily summary;
@@ -238,6 +293,16 @@ Return:
   create_internal_task adds work that needs doing but is not yet a task.
   delegate_to_agent commissions one specialist's report; run_management_review
   asks several to review one question independently.
+  create_engineering_ticket opens a private GitHub issue assigning existing
+  work to {principal} as GaryCorp's engineer. It needs an open task_id from
+  operations that has no ticket yet, so ticket work that is already a task
+  rather than inventing it here. Write a real specification: what the company
+  needs and how you will know it is done, never how to implement it. At most
+  one a cycle. set_engineering_priority re-orders the queue when what matters
+  has genuinely changed, such as a deadline moving or something newly
+  blocking other work.
+  Engineering tickets are ordinary tasks as well, so schedule them with
+  schedule_task like anything else, putting P0 and P1 work first.
   ask_user speaks to {principal} directly, outside any conversation, and is
   only for something that genuinely needs him now: a decision only he can
   make, a commitment about to be missed, an approval about to expire. It is

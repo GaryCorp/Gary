@@ -116,6 +116,27 @@ class CreateEngineeringTicketRequest(RequestModel):
         return values
 
 
+class CreateEngineeringTicketPayload(CreateEngineeringTicketRequest):
+    """The ``create_engineering_ticket`` action payload.
+
+    Identical to the tool request: a cycle proposing a ticket has to write the
+    same specification Gary writes in conversation, so nothing vaguer than a
+    real ticket can reach GitHub.
+    """
+
+
+class SetEngineeringPriorityPayload(RequestModel):
+    """The ``set_engineering_priority`` action payload.
+
+    Only by ticket_id: the planner is given ticket ids in operations, so there
+    is no reason to let it name a ticket any looser way.
+    """
+
+    ticket_id: EntityId
+    priority: Priority
+    reason: str | None = Field(default=None, max_length=1000)
+
+
 class TicketLookupRequest(RequestModel):
     ticket_id: EntityId | None = None
     task_id: EntityId | None = None
@@ -131,6 +152,13 @@ class ListTicketsRequest(RequestModel):
 class TransitionRequest(RequestModel):
     ticket_id: EntityId | None = None
     task_id: EntityId | None = None
+    reason: str | None = Field(default=None, max_length=1000)
+
+
+class SetPriorityRequest(RequestModel):
+    ticket_id: EntityId | None = None
+    task_id: EntityId | None = None
+    priority: Priority
     reason: str | None = Field(default=None, max_length=1000)
 
 

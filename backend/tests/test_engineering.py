@@ -680,6 +680,7 @@ def test_gary_has_no_raw_github_or_admin_tools():
         "engineering_mark_ready", "engineering_mark_in_progress", "engineering_mark_review",
         "engineering_mark_security_review", "engineering_mark_done", "engineering_mark_blocked",
         "engineering_add_comment", "engineering_sync", "engineering_status",
+        "engineering_set_priority",
     }
 
 
@@ -780,3 +781,115 @@ def test_missing_project_number_is_reported_clearly(gary):
     service, _ = build_service(gary, FakeGitHub(), project_number=42)
     with pytest.raises(Exception, match="No Project number 42"):
         run(service.client.get_project())
+
+
+# --------------------------------------------- an item that left the board
+
+def test_a_deleted_project_item_does_not_brick_the_ticket(gary):
+    """A Project item deleted on GitHub used to fail the whole sync, and the
+    stored item id meant it could never be added back."""
+    service, github = build_service(gary)
+    task = make_task(gary, title="Research integration")
+    ticket = create(service, task)
+
+    del github.items[ticket.github_project_item_id]
+
+    result = run(service.sync_ticket(ticket.id))
+
+    assert result["synced"] is True, "the issue still syncs"
+    assert result["item_lost"] is True
+    row = ticket_rows(gary)[0]
+    assert row["github_project_item_id"] is None, "the dangling id is cleared"
+    assert row["sync_state"] == "degraded"
+    assert "no longer on the Project board" in row["sync_error"]
+    assert "github_project_item_lost" in audit_for(gary, ticket.id)
+
+
+def test_a_lost_project_item_is_put_back(gary):
+    service, github = build_service(gary)
+    task = make_task(gary, title="Research integration")
+    ticket = create(service, task)
+    del github.items[ticket.github_project_item_id]
+
+    result = run(service.sync_all())
+
+    assert result["repaired"] == [ticket.id]
+    row = ticket_rows(gary)[0]
+    assert row["github_project_item_id"] in github.items, "back on the board"
+    assert row["sync_state"] == "synced"
+    assert row["sync_error"] is None
+
+
+def test_an_unreadable_project_item_is_not_treated_as_deleted(gary):
+    """A 500 is an outage, not a deletion: the id must survive it."""
+    service, github = build_service(gary)
+    task = make_task(gary, title="Research integration")
+    ticket = create(service, task)
+    item_id = ticket.github_project_item_id
+    github.fail["get_item"] = (500, "server error")
+
+    result = run(service.sync_ticket(ticket.id))
+
+    assert result["synced"] is False
+    row = ticket_rows(gary)[0]
+    assert row["github_project_item_id"] == item_id
+    assert row["sync_state"] == "degraded"
+
+
+# -------------------------------------------------------------- priority
+
+PRIORITY_FIELDS = {
+    "Priority": {
+        "id": "F_priority",
+        "dataType": "SINGLE_SELECT",
+        "options": {"P0": "p0", "P1": "p1", "P2": "p2", "P3": "p3"},
+    }
+}
+
+
+def priority_service(gary):
+    github = FakeGitHub()
+    github.extra_fields = dict(PRIORITY_FIELDS)
+    return build_service(gary, github)
+
+
+def test_priority_changes_everywhere_it_is_recorded(gary):
+    service, github = priority_service(gary)
+    task = make_task(gary, title="Research integration")
+    ticket = create(service, task)  # P1
+
+    updated = run(service.set_priority(service.resolve(ticket.id), "P0", "The demo moved up"))
+
+    assert updated.priority == "P0"
+    assert ticket_rows(gary)[0]["priority"] == "P0"
+    assert github.items[ticket.github_project_item_id]["fields"]["Priority"] == "P0"
+    labels = github.issues[ticket.github_issue_number]["labels"]
+    assert "P0" in labels and "P1" not in labels
+    assert "engineering_priority_changed" in audit_for(gary, ticket.id)
+    assert any("P1 to P0" in c["body"] for c in github.comments)
+
+
+def test_the_same_priority_is_refused_rather_than_rewritten(gary):
+    service, _ = priority_service(gary)
+    task = make_task(gary, title="Research integration")
+    ticket = create(service, task)
+
+    with pytest.raises(EngineeringError, match="already P1"):
+        run(service.set_priority(service.resolve(ticket.id), "P1"))
+
+
+def test_a_board_that_will_not_take_the_priority_changes_nothing(gary):
+    """No half-applied change: if GitHub did not take it, neither do we."""
+    github = FakeGitHub()
+    github.extra_fields = {
+        "Priority": {"id": "F_priority", "dataType": "SINGLE_SELECT", "options": {"P1": "p1"}}
+    }
+    service, _ = build_service(gary, github)
+    task = make_task(gary, title="Research integration")
+    ticket = create(service, task)
+
+    with pytest.raises(EngineeringError, match="not re-prioritised"):
+        run(service.set_priority(service.resolve(ticket.id), "P0"))
+
+    assert ticket_rows(gary)[0]["priority"] == "P1"
+    assert "engineering_priority_changed" not in audit_for(gary, ticket.id)

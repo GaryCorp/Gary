@@ -42,6 +42,30 @@ def shift(now: str, **delta) -> str:
     return format_utc(to_datetime(now) + dt.timedelta(**delta))
 
 
+def engineering_queue(repos: Repositories) -> list[dict]:
+    """Open engineering tickets, as the planner needs to see them: what the
+    work is, how urgent, and whether it is already on the calendar."""
+    queue = []
+    for ticket in repos.engineering.list_open():
+        task = repos.tasks.get(ticket["task_id"])
+        queue.append(
+            {
+                "ticket_id": ticket["id"],
+                "task_id": ticket["task_id"],
+                "title": (task or {}).get("title", ""),
+                "issue_number": ticket["github_issue_number"],
+                "status": ticket["status"],
+                "priority": ticket["priority"],
+                "security_review_required": bool(ticket["security_review_required"]),
+                "scheduled_start": (task or {}).get("scheduled_start"),
+                "deadline": (task or {}).get("deadline"),
+                "sync_state": ticket["sync_state"],
+            }
+        )
+    # Most urgent first, so a truncated list keeps what matters.
+    return sorted(queue, key=lambda t: (t["priority"], t["status"]))
+
+
 def collect_operations(repos: Repositories, now: str) -> dict:
     upcoming_end = shift(now, days=UPCOMING_DEADLINE_DAYS)
     projects = repos.projects.list_active()
@@ -154,6 +178,9 @@ def collect_operations(repos: Repositories, now: str) -> dict:
         "open_commitments": open_commitments[:CONTEXT_LIST_LIMIT],
         "pending_approvals": repos.approvals.list_pending()[:CONTEXT_LIST_LIMIT],
         "recent_actions": repos.actions.list_recent(shift(now, hours=-RECENT_ACTION_HOURS)),
+        # Alex's engineering queue. Without it a cycle cannot tell which work
+        # is already ticketed, what is most urgent, or what to schedule.
+        "engineering_tickets": engineering_queue(repos)[:CONTEXT_LIST_LIMIT],
         # What Gary has put to Alex himself. Without these a cycle re-asks
         # what is already open and never acts on what Alex answered.
         "open_questions": [

@@ -23,6 +23,7 @@ from gary.db.repositories import Repositories
 from gary.integrations.github.client import GitHubClient
 from gary.integrations.github.exceptions import (
     GitHubError,
+    GitHubNotFoundError,
     GitHubPrivacyError,
 )
 from gary.integrations.github.issues import (
@@ -37,7 +38,7 @@ from gary.integrations.github.models import (
     EngineeringStatus,
 )
 from gary.integrations.github.privacy import PrivacyGate
-from gary.integrations.github.projects import ProjectBoard
+from gary.integrations.github.projects import PRIORITY_FIELD, ProjectBoard
 from gary.models.engineering import (
     CreateEngineeringTicketRequest,
     EngineeringTicket,
@@ -486,6 +487,55 @@ class EngineeringTicketService:
             row = await self._complete(row, actor)
         return self._present(row)
 
+    async def set_priority(
+        self,
+        row: dict,
+        priority: str,
+        reason: str | None = None,
+        actor: str = GARY_ACTOR,
+    ) -> EngineeringTicket:
+        """Re-prioritise a ticket everywhere it is recorded.
+
+        The stored priority, the issue label and the board's Priority field
+        have to agree, so GitHub is written first and SQLite only after it
+        succeeded. A half-applied change is raised, never reported as done.
+        """
+        current = row["priority"]
+        if current == priority:
+            raise EngineeringError(
+                f"Issue #{row['github_issue_number']} is already {priority}"
+            )
+        if not row["github_issue_number"]:
+            raise EngineeringError("This ticket has no GitHub issue yet")
+
+        _, project = await self.gate.verify()
+        if row["github_project_item_id"]:
+            written = await self.board.set_optional_fields(
+                project.id, row["github_project_item_id"], priority=priority
+            )
+            if PRIORITY_FIELD not in written:
+                raise EngineeringError(
+                    f"The Engineering Project would not accept Priority {priority!r}, so "
+                    "the ticket was not re-prioritised. Check the board's Priority options."
+                )
+        # The label follows the field. It is cosmetic, so a failure here is
+        # logged rather than losing a priority GitHub already accepted.
+        await self._label(row, add=priority, remove=current)
+
+        row = self._save(row["id"], priority=priority, last_synced_at=self._now())
+        self._audit(
+            actor,
+            "engineering_priority_changed",
+            f"Issue #{row['github_issue_number']}: {current} -> {priority}",
+            row["id"],
+            {"from": current, "to": priority, "reason": (reason or "")[:500]},
+        )
+        note = f"Priority changed from {current} to {priority}."
+        if reason:
+            note += f" {scrub(reason)}"
+        await self._comment(row, note, actor, audit=False)
+        return self._present(row)
+
     async def _mirror_task(self, row, target: EngineeringStatus, reason, actor) -> None:
         status = TASK_STATUS_FOR.get(target)
         if status is None:
@@ -586,14 +636,10 @@ class EngineeringTicketService:
         row = self._row(ticket_id)
         if not row["github_issue_number"]:
             return {"ticket_id": ticket_id, "synced": False, "reason": "no GitHub issue yet"}
+        item_lost = False
         try:
             await self.gate.verify()
             issue = await self.client.get_issue(row["github_issue_number"])
-            board_status = (
-                await self.board.status_of(row["github_project_item_id"])
-                if row["github_project_item_id"]
-                else None
-            )
         except GitHubError as exc:
             self._save(row["id"], sync_state="degraded", sync_error=str(exc)[:500])
             self._audit(
@@ -605,9 +651,47 @@ class EngineeringTicketService:
             )
             return {"ticket_id": ticket_id, "synced": False, "error": str(exc)}
 
+        # The Project item is read on its own, because a deleted item must not
+        # stop the issue syncing. Its id is remembered in SQLite, so an item
+        # removed from the board leaves a reference that will never resolve
+        # again; clearing it lets retry_incomplete put the issue back on the
+        # board instead of the ticket being stuck degraded forever.
+        board_status = None
+        if row["github_project_item_id"]:
+            try:
+                board_status = await self.board.status_of(row["github_project_item_id"])
+            except GitHubNotFoundError:
+                item_lost = True
+            except GitHubError as exc:
+                self._save(row["id"], sync_state="degraded", sync_error=str(exc)[:500])
+                self._audit(
+                    actor,
+                    "github_sync_failed",
+                    f"Could not read the Project item for issue #{row['github_issue_number']}",
+                    row["id"],
+                    {"error": str(exc)[:500], "step": "project_item"},
+                )
+                return {"ticket_id": ticket_id, "synced": False, "error": str(exc)}
+
         changes: dict = {"last_synced_at": self._now()}
         notes: list[str] = []
         before = EngineeringStatus(row["status"])
+
+        if item_lost:
+            changes["github_project_item_id"] = None
+            changes["sync_state"] = "degraded"
+            changes["sync_error"] = (
+                f"Issue #{row['github_issue_number']} is no longer on the Project board; "
+                "it will be added again on the next retry"
+            )
+            notes.append("Project item is gone; it will be re-added")
+            self._audit(
+                actor,
+                "github_project_item_lost",
+                f"Issue #{row['github_issue_number']} is no longer on the private Project",
+                row["id"],
+                {"previous_item_id": row["github_project_item_id"]},
+            )
 
         confirmed = self.config.engineer_username in issue.assignees
         if int(confirmed) != row["assignment_confirmed"]:
@@ -645,6 +729,9 @@ class EngineeringTicketService:
                     + (" and has not passed security review" if needs_review and not reviewed_at else "")
                 )
                 notes.append("closed without satisfying the required state")
+        elif item_lost:
+            # Already marked degraded above; it is not synced until re-added.
+            pass
         elif changes.get("status") or row["sync_state"] != "synced":
             changes["sync_state"] = "synced"
             changes.setdefault("sync_error", None)
@@ -693,22 +780,34 @@ class EngineeringTicketService:
             "status": row["status"],
             "assignment_confirmed": bool(row["assignment_confirmed"]),
             "needs_reconciliation": reconcile,
+            "item_lost": item_lost,
             "notes": notes,
         }
 
     async def sync_all(self, limit: int = 100, actor: str = GITHUB_ACTOR) -> dict:
         with self.gary.db.read() as conn:
             rows = Repositories.bind(conn).engineering.list_syncable(limit)
-        results = []
+        results, repaired = [], []
         for row in rows:
             try:
-                results.append(await self.sync_ticket(row["id"], actor))
+                result = await self.sync_ticket(row["id"], actor)
             except (GitHubError, NotFoundError) as exc:
                 logger.warning("Sync failed for %s: %s", row["id"], exc)
                 results.append({"ticket_id": row["id"], "synced": False, "error": str(exc)})
+                continue
+            results.append(result)
+            # An issue that fell off the board goes straight back on, through
+            # the same path that puts it there at creation.
+            if result.get("item_lost"):
+                try:
+                    await self.retry_incomplete(row["id"], actor)
+                    repaired.append(row["id"])
+                except (GitHubError, NotFoundError, EngineeringError) as exc:
+                    logger.warning("Could not put %s back on the Project: %s", row["id"], exc)
         return {
             "checked": len(results),
             "synced": sum(1 for r in results if r.get("synced")),
+            "repaired": repaired,
             "needs_reconciliation": [r["ticket_id"] for r in results if r.get("needs_reconciliation")],
             "failed": [r["ticket_id"] for r in results if not r.get("synced")],
             "results": results,

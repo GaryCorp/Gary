@@ -22,6 +22,11 @@ ACTION_POLICIES = {
     # Gary speaking first. It changes nothing by itself, so it is green; what
     # it spends is Alex's attention, which conversation_service.py caps.
     "ask_user": GREEN,
+    # Running Alex's engineering queue. A ticket is a specification in
+    # GaryCorp's own private repository, not a change to the world, so both
+    # are green; what bounds them is the caps in planning_cycle.py.
+    "create_engineering_ticket": GREEN,
+    "set_engineering_priority": GREEN,
     # Moving a non-critical task block is green; a critical one (see
     # CRITICAL_TASK_PRIORITY) is escalated to yellow by its handler.
     "move_calendar_event": GREEN,

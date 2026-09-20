@@ -76,6 +76,7 @@ from gary.policy import (
 )
 from gary.services.action_service import ActionHandler
 from gary.services.conversation_service import SpokenDelivery
+from gary.services.engineering_actions import engineering_action_handlers
 from gary.services.calendar_blocks import working_time_problem
 from gary.services.common import require_task
 from gary.services.planning_cycle import (
@@ -1889,6 +1890,9 @@ gary_ops = build_gary(
         **team_action_handlers(lambda: globals().get("agent_service")),
         # Hiring: approved on the web page only, capped by HIREABLE_TOOLS.
         **hire_action_handler(_lazy_registry()),
+        # Alex's engineering queue. Resolved lazily and absent in effect when
+        # GitHub is not configured: the handlers then refuse.
+        **engineering_action_handlers(lambda: globals().get("engineering_service")),
     },
     work_week=WORK_WEEK,
 )

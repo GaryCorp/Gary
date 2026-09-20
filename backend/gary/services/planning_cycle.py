@@ -77,6 +77,9 @@ CYCLE_ACTION_TYPES = (
     "run_management_review",
     # Gary deciding the cycle found something Alex himself needs to hear.
     "ask_user",
+    # Gary running Alex's engineering queue between conversations.
+    "create_engineering_ticket",
+    "set_engineering_priority",
 )
 # Caps for unattended cycles. The company runs itself between conversations,
 # so the limits are what stops a cycle commissioning work all day: a cycle
@@ -87,6 +90,12 @@ MAX_CYCLE_REVIEWS = 1
 # A cycle may interrupt Alex about one thing, not several. The rest keeps
 # until the next briefing.
 MAX_CYCLE_QUESTIONS = 1
+# How much engineering work Gary may put on Alex unattended. A backlog should
+# build over a week; a stuck state must not fill it in an afternoon.
+MAX_CYCLE_TICKETS = 1
+MAX_DAILY_TICKETS = 3
+# Reshuffling the queue is cheaper than adding to it, but not free.
+MAX_CYCLE_PRIORITY_CHANGES = 2
 MAX_DAILY_DELEGATIONS = 4
 MAX_DAILY_REVIEWS = 1
 # An objective close enough to recent work for the same specialist is a loop,
@@ -219,6 +228,21 @@ def overlaps(start: str, end: str, intervals: list[tuple[str, str]]) -> bool:
     return any(start < other_end and other_start < end for other_start, other_end in intervals)
 
 
+TICKET_PRIORITIES = ("P0", "P1", "P2", "P3")
+
+
+def _bounded_lines(value, limit: int = 15, length: int = 500) -> list[str]:
+    """Clean a proposed list of requirements or acceptance criteria."""
+    if not isinstance(value, list):
+        return []
+    lines = []
+    for item in value:
+        text = " ".join(str(item).split())[:length]
+        if text:
+            lines.append(text)
+    return lines[:limit]
+
+
 def _bounded_priority(value) -> int:
     return min(10, max(1, value)) if isinstance(value, int) else 5
 
@@ -247,6 +271,8 @@ def validate_cycle_actions(
         "delegate_to_agent": 0,
         "run_management_review": 0,
         "ask_user": 0,
+        "create_engineering_ticket": 0,
+        "set_engineering_priority": 0,
     }
     delegated_agents: set[str] = set()
     earliest = format_utc(to_datetime(now) + dt.timedelta(minutes=MIN_LEAD_MINUTES))
@@ -268,6 +294,13 @@ def validate_cycle_actions(
             objective_key(topic)
             for topic in repos.spoken.answered_topic_keys(quiet_since(now))
         ]
+        # Alex's engineering queue, and how much of it Gary opened today.
+        tickets_by_task = {
+            ticket["task_id"]: ticket for ticket in repos.engineering.list_all(100)
+        }
+        tickets_by_id = {ticket["id"]: ticket for ticket in tickets_by_task.values()}
+        tickets_today = repos.engineering.count_created_since(day_start) if day_start else 0
+        seen_tickets: set[str] = set()
         # What the team is already doing, so a cycle cannot re-commission it.
         since = format_utc(to_datetime(now) - dt.timedelta(days=REPEAT_ASSIGNMENT_DAYS))
         recent_assignments: dict[str, list[frozenset[str]]] = {}
@@ -431,6 +464,108 @@ def validate_cycle_actions(
                         "task_title": f"review: {topic[:80]}",
                     }
                 )
+                counts[action_type] += 1
+                continue
+
+            if action_type == "create_engineering_ticket":
+                task_id = proposal.get("task_id") or None
+                task = repos.tasks.get(task_id) if isinstance(task_id, str) else None
+                if task is None:
+                    reject("unknown task")
+                    continue
+                if task["status"] in CLOSED_STATUSES:
+                    reject(f"the task is {task['status']}")
+                    continue
+                existing = tickets_by_task.get(task["id"])
+                if existing and existing["sync_state"] == "synced":
+                    reject("that task already has an engineering ticket")
+                    continue
+                if counts[action_type] >= MAX_CYCLE_TICKETS:
+                    reject(f"at most {MAX_CYCLE_TICKETS} engineering ticket per cycle")
+                    continue
+                if tickets_today + counts[action_type] >= MAX_DAILY_TICKETS:
+                    reject(f"at most {MAX_DAILY_TICKETS} engineering tickets a day")
+                    continue
+
+                title = " ".join(str(proposal.get("title") or "").split())[:240]
+                objective = " ".join(str(proposal.get("objective") or "").split())[:4000]
+                requirements = _bounded_lines(proposal.get("requirements"))
+                acceptance = _bounded_lines(proposal.get("acceptance_criteria"))
+                if len(title) < 5 or len(objective) < 20:
+                    reject("an engineering ticket needs a title and an objective")
+                    continue
+                if not requirements or not acceptance:
+                    reject("an engineering ticket needs requirements and acceptance criteria")
+                    continue
+                priority = str(proposal.get("priority") or "P2").upper()
+                if priority not in TICKET_PRIORITIES:
+                    reject(f"priority must be one of {', '.join(TICKET_PRIORITIES)}")
+                    continue
+
+                payload = {
+                    "task_id": task["id"],
+                    "title": title,
+                    "objective": objective,
+                    "requirements": requirements,
+                    "acceptance_criteria": acceptance,
+                    "priority": priority,
+                    "kind": "bug" if proposal.get("kind") == "bug" else "feature",
+                    "security_review_required": bool(
+                        proposal.get("security_review_required", False)
+                    ),
+                }
+                if isinstance(task["estimated_minutes"], int) and task["estimated_minutes"] > 0:
+                    payload["estimated_minutes"] = task["estimated_minutes"]
+                accepted.append(
+                    {
+                        "action_type": action_type,
+                        "payload": payload,
+                        "reason": str(proposal.get("reason") or "")[:1000] or None,
+                        "task_id": task["id"],
+                        "project_id": task["project_id"],
+                        "task_title": title,
+                    }
+                )
+                counts[action_type] += 1
+                continue
+
+            if action_type == "set_engineering_priority":
+                ticket_id = proposal.get("ticket_id") or None
+                ticket = tickets_by_id.get(ticket_id) if isinstance(ticket_id, str) else None
+                if ticket is None:
+                    reject("unknown engineering ticket")
+                    continue
+                priority = str(proposal.get("priority") or "").upper()
+                if priority not in TICKET_PRIORITIES:
+                    reject(f"priority must be one of {', '.join(TICKET_PRIORITIES)}")
+                    continue
+                if ticket["priority"] == priority:
+                    reject(f"that ticket is already {priority}")
+                    continue
+                if ticket["status"] == "done":
+                    reject("that ticket is done")
+                    continue
+                if ticket_id in seen_tickets:
+                    reject("the ticket already has an action in this plan")
+                    continue
+                if counts[action_type] >= MAX_CYCLE_PRIORITY_CHANGES:
+                    reject(f"at most {MAX_CYCLE_PRIORITY_CHANGES} priority changes per cycle")
+                    continue
+                accepted.append(
+                    {
+                        "action_type": action_type,
+                        "payload": {
+                            "ticket_id": ticket["id"],
+                            "priority": priority,
+                            "reason": str(proposal.get("reason") or "")[:1000] or None,
+                        },
+                        "reason": str(proposal.get("reason") or "")[:1000] or None,
+                        "task_id": ticket["task_id"],
+                        "project_id": None,
+                        "task_title": f"#{ticket['github_issue_number']} -> {priority}",
+                    }
+                )
+                seen_tickets.add(ticket_id)
                 counts[action_type] += 1
                 continue
 

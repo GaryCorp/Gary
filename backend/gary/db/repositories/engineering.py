@@ -125,6 +125,14 @@ class EngineeringTicketRepository:
     def list_open(self, limit: int = 50) -> list[dict]:
         return self.list_by_status(OPEN_TICKET_STATUSES, limit)
 
+    def count_created_since(self, since: str) -> int:
+        """How many tickets have been opened since a point in time, for the
+        cap on how much work Gary may assign unattended."""
+        return self.conn.execute(
+            "SELECT COUNT(*) AS n FROM engineering_tickets WHERE created_at >= ?",
+            (since,),
+        ).fetchone()["n"]
+
     def list_syncable(self, limit: int = 100) -> list[dict]:
         """Tickets with a GitHub issue that are not finished: what a sync run
         needs to look at."""

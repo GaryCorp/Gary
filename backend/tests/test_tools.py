@@ -51,6 +51,7 @@ EXPECTED_TOOLS = {
     "engineering_add_comment",
     "engineering_sync",
     "engineering_status",
+    "engineering_set_priority",
     "hiring_context",
     "propose_new_employee",
     "ask_user",

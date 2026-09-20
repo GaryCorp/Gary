@@ -145,6 +145,25 @@ chmod 700 data
 - Use a virtual or limited card where possible, and freeze it at `/finance`
   when not needed.
 
+## Gary assigning engineering work
+
+Gary opens and re-prioritises tickets in Alex's private GitHub repository
+unattended, without an approval step. What makes that acceptable:
+
+- a ticket is a **specification**, not an external side effect. It asks Alex
+  to do something; it changes nothing outside GaryCorp's own private
+  repository, and nothing in the integration can merge, deploy, or close work
+  on Alex's behalf;
+- the privacy gate runs before every write and fails closed, so a repository
+  or Project that is not private stops the ticket before anything is sent;
+- hard caps bound the volume: 1 new ticket per cycle, 3 per local day, 2
+  priority changes per cycle, on top of the management loop's own daily
+  ceiling;
+- a cycle can only ticket a task that already exists and has no ticket, so it
+  cannot invent and assign work in a single pass;
+- `UNIQUE(task_id)` makes creation idempotent, and a partial failure is stored
+  as `degraded` and retried, never reported as a created ticket.
+
 ## Gary speaking first
 
 Gary can start a conversation (`ask_user`). Speaking changes nothing by

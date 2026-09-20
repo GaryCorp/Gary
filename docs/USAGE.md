@@ -374,6 +374,25 @@ recipient, text, or times, and it remains the only way to approve a card
 purchase or a hire. Unanswered approvals expire after 72 hours. Gary only
 reports an action as done when it actually succeeded.
 
+## Gary running your engineering queue
+
+You are GaryCorp's Software/AI Engineer, and Gary is your manager. He opens
+tickets in the private repository, assigns them to you, sets and changes their
+priority, and puts the work on your calendar — in conversation, and on his own
+between conversations.
+
+```text
+Gary, what's on my engineering queue?
+Gary, make the retention bug a P0, the demo moved up.
+Gary, what did you assign me this week?
+```
+
+Unprompted he is deliberately limited: at most one new ticket per planning
+cycle, three a day, and two priority changes a cycle. He can only ticket work
+that is already a task, so nothing appears that you have not at least seen as
+a task first. Everything he opens is in the private Project, and he tells you
+out loud when it matters.
+
 ## When Gary starts the conversation
 
 Gary speaks first when something genuinely needs you: a decision only you can

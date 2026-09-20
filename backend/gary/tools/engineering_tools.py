@@ -13,6 +13,7 @@ from gary.models.engineering import (
     CommentRequest,
     CreateEngineeringTicketRequest,
     ListTicketsRequest,
+    SetPriorityRequest,
     TicketLookupRequest,
     TransitionRequest,
 )
@@ -98,6 +99,14 @@ def _transition_tool(target: EngineeringStatus):
         return {"ticket": _result(ticket), "status": ticket.status.value}
 
     return handler
+
+
+async def engineering_set_priority(args: dict, ctx: ToolContext) -> dict:
+    request = validate_request(SetPriorityRequest, args)
+    service = _service(ctx)
+    row = await _resolve(ctx, request)
+    ticket = await service.set_priority(row, request.priority, request.reason)
+    return {"ticket": ticket.brief()}
 
 
 async def engineering_add_comment(args: dict, ctx: ToolContext) -> dict:
@@ -246,9 +255,28 @@ TOOLS = [
         _transition_tool(EngineeringStatus.BLOCKED),
     ),
     Tool(
+        "engineering_set_priority",
+        "Change an existing ticket's priority. It updates the stored priority, the issue "
+        "label, and the Priority field on the Engineering Project, so they always agree. "
+        "Use it when what matters has genuinely changed, such as a deadline moving or "
+        "something newly blocking other work; say why. Refused if the ticket is already at "
+        "that priority.",
+        obj(
+            {
+                **LOOKUP_PROPERTIES,
+                "priority": string("P0 urgent to P3 low.", ["P0", "P1", "P2", "P3"]),
+                "reason": string("Why it changed, in one sentence."),
+            },
+            ("priority",),
+        ),
+        engineering_set_priority,
+    ),
+    Tool(
         "engineering_add_comment",
         "Add a comment to a ticket's private GitHub issue. Use for meaningful operational "
-        "updates only, such as a priority change, a moved deadline, or a new dependency.",
+        "updates only, such as a moved deadline or a new dependency. To change the "
+        "priority use engineering_set_priority, which actually changes it; a comment "
+        "saying the priority changed would not.",
         obj({**LOOKUP_PROPERTIES, "comment": string("The update, in one or two sentences.")},
             ("comment",)),
         engineering_add_comment,
