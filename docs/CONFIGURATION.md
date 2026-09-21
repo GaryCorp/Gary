@@ -394,6 +394,36 @@ docker compose exec backend python -m app.costs models
 Set it to `false` to keep running with spend you cannot measure; the system
 still refuses to claim the ceiling is enforced.
 
+### `OPENAI_ADMIN_KEY`
+
+Default: empty (billed costs unavailable).
+
+An OpenAI **Admin key**, used only to read what OpenAI actually billed
+(`GET /v1/organization/costs`), so `/costs` and `python -m app.costs billed`
+can show the provider's figure beside Gary's estimate. It is optional: without
+it, costs are estimated from `data/model_prices.json` and the billed figure is
+reported as unavailable, never as zero.
+
+This is not the same as `OPENAI_API_KEY`. An ordinary project key cannot read
+organization usage. To create one you must be an **Owner** of the OpenAI
+organization:
+
+1. Open platform.openai.com, then **Settings > Organization > Admin keys**.
+2. **Create new admin key**. Give it a name such as `gary-costs-readonly`.
+3. If you are offered permissions, grant read access to **usage** only
+   (`api.usage.read`) and nothing else.
+4. Copy the key (it starts `sk-admin-`); it is shown once.
+5. Put it in `.env` as `OPENAI_ADMIN_KEY=...` and restart the backend:
+   `docker compose up -d backend`.
+
+An admin key is far more powerful than an API key, so keep it scoped to usage
+if you can, keep it only in `.env`, and revoke it from the same page if it is
+ever exposed. Check it works with:
+
+```bash
+docker compose exec backend python -m app.costs billed
+```
+
 ### `WEEKLY_REVIEW_DAY`
 
 Default: `4` (Friday; 0 is Monday).
