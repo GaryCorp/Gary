@@ -10,6 +10,7 @@ from googleapiclient.errors import HttpError
 
 from app.config import LOCAL_TIMEZONE
 from app.google_auth import credentials_for_active_user
+from gary.timeutil import parse_timestamp
 
 
 def calendar_service(credentials: Credentials):
@@ -269,3 +270,54 @@ async def delete_calendar_event(
         # Only this occurrence is removed for a recurring series.
         "recurring_occurrence": bool(event.get("recurringEventId")),
     }
+
+
+class GoogleBusyCalendar:
+    """Busy intervals only: no titles, attendees, or descriptions."""
+
+    async def busy_intervals(self, start: str, end: str) -> list[dict]:
+        _, credentials = await credentials_for_active_user()
+        service = calendar_service(credentials)
+        intervals, page_token = [], None
+
+        for _ in range(10):
+            arguments = {
+                "calendarId": "primary",
+                "timeMin": start,
+                "timeMax": end,
+                "singleEvents": True,
+                "orderBy": "startTime",
+                "maxResults": 250,
+            }
+            if page_token:
+                arguments["pageToken"] = page_token
+            response = await asyncio.to_thread(
+                lambda: service.events().list(**arguments).execute()
+            )
+
+            for event in response.get("items", []):
+                event_start = event.get("start", {}).get("dateTime")
+                event_end = event.get("end", {}).get("dateTime")
+                declined = any(
+                    attendee.get("self") and attendee.get("responseStatus") == "declined"
+                    for attendee in event.get("attendees", [])
+                )
+                if (
+                    not event_start  # all-day events do not block time
+                    or event.get("transparency") == "transparent"
+                    or event.get("status") == "cancelled"
+                    or declined
+                ):
+                    continue
+                intervals.append(
+                    {
+                        "start": parse_timestamp(event_start, "start"),
+                        "end": parse_timestamp(event_end, "end"),
+                        "event_id": event.get("id"),
+                    }
+                )
+
+            page_token = response.get("nextPageToken")
+            if not page_token:
+                break
+        return intervals

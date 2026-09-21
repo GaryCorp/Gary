@@ -148,14 +148,56 @@ Python package marker.
 
 ### `backend/app/main.py`
 
-Builds the shared objects and contains:
+The composition root. Builds the shared objects (Gary's operations package,
+the planning cycle, the team, the cost ledger and spend ceiling) and contains:
 
-- FastAPI routes, including the approvals, team, finance and events pages;
-- the Google sign-in routes (your account and Gary's mailbox);
-- the Realtime WebSocket bridge and the voice tool dispatcher;
-- Google Calendar and Gmail action handlers for the operations package;
-- the planning scheduler, Joplin planning notebook, and busy-calendar reader;
-- the management loop, spoken delivery, and the new email announcements.
+- the background loops: planning scheduler, management loop, spoken delivery,
+  weekly review, GitHub sync, missed-block replanning, and the new email and
+  operations announcements;
+- the read-only status endpoints (`/health`, `/costs`, `/management/status`,
+  `/engineering/status`);
+- the voice WebSocket bridge and the tool call entry point both voice paths use.
+
+### `backend/app/pages.py`
+
+The web pages: `/`, the Google sign-in routes (your account and Gary's
+mailbox), `/events`, `/approvals`, `/team` and `/finance`.
+
+### `backend/app/calendar_actions.py`
+
+The `schedule_task`, `move_calendar_event` and `send_external_email` action
+handlers for the operations package.
+
+### `backend/app/notebooks.py`
+
+The Joplin notebooks used outside a conversation: Planning and Daily
+Summaries, each specialist's own notebook, and Gary > Spoken.
+
+### `backend/app/announcements.py`
+
+The words Gary says when he speaks first: operations alerts and approvals.
+
+### `backend/app/tool_dispatch.py`
+
+Runs the voice tools that reach Google Calendar, Gmail and Joplin.
+
+### `backend/app/realtime.py` and `backend/app/realtime_session.py`
+
+`VOICE_MODE=realtime`: the response turn-taking rules (no I/O), and the
+OpenAI Realtime connection itself.
+
+### `backend/app/voice_turn.py`
+
+`VOICE_MODE=transcribe`: one utterance transcribed, then answered by a text
+model.
+
+### `backend/app/system_summary.py`
+
+The deployment described without secrets, for Dave's security reviews.
+
+### `backend/app/local_time.py`
+
+Timestamps in local time, for the calendar and for being spoken.
 
 ### `backend/app/config.py`
 
@@ -168,11 +210,12 @@ Gary's own mailbox) a call goes through.
 
 ### `backend/app/google_calendar.py`
 
-Calendar read, create, and delete helpers.
+Calendar read, create, and delete helpers, and the busy-time reader planning
+uses.
 
 ### `backend/app/gmail.py`
 
-Gmail tools and the new email check.
+Gmail tools, the new email check, and the unread summaries planning uses.
 
 ### `backend/app/joplin.py`
 

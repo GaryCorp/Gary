@@ -40,9 +40,11 @@ docker compose build backend && docker compose up -d backend
 Operator CLIs, all run inside the backend container:
 
 ```bash
+python -m app.ask [--show-tools] "..."                  # talk to Gary in text (company tools only)
 python -m app.team_cli team|assign|review|show          # run specialists by hand
+python -m app.hiring_cli list|show|dismiss              # hired employees; dismissal is Alex's alone
 python -m app.dry_run [--type management] [--act]       # a planning cycle, observe-only by default
-python -m app.costs report|billed|prices|set-price      # what the AI costs
+python -m app.costs report|models|billed|prices|set-price     # what the AI costs
 python -m gary.integrations.github.setup                # verify the private GitHub wiring
 ```
 
@@ -58,23 +60,46 @@ and **ease-api** + **ease-worker** + **ease-redis** (the EASE service Lauren
 uses, host port 8002).
 
 Voice is a split pipeline, not an audio model: local faster-whisper detects the
-wake word, audio goes to the OpenAI Realtime API with
-`output_modalities: ["text"]`, and **local Piper TTS speaks the reply**. This is
-why Gary's prompt forbids markdown, lists and symbols.
+wake word and segments the utterance, and **local Piper TTS speaks the reply**.
+In between, `VOICE_MODE` picks one of two paths:
+
+- `transcribe` (default, `app/voice_turn.py`): the utterance goes to a
+  transcription model (billed per minute), the words go to a text model over the
+  Responses API with Gary's tools. History is kept in the backend because the
+  text model is stateless.
+- `realtime`: the original single OpenAI Realtime session with
+  `output_modalities: ["text"]`; `app/realtime.py` serialises response
+  turn-taking so a tool result is never dropped.
+
+Both use the same tool schemas. Piper speaking is why Gary's prompt forbids
+markdown, lists and symbols.
 
 ## Architecture
 
 ### Composition root vs domain
 
 `backend/app/` is the composition root and wires concrete integrations into
-`gary/`. `main.py` (~2.8k lines) builds the shared objects (`gary_ops`, the
-planning cycle, the agents), the web pages, the voice WebSocket, the tool
-dispatcher, and the background loops started in `lifespan`. Beside it:
-`config.py` (every env setting), `google_auth.py` (encrypted token store,
-OAuth flow, which mailbox a call uses), `google_calendar.py`, `gmail.py`,
-`joplin.py`, `voice_tools.py` (tool schemas) and `instructions.py` (Gary's
-prompt). These import from `config` and each other, never from `main`; tests
-patch a name in the module that defines it.
+`gary/`. `main.py` builds the shared objects (`gary_ops`, the planning cycle,
+the agents, the cost ledger and spend gate), the status endpoints, the voice
+WebSocket, and the background loops started in `lifespan`. Beside it:
+
+- `config.py` (every env setting), `google_auth.py` (encrypted token store,
+  OAuth flow, which mailbox a call uses), `google_calendar.py`, `gmail.py`,
+  `joplin.py` — the integrations;
+- `pages.py` — the HTML pages and sign-in routes, an `APIRouter` that reads
+  `gary_ops`, `agent_service` and `card_vault` from `request.app.state`;
+- `calendar_actions.py` (Google-backed action handlers), `notebooks.py`
+  (Joplin notebooks used outside a conversation), `tool_dispatch.py`
+  (Google/Joplin voice tools), `announcements.py` (what Gary says unprompted),
+  `system_summary.py`, `local_time.py`;
+- `voice_tools.py` (tool schemas), `instructions.py` (Gary's prompt),
+  `voice_turn.py` / `realtime.py` + `realtime_session.py` (the two voice
+  paths), and the operator CLIs.
+
+These import from `config` and each other, **never from `main`** — anything
+that needs a runtime object takes it as an argument or from `app.state`. The
+CLIs are the exception: they import `main` to reach the live objects. Tests
+patch a name in the module that defines it (e.g. `pages.make_flow`).
 
 `backend/gary/` is the domain and has no knowledge of FastAPI or Google:
 
@@ -83,9 +108,9 @@ patch a name in the module that defines it.
 | `container.py` | `build_gary()` assembles services over one SQLite database |
 | `db/` | numbered SQL migrations + one repository per table; SQL lives here and nowhere else |
 | `models/` | pydantic request models; `extra="forbid"`, validated at the boundary |
-| `services/` | task/project/action/approval/planning/briefing, the planning cycle, the management loop, engineering tickets |
+| `services/` | task/project/action/approval/planning/briefing, follow-ups and commitments, the planning cycle, the management loop, engineering tickets, spoken messages (`conversation_service`), hiring and reorg proposals, performance facts, the weekly review |
 | `tools/` | the *only* interface the voice model has to SQLite |
-| `agents/` | the GaryCorp specialists (CrewAI), their roster, gateway, runner |
+| `agents/` | the GaryCorp specialists (CrewAI), their roster, gateway, runner, hiring (`HIREABLE_TOOLS`, prompt frame), EASE client |
 | `finance/` | card vault, purchase policy, model prices, usage ledger |
 | `integrations/github/` | private-only engineering tickets (REST + Projects v2) |
 
@@ -110,6 +135,17 @@ Breaking one is almost always a bug.
   `FORBIDDEN_TOOLS` cannot be granted at all.
 - **Specialists are advisory.** A report changes nothing by itself. Only Gary
   delegates; employees cannot.
+- **The company's shape is a code change.** `sync_roster` mirrors `roster.py`
+  into the database on every start. Hiring and reorganisation are yellow
+  actions: approving one files a private engineering ticket for Alex to edit
+  `roster.py` and deploy; it never creates an agent or changes a permission by
+  itself. Gary cannot be the subject of a reorg. Employees hired under the
+  older data-driven flow (`hired_employees`) still load, but only if they
+  validate against `HIREABLE_TOOLS`.
+- **Speaking first is an action.** Deciding to say something writes a
+  `spoken_messages` row (validated, capped, never a duplicate open question);
+  delivery is separate and retried, and a row is marked spoken only once a voice
+  client received it.
 - **SQLite is the source of truth** for company state; GitHub owns the external
   workflow state of an issue. `engineering_tickets.task_id` is unique, which is
   what makes ticket creation idempotent.
@@ -142,7 +178,14 @@ scheduled cycles (08:00/12:30/17:30)  +  management loop (every 15 min)
 A cycle may create tasks, delegate to a specialist, or start a management
 review, under caps in `planning_cycle.py` (2 delegations per cycle, 4 per day,
 1 review per day) plus repeat detection so the same question is not commissioned
-twice. Finished assignments wake the loop immediately.
+twice. Finished assignments wake the loop immediately. The management loop also
+has a daily run ceiling.
+
+Other background loops started in `lifespan`: spoken-message delivery, the
+GitHub ticket sync, the missed-block replan, new-email announcements, the daily
+SQLite backup (`gary/backup.py`, to `data/backups/`, 14 kept), and the weekly
+review (`WEEKLY_REVIEW_DAY`), written to Joplin from SQLite with **no model
+call** so it still works when spending is stopped.
 
 ### Cost accounting
 
@@ -151,6 +194,13 @@ voice) and priced from `data/model_prices.json`. **An unpriced model is reported
 as unpriced, never as free**; EASE runs in its own container and is reported as
 unmeasured. With `OPENAI_ADMIN_KEY` (scope `api.usage.read`) Gary also reads the
 provider's billed figure.
+
+`MAX_DAILY_AI_SPEND_USD` is a hard daily ceiling: once reached, everything that
+calls a model stops until local midnight, voice included (`spend_stop` in
+`main.py`). It can only be enforced for priced models, so the gate reports
+itself unenforceable rather than "within budget" when a call is unpriced, and
+`REQUIRE_PRICED_MODELS` (default on) refuses unattended work while any
+*configured* model has no price.
 
 ## Tests
 
@@ -171,5 +221,6 @@ had missed).
 `docs/` is written for the operator and is kept current with the code:
 `ARCHITECTURE.md`, `TEAM.md` (the five specialists, permissions, EASE, costs),
 `ENGINEERING.md` (GitHub tickets), `SECURITY.md`, `PRIVACY.md`,
-`CONFIGURATION.md` (every `.env` setting), `SETUP.md`, `USAGE.md`,
-`TROUBLESHOOTING.md`. Update the relevant one in the same change as the code.
+`CONFIGURATION.md` (every `.env` setting), `GOOGLE_OAUTH.md` (both mailboxes),
+`SETUP.md`, `USAGE.md`, `TROUBLESHOOTING.md` (including restoring a backup),
+`PROJECT_FILES.md` (what each file is for). Update the relevant one in the same change as the code.

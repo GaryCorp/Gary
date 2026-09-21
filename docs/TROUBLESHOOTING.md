@@ -182,7 +182,7 @@ Gary tells you the reason. Check:
 Test the whole path from the backend:
 
 ```bash
-docker compose exec backend python -c "import asyncio; from app.main import list_joplin_notebooks as f; print(asyncio.run(f()))"
+docker compose exec backend python -c "import asyncio; from app.joplin import list_joplin_notebooks as f; print(asyncio.run(f()))"
 ```
 
 ## Gary says an action is waiting for approval

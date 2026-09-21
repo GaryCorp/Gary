@@ -68,7 +68,7 @@ def import_main():
 
 main = import_main()
 
-from app import config, gmail, google_auth  # noqa: E402  (after the env is set)
+from app import config, gmail, google_auth, pages  # noqa: E402  (after the env is set)
 
 
 class FakeGmail:
@@ -146,7 +146,7 @@ def credentials(token: str) -> Credentials:
 @pytest.fixture
 def accounts(monkeypatch, tmp_path):
     """A fresh token store and one fake Gmail per signed-in account."""
-    # One store is shared by google_auth and the sign-in routes in main, so
+    # One store is shared by google_auth and the sign-in routes in pages, so
     # it is pointed at a fresh file rather than replaced.
     store = google_auth.store
     monkeypatch.setattr(store, "path", tmp_path / "token_store.enc")
@@ -332,9 +332,9 @@ def web(accounts, monkeypatch):
         flows["mailbox"] = mailbox
         return flows["flow"]
 
-    monkeypatch.setattr(main, "make_flow", make_flow)
+    monkeypatch.setattr(pages, "make_flow", make_flow)
     monkeypatch.setattr(
-        main.id_token, "verify_oauth2_token",
+        pages.id_token, "verify_oauth2_token",
         lambda token, request, client_id: flows["flow"].claims,
     )
     client = TestClient(main.app, base_url="http://localhost:8000")
