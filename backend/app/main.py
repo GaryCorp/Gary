@@ -185,7 +185,8 @@ MANAGEMENT_WEEKDAYS = parse_weekdays(
 # token is read here and never stored, logged, or put in a prompt or issue.
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "").strip()
 # How often unfinished tickets are synchronized from GitHub. 0 turns it off.
-GITHUB_SYNC_INTERVAL_MINUTES = float(os.getenv("GITHUB_SYNC_INTERVAL_MINUTES", "5"))
+# Set in .env; an empty or missing value falls back to 5.
+GITHUB_SYNC_INTERVAL_MINUTES = float(os.getenv("GITHUB_SYNC_INTERVAL_MINUTES", "").strip() or "5")
 
 # Lauren's EASE ethical decision-making service (the ease-api container).
 # Empty URL = Lauren applies the framework without the service.
