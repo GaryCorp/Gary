@@ -19,6 +19,11 @@ services:
       VOICE_BRIDGE_TOKEN: "${VOICE_BRIDGE_TOKEN:?Run bash setup.sh}"
 
       OPENAI_REALTIME_MODEL: "${OPENAI_REALTIME_MODEL:-gpt-realtime-2.1}"
+      # transcribe: local wake word, then transcription + a text model.
+      # realtime: the original single Realtime session.
+      VOICE_MODE: "${VOICE_MODE:-transcribe}"
+      VOICE_TRANSCRIBE_MODEL: "${VOICE_TRANSCRIBE_MODEL:-}"
+      VOICE_TEXT_MODEL: "${VOICE_TEXT_MODEL:-}"
       LOCAL_TIMEZONE: "${LOCAL_TIMEZONE:-America/Chicago}"
       WAKE_WORD: "${WAKE_WORD:-gary}"
       EMAIL_CHECK_INTERVAL_MINUTES: "${EMAIL_CHECK_INTERVAL_MINUTES:-60}"
@@ -35,11 +40,14 @@ services:
       GARY_BACKUP_KEEP: "${GARY_BACKUP_KEEP:-14}"
       OPS_CHECK_INTERVAL_MINUTES: "${OPS_CHECK_INTERVAL_MINUTES:-5}"
       SPOKEN_DELIVERY_SECONDS: "${SPOKEN_DELIVERY_SECONDS:-60}"
+      MAX_DAILY_AI_SPEND_USD: "${MAX_DAILY_AI_SPEND_USD:-10.00}"
+      WEEKLY_REVIEW_DAY: "${WEEKLY_REVIEW_DAY:-4}"
+      REQUIRE_PRICED_MODELS: "${REQUIRE_PRICED_MODELS:-true}"
 
       # Scheduled planning cycle. Set PLANNING_TIMES empty to turn it off.
       PLANNING_TIMES: "${PLANNING_TIMES-morning=08:00,midday=12:30,evening=17:30}"
       PLANNING_WEEKDAYS: "${PLANNING_WEEKDAYS:-mon,tue,wed,thu,fri}"
-      PLANNING_MODEL: "${PLANNING_MODEL:-gpt-5.4-mini}"
+      PLANNING_MODEL: "${PLANNING_MODEL:-gpt-5.6-luna}"
       PLANNING_MAX_ACTIONS: "${PLANNING_MAX_ACTIONS:-5}"
       WORK_HOURS: "${WORK_HOURS:-9-17}"
       PROTECTED_TIMES: "${PROTECTED_TIMES-12:00-13:00}"
@@ -61,7 +69,7 @@ services:
 
       # GaryCorp specialists (Susan, Dave, Linda, Catherine, Lauren). Empty model = PLANNING_MODEL.
       GARY_EMPLOYEE_MODEL: "${GARY_EMPLOYEE_MODEL:-}"
-      AGENT_WEB_SEARCH_MODEL: "${AGENT_WEB_SEARCH_MODEL:-gpt-5.4-mini}"
+      AGENT_WEB_SEARCH_MODEL: "${AGENT_WEB_SEARCH_MODEL:-gpt-5.6-luna}"
       MAX_AGENT_ITERATIONS: "${MAX_AGENT_ITERATIONS:-8}"
       MAX_AGENT_EXECUTION_SECONDS: "${MAX_AGENT_EXECUTION_SECONDS:-300}"
       MAX_CONCURRENT_AGENT_RUNS: "${MAX_CONCURRENT_AGENT_RUNS:-2}"
@@ -176,6 +184,12 @@ services:
       ACTIVE_SESSION_SECONDS: "${ACTIVE_SESSION_SECONDS:-45}"
       FOLLOWUP_GRACE_SECONDS: "${FOLLOWUP_GRACE_SECONDS:-10}"
 
+      # Must match the backend's VOICE_MODE.
+      VOICE_MODE: "${VOICE_MODE:-transcribe}"
+      UTTERANCE_SILENCE_SECONDS: "${UTTERANCE_SILENCE_SECONDS:-1.2}"
+      UTTERANCE_ENERGY: "${UTTERANCE_ENERGY:-0.006}"
+      MAX_UTTERANCE_SECONDS: "${MAX_UTTERANCE_SECONDS:-30}"
+
       PULSE_SERVER: unix:/run/pulse/native
 
     # Host PipeWire/PulseAudio socket. Raw /dev/snd access fails for playback
@@ -263,7 +277,7 @@ services:
       # Google set EASE_LLM_PROVIDER, EASE_LLM_API_KEY and EASE_LLM_MODEL.
       LLM_PROVIDER: "${EASE_LLM_PROVIDER:-openai}"
       LLM_API_KEY: "${EASE_LLM_API_KEY:-${OPENAI_API_KEY}}"
-      LLM_MODEL: "${EASE_LLM_MODEL:-gpt-5.4-mini}"
+      LLM_MODEL: "${EASE_LLM_MODEL:-gpt-5.6-luna}"
       # Empty = no auth. Set it if anything beyond localhost can reach the API.
       API_KEY: "${EASE_API_KEY:-}"
       REDIS_URL: redis://ease-redis:6379/0

@@ -169,6 +169,25 @@ ticketing the same work twice and lets it schedule engineering blocks
 knowingly — an engineering ticket's task is an ordinary task, so it is
 scheduled with `schedule_task` like anything else.
 
+### Hire tickets
+
+Approving a hire on `/approvals` files one of these: a task titled
+"Hire <Name> as <Title>" and an issue whose objective is the capability gap,
+whose requirements are the agent's id, name, title, department, notebook,
+specialty, personality and proposed tools, and whose acceptance criteria are
+that they appear in `roster.py`, pass `validate_roster_tools`, show on
+`/team`, and can be delegated to. `security_review_required` is set, because
+a new agent with tools is what that gate exists for. See
+[TEAM.md](TEAM.md#hiring).
+
+### Reorganisation tickets
+
+Approving a reorganisation files a task and an issue whose requirements are
+the **before → after diff** for each role, with the scorecard line each
+change is justified by, and whose acceptance criteria require that
+`allowed_tools` and `can_delegate` are unchanged for every agent. See
+[TEAM.md](TEAM.md#reorganisation).
+
 ## Ticket lifecycle
 
 ```text

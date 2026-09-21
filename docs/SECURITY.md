@@ -145,6 +145,29 @@ chmod 700 data
 - Use a virtual or limited card where possible, and freeze it at `/finance`
   when not needed.
 
+## The spend ceiling
+
+`MAX_DAILY_AI_SPEND_USD` (default $10) is a hard daily limit on what the
+company may spend on thinking, and the main protection when GaryCorp runs
+unattended for days:
+
+- checked at **every** path that can call a model — scheduled cycles, the
+  management loop, `PlanningCycle.run`, specialist runs, and the Realtime
+  voice session — so no route is left open;
+- reached means stopped until local midnight, including voice. The only way
+  to lift it early is raising the value and restarting, which is deliberate:
+  a voice override would itself be a model call, and a misheard one could
+  raise the company's spending limit;
+- announcing the stop costs nothing (local Piper TTS), so a stopped company
+  still tells you it has stopped;
+- audited once per day as `spend_ceiling_reached`, not once per tick.
+
+**Its honest limit:** it can only see priced models. A model with no price
+contributes tokens and no cost, so while any call that day is unpriced the
+gate reports `enforceable: false` and says the ceiling is not protecting you,
+rather than reporting the company as within budget. Setting a price is what
+makes it real.
+
 ## Gary assigning engineering work
 
 Gary opens and re-prioritises tickets in Alex's private GitHub repository
@@ -163,6 +186,27 @@ unattended, without an approval step. What makes that acceptable:
   cannot invent and assign work in a single pass;
 - `UNIQUE(task_id)` makes creation idempotent, and a partial failure is stored
   as `degraded` and retried, never reported as a created ticket.
+
+## Reorganisation
+
+Gary can propose how the company is organised. He cannot change what anyone
+may do:
+
+- `modify_permissions` and `change_own_permissions` stay **RED**. The
+  reorganisation payload has **no field** for tools or `can_delegate`, so a
+  proposal asking for either fails validation before reaching policy — the
+  restriction is structural, not an instruction;
+- a change naming `gary` as its subject is refused: he does not promote
+  himself or rewrite his own remit;
+- reporting loops, self-reporting, unknown agents and no-op changes are all
+  refused in Python;
+- it is **yellow**, so it waits for Alex, and approving files an engineering
+  ticket rather than applying anything. `sync_roster` overwrites the `agents`
+  table from `roster.py` at startup, so the database cannot be used to route
+  around the roster — a tested invariant;
+- the ticket's acceptance criteria require `allowed_tools` and
+  `can_delegate` to be unchanged for every agent, so the reviewer checks the
+  invariant rather than the intent, and `security_review_required` is set.
 
 ## Gary speaking first
 
@@ -377,6 +421,12 @@ at runtime. The guarantees that make it safe:
   hires, and a misheard "yes" by voice cannot add a colleague. Gary now says
   out loud that he has proposed one, so it is not found by accident, but
   telling Alex is not approving: the approval still happens on the page;
+- **approval no longer creates an agent.** It opens a private engineering
+  ticket holding the specification. Nothing new can act until Alex has
+  written the roster entry and deployed, so the blast radius of an approval
+  is a ticket in a queue. The corollary is that a hand-written entry is
+  capped by `FORBIDDEN_TOOLS` and `TOOL_CATALOG`, not by `HIREABLE_TOOLS`:
+  code review is what bounds a new colleague's power;
 - what a hire may do is capped by `HIREABLE_TOOLS` in code — read-only company
   data, web search and their own notebook. Money, security introspection,
   EASE, delegation and every forbidden tool are out of reach whatever the

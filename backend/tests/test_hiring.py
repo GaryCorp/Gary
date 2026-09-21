@@ -21,13 +21,14 @@ from gary.agents.hiring import (
     scrub,
 )
 from gary.agents.gateway import FORBIDDEN_TOOLS, TOOL_CATALOG, RunState, ToolDenied, ToolGateway
-from gary.agents.roster import AgentRegistry
+from gary.agents.roster import AgentRegistry, UnknownAgentError
 from gary.db.repositories import Repositories
 from gary.policy import WEB_ONLY_APPROVAL_ACTIONS
 from gary.services.hiring_actions import dismiss, hire_action_handler, proposal_context
 from gary.tools import ToolContext, call_tool
 
 from conftest import run
+from fake_github import FakeGitHub
 from test_agents import build_team
 
 PROPOSAL = {
@@ -56,12 +57,71 @@ def hired_source(gary):
     return load
 
 
-def hire_ready(gary, executor=None):
+def engineering_for(gary, github: FakeGitHub | None = None):
+    """The engineering ticket service, on a fake GitHub. Approving a hire
+    files a ticket, so hiring cannot be tested without one."""
+    from gary.integrations.github.client import GitHubClient
+    from gary.integrations.github.config import EnvTokenProvider
+    from gary.integrations.github.privacy import PrivacyGate
+    from gary.integrations.github.projects import ProjectBoard
+    from gary.services.engineering_service import EngineeringTicketService
+
+    from test_engineering import build_config
+
+    async def _no_sleep(_seconds):
+        return None
+
+    github = github or FakeGitHub()
+    client = GitHubClient(
+        build_config(), EnvTokenProvider("ghp_fake_token_for_tests"),
+        transport=github, sleep=_no_sleep,
+    )
+    service = EngineeringTicketService(
+        gary, client, board=ProjectBoard(client),
+        gate=PrivacyGate(client, cache_seconds=0), clock=gary.planning.clock,
+    )
+    return service, github
+
+
+def hire_ready(gary, executor=None, engineering=None, github=None):
     """A registry and Gary wired up so hiring can be proposed and approved."""
     service = build_team(gary, executor, hired_source=hired_source(gary))
     registry = service.registry
-    gary.actions.handlers.update(hire_action_handler(registry))
+    if engineering is None and engineering is not False:
+        engineering, github = engineering_for(gary, github)
+    gary.actions.handlers.update(
+        hire_action_handler(registry, lambda: engineering or None)
+    )
+    gary.engineering_for_tests = engineering
+    gary.github_for_tests = github
     return service, registry
+
+
+def existing_hire(gary, registry, **overrides) -> dict:
+    """An employee who already exists as a stored row, the way Maya does.
+
+    Approving no longer creates one, but the roster must keep loading the
+    ones that are already there.
+    """
+    from gary.agents.hiring import normalize_tools
+
+    payload = {**PROPOSAL, **overrides}
+    with gary.db.transaction() as conn:
+        row = Repositories.bind(conn).hires.hire(
+            agent_id=payload["agent_id"],
+            name=payload["name"],
+            title=payload["title"],
+            department=payload["department"],
+            notebook=payload["notebook"],
+            specialty=payload["specialty"],
+            personality=payload.get("personality"),
+            capability_gap=payload["capability_gap"],
+            allowed_tools=normalize_tools(payload["tools"]),
+            proposed_by="gary",
+            approved_by="alex",
+        )
+    registry.refresh(force=True)
+    return row
 
 
 def propose(gary, **overrides) -> dict:
@@ -169,28 +229,50 @@ def test_a_hire_cannot_be_approved_by_voice(gary):
         assert Repositories.bind(conn).hires.list_active() == []
 
 
-def test_approval_adds_exactly_one_colleague(gary):
+def test_approval_files_a_ticket_and_hires_nobody(gary):
+    """Approving used to bring a working agent into existence. Now it only
+    commissions the work, so nothing can act until Alex has built it."""
     service, registry = hire_ready(gary)
     before = set(registry.employee_ids())
 
-    approve(gary, propose(gary))
+    result = approve(gary, propose(gary))
 
-    assert set(registry.employee_ids()) - before == {"nina"}
-    nina = registry.get("nina")
-    assert nina.hired is True and nina.reports_to == "gary"
-    assert nina.can_delegate is False and nina.report_kind == "advisory"
-    assert set(nina.allowed_tools) == set(PROPOSAL["tools"]) | set(BASE_HIRE_TOOLS)
+    assert set(registry.employee_ids()) == before, "nobody joined"
+    with pytest.raises(UnknownAgentError):
+        registry.get("nina")
+    execution = result["execution"]
+    assert execution["status"] == "succeeded"
+    assert execution["result"]["joined"] is False
+    assert execution["result"]["issue_number"] == 1
 
     with gary.db.read() as conn:
-        rows = Repositories.bind(conn).hires.list_active()
+        repos = Repositories.bind(conn)
+        assert repos.hires.list_active() == [], "no stored employee either"
+        tickets = repos.engineering.list_all()
         events = [
             r["event_type"]
             for r in conn.execute(
                 "SELECT event_type FROM audit_log WHERE entity_id = 'nina' ORDER BY id"
             )
         ]
-    assert len(rows) == 1 and rows[0]["approved_by"] == "alex"
-    assert "employee_hired" in events
+    assert len(tickets) == 1
+    assert tickets[0]["security_review_required"] == 1, "a new agent needs Dave"
+    assert "employee_requested" in events
+    assert "employee_hired" not in events
+
+
+def test_the_ticket_carries_the_whole_specification(gary):
+    service, registry = hire_ready(gary)
+    approve(gary, propose(gary))
+
+    body = gary.github_for_tests.issue_body(1)
+
+    assert "Nina" in body and "nina" in body
+    assert "Director of Customer Insight" in body
+    assert "viewers" in body, "the capability gap is the objective"
+    assert "roster.py" in body, "Alex is told where it goes"
+    for tool in PROPOSAL["tools"]:
+        assert tool in body
 
 
 def test_a_rejected_proposal_hires_nobody(gary):
@@ -200,15 +282,26 @@ def test_a_rejected_proposal_hires_nobody(gary):
     assert "nina" not in registry.employee_ids()
 
 
-def test_the_same_person_cannot_be_hired_twice(gary):
+def test_the_same_person_is_not_ticketed_twice(gary):
     service, registry = hire_ready(gary)
     approve(gary, propose(gary))
 
-    # A second proposal for the same id is refused at proposal time.
+    # A second proposal for the same person is refused before it files a
+    # second issue for work already commissioned.
     second, error = propose_or_error(gary)
     assert error is not None or second["status"] != "awaiting_approval"
     with gary.db.read() as conn:
-        assert len(Repositories.bind(conn).hires.list_active()) == 1
+        assert len(Repositories.bind(conn).engineering.list_all()) == 1
+
+
+def test_an_already_hired_person_is_refused(gary):
+    """The old data-driven employees still block a duplicate proposal."""
+    service, registry = hire_ready(gary)
+    existing_hire(gary, registry)
+
+    second, error = propose_or_error(gary)
+
+    assert error is not None or second["status"] != "awaiting_approval"
 
 
 def test_colliding_identities_are_refused(gary):
@@ -278,7 +371,7 @@ def test_a_failing_roster_keeps_the_previous_one():
 
 def test_a_hired_employee_only_gets_their_own_tools(gary):
     service, registry = hire_ready(gary)
-    approve(gary, propose(gary))
+    existing_hire(gary, registry)
     nina = registry.get("nina")
     gateway = ToolGateway(service.runner.services, nina, RunState("assign-n", "nina"),
                           registry.limits)
@@ -311,7 +404,7 @@ def test_gary_can_delegate_to_a_hired_employee(gary):
     }
     service, registry = hire_ready(gary, FakeExecutor({"nina": [ADVISORY]}))
     executor = service.runner.executor
-    approve(gary, propose(gary))
+    existing_hire(gary, registry)
     service.sync_roster()
 
     result = run(delegate_and_wait(service, agent_id="nina",
@@ -325,7 +418,7 @@ def test_gary_can_delegate_to_a_hired_employee(gary):
 
 def test_only_alex_dismisses_and_the_record_remains(gary):
     service, registry = hire_ready(gary)
-    approve(gary, propose(gary))
+    existing_hire(gary, registry)
 
     result = dismiss(gary, registry, "nina")
     assert result["status"] == "deactivated"
@@ -424,3 +517,55 @@ def test_a_hire_is_raised_with_alex_out_loud_and_still_settled_on_the_page(gary)
         approve(gary, result, channel="voice")
     with gary.db.read() as conn:
         assert Repositories.bind(conn).hires.list_active() == []
+
+
+def test_without_github_a_hire_cannot_even_be_proposed(gary):
+    """Approving files a ticket, so a deployment with no GitHub must refuse
+    the proposal rather than approve something that can go nowhere."""
+    service, registry = hire_ready(gary, engineering=False)
+
+    result, error = propose_or_error(gary)
+
+    assert error is not None and "not configured" in error
+    with gary.db.read() as conn:
+        assert Repositories.bind(conn).hires.list_active() == []
+
+
+def test_a_github_failure_hires_nobody_and_is_recorded_as_failed(gary):
+    """The external step failing must never read as a successful hire."""
+    github = FakeGitHub()
+    github.fail["create_issue"] = (500, "server error")
+    service, registry = hire_ready(gary, github=github)
+    before = set(registry.employee_ids())
+
+    result = approve(gary, propose(gary))
+
+    assert result["execution"]["status"] == "failed"
+    assert set(registry.employee_ids()) == before
+    with gary.db.read() as conn:
+        repos = Repositories.bind(conn)
+        assert repos.hires.list_active() == []
+        events = [
+            r["event_type"]
+            for r in conn.execute(
+                "SELECT event_type FROM audit_log WHERE entity_id = 'nina' ORDER BY id"
+            )
+        ]
+    assert "employee_requested" not in events
+    assert "employee_hired" not in events
+
+
+def test_the_ticket_is_one_task_assigned_to_alex(gary):
+    service, registry = hire_ready(gary)
+    approve(gary, propose(gary))
+
+    with gary.db.read() as conn:
+        repos = Repositories.bind(conn)
+        tickets = repos.engineering.list_all()
+        task = repos.tasks.get(tickets[0]["task_id"])
+
+    assert len(tickets) == 1
+    assert task["title"] == "Hire Nina as Director of Customer Insight"
+    assert tickets[0]["assigned_to"] == "alex"
+    assert tickets[0]["assignment_confirmed"] == 1
+    assert tickets[0]["sync_state"] == "synced"

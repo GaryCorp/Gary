@@ -27,6 +27,11 @@ ACTION_POLICIES = {
     # are green; what bounds them is the caps in planning_cycle.py.
     "create_engineering_ticket": GREEN,
     "set_engineering_priority": GREEN,
+    # Gary proposing a different shape for the company. Yellow: it changes
+    # nothing by itself -- it files a ticket for Alex -- but how the company
+    # is organised is his decision, not Gary's. Nothing here can change what
+    # anyone is permitted to do; modify_permissions stays red.
+    "propose_reorganisation": YELLOW,
     # Moving a non-critical task block is green; a critical one (see
     # CRITICAL_TASK_PRIORITY) is escalated to yellow by its handler.
     "move_calendar_event": GREEN,

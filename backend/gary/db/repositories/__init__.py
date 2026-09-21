@@ -21,6 +21,7 @@ from gary.db.repositories.hiring import HiredEmployeeRepository
 from gary.db.repositories.followups import FollowupRepository
 from gary.db.repositories.planning_runs import PlanningRunRepository
 from gary.db.repositories.projects import ProjectRepository
+from gary.db.repositories.reviews import PerformanceReviewRepository
 from gary.db.repositories.spoken import SpokenMessageRepository
 from gary.db.repositories.tasks import TaskRepository
 from gary.db.repositories.usage import ModelUsageRepository
@@ -49,6 +50,8 @@ class Repositories:
     usage: ModelUsageRepository
     hires: HiredEmployeeRepository
     spoken: SpokenMessageRepository
+    # 'reviews' above is the multi-agent topic review; this is appraisals.
+    performance: PerformanceReviewRepository
     project_fields: GitHubProjectFieldRepository
 
     @classmethod
@@ -72,6 +75,7 @@ class Repositories:
             usage=ModelUsageRepository(conn),
             hires=HiredEmployeeRepository(conn),
             spoken=SpokenMessageRepository(conn),
+            performance=PerformanceReviewRepository(conn),
             project_fields=GitHubProjectFieldRepository(conn),
         )
 
@@ -93,6 +97,7 @@ __all__ = [
     "FollowupRepository",
     "ModelUsageRepository",
     "PlanningRunRepository",
+    "PerformanceReviewRepository",
     "ProjectRepository",
     "SpokenMessageRepository",
     "Repositories",

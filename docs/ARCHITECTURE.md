@@ -440,7 +440,43 @@ voice container
 
 No deliberate OpenAI microphone stream exists in this state.
 
-### Active state
+### Active state (VOICE_MODE=transcribe, the default)
+
+```text
+pre-roll + microphone PCM24k
+            |
+            v
+   Utterance (voice container)
+   collects while the room is loud,
+   ends after UTTERANCE_SILENCE_SECONDS
+            |
+            v   one WAV, plus its duration
+        FastAPI
+            |
+            +--> transcription model  -> words   (billed per minute)
+            |
+            v
+     text model (VOICE_TEXT_MODEL)
+       |           |
+       |           +--> calendar / email / notes / operations tool
+       |                    |
+       |      Google Calendar / Gmail / Joplin / SQLite
+       |                    |
+       |           <--------+  result appended, model called again
+       v
+  reply text (bridge.reply)
+       |
+       v
+ voice container -> local Piper TTS -> speakers
+```
+
+Conversation history lives in the backend session and is cleared when Gary
+sleeps, which is the lifetime the Realtime conversation had. The tool
+definitions are identical in both modes: `Tool.schema()` emits the flat
+`{"type": "function", "name", "parameters"}` shape that the Realtime and
+Responses APIs both accept.
+
+### Active state (VOICE_MODE=realtime)
 
 ```text
 pre-roll + microphone PCM24k

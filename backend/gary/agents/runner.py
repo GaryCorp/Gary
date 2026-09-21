@@ -20,6 +20,7 @@ from gary.agents.gateway import AgentServices, RunState, ToolDenied, ToolGateway
 from gary.agents.models import FINDINGS_MODELS, REPORT_MODELS, GaryCorpAgentDefinition
 from gary.agents.roster import AgentLimits, UnknownAgentError
 from gary.db.repositories import Repositories
+from gary.finance.usage import SpendCeilingReached
 from gary.models.common import validation_message
 from gary.services.common import NotFoundError
 from gary.timeutil import format_utc, utc_now
@@ -120,12 +121,17 @@ class GaryCorpAgentRunner:
         limits: AgentLimits | None = None,
         on_finished: Callable[[dict], Awaitable[None]] | None = None,
         usage=None,
+        spend_gate=None,
     ):
         self.services = services
         self.executor = executor
         self.model = model
         # The model-usage ledger; runs are uncosted without it.
         self.usage = usage
+        # Asked before a specialist runs. A specialist is the most expensive
+        # thing the company does unattended, so the ceiling is checked here as
+        # well as in the loops that commission the work.
+        self.spend_gate = spend_gate
         self.limits = limits or services.registry.limits
         self.on_finished = on_finished
         self._semaphore = asyncio.Semaphore(self.limits.max_concurrent_runs)
@@ -333,6 +339,12 @@ class GaryCorpAgentRunner:
             )
 
     async def run_assignment(self, assignment_id: str, shared_reports: list[dict] | None = None) -> dict:
+        if self.spend_gate is not None and not self.spend_gate.allowed():
+            # Checked after queueing and before spending: the assignment stays
+            # queued and runs when the ceiling resets, rather than failing.
+            raise SpendCeilingReached(
+                self.spend_gate.state()["reason"] or "The daily AI spend ceiling has been reached"
+            )
         async with self._semaphore:
             return await self._run(assignment_id, shared_reports)
 

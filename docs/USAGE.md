@@ -374,6 +374,42 @@ recipient, text, or times, and it remains the only way to approve a card
 purchase or a hire. Unanswered approvals expire after 72 hours. Gary only
 reports an action as done when it actually succeeded.
 
+## Letting the company run itself
+
+GaryCorp keeps working between conversations: three planning cycles a day, a
+management loop every fifteen minutes, six specialists, and the engineering
+queue. Over days at a time three things keep it honest.
+
+**A daily spending ceiling.** `MAX_DAILY_AI_SPEND_USD` (default $10) stops
+everything that calls a model — including talking to Gary — until midnight
+when it is reached. Gary still says so out loud, because speaking costs
+nothing. Raise the value in `.env` and restart to lift it early.
+
+> Check `python -m app.costs report` before leaving it alone for a week: the
+> ceiling can only be enforced for models that have a price, and it tells you
+> plainly when it cannot.
+
+**Something noticing when the company is stuck.** Failed assignments, broken
+engineering tickets, approvals that expired and questions you never answered
+now count as problems and wake Gary, so a quiet week and a broken one no
+longer look the same. What is stuck is in `/management/status` and in the
+weekly review.
+
+**A weekly review.** On Friday evening Gary writes `Weekly review YYYY-MM-DD`
+in the Joplin Daily Summaries notebook — what was completed, what the team
+was asked, what engineering moved, what was decided, what it cost, and what
+needs you — and speaks a short summary. It is built from the database with no
+model call, so you still get it on a week that hit the ceiling.
+
+```text
+Gary, what did the company do this week?
+Gary, what's stuck?
+Gary, what have we spent?
+```
+
+By default the company pauses Saturday and Sunday. See `MANAGEMENT_WEEKDAYS`
+in [CONFIGURATION.md](CONFIGURATION.md) to run all seven days.
+
 ## Gary running your engineering queue
 
 You are GaryCorp's Software/AI Engineer, and Gary is your manager. He opens

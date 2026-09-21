@@ -1,9 +1,11 @@
 """Gary's hiring tool.
 
-Gary can propose a colleague; only Alex can hire one. The proposal becomes a
-yellow action that waits on the approvals web page, and the tools a new
-employee may hold are capped in code, so the worst a bad proposal can do is
-waste Alex's time.
+Gary can propose a colleague; only Alex can build one. The proposal becomes a
+yellow action that waits on the approvals web page, and approving it opens a
+private GitHub engineering ticket holding the specification. Alex writes the
+new employee into the roster and deploys; nobody joins before that.
+
+So the worst a bad proposal can do is put a ticket in Alex's queue.
 """
 
 from gary.agents.hiring import HIREABLE_TOOLS
@@ -32,7 +34,9 @@ async def hiring_context(args: dict, ctx: ToolContext) -> dict:
         **context,
         "note": (
             "Propose a colleague only for a capability the company actually lacks and "
-            "keeps needing. Alex approves every hire on the approvals web page."
+            "keeps needing. Alex approves the proposal on the approvals web page, which "
+            "opens an engineering ticket for him to build them. The tools listed here are "
+            "what you may propose; what they finally have is decided when Alex builds it."
         ),
     }
 
@@ -47,8 +51,9 @@ async def propose_new_employee(args: dict, ctx: ToolContext) -> dict:
         "proposal": result,
         "note": (
             "This is a proposal, not a hire. It waits for Alex on the approvals page at "
-            "http://localhost:8000/approvals and cannot be approved by voice. Do not say "
-            f"{request.name} has joined until it is approved."
+            "http://localhost:8000/approvals and cannot be approved by voice. Approving it "
+            "opens an engineering ticket for Alex to build them; it does not create anyone. "
+            f"Do not say {request.name} has joined until team_list shows them."
         ),
     }
 
@@ -63,11 +68,13 @@ TOOLS = [
     ),
     Tool(
         "propose_new_employee",
-        "Propose hiring a new AI employee for a capability GaryCorp lacks. Alex approves "
-        "or rejects it on the approvals web page; you cannot hire anyone yourself, and you "
-        "cannot approve it by voice. Only propose when the gap is real and recurring, not "
-        "for one task, and never to make the company look bigger. A new employee is "
-        "advisory like the others and may only have the tools hiring_context lists.",
+        "Propose a new AI employee for a capability GaryCorp lacks. Alex approves or "
+        "rejects it on the approvals web page; you cannot hire anyone yourself, and you "
+        "cannot approve it by voice. Approving opens a private engineering ticket for Alex "
+        "to build them, so nobody joins the company until he has written and deployed "
+        "them. Only propose when the gap is real and recurring, not for one task, and "
+        "never to make the company look bigger. A new employee is advisory like the "
+        "others and may only have the tools hiring_context lists.",
         obj(
             {
                 "agent_id": string("Lowercase id, e.g. 'nina'. Letters, digits, underscores."),

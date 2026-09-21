@@ -39,6 +39,17 @@ class AuditRepository:
         )
         return cursor.lastrowid
 
+    def count_events_for(self, event_type: str, actor: str, since: str) -> int:
+        """How many times one actor caused one kind of event. Used by
+        performance scorecards, where a count is the whole point."""
+        return self.conn.execute(
+            """
+            SELECT COUNT(*) AS n FROM audit_log
+            WHERE event_type = ? AND actor = ? AND timestamp >= ?
+            """,
+            (event_type, actor, since),
+        ).fetchone()["n"]
+
     def list_recent(self, limit: int = 50) -> list[dict]:
         return rows_to_dicts(
             self.conn.execute(

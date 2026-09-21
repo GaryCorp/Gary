@@ -64,6 +64,22 @@ planning cycle below, and `planning_get_context` in conversation) reads
 Planning notes titled like an active project or "Preferences", and Gary's
 previous daily summary.
 
+## What is sent when you speak
+
+With `VOICE_MODE=transcribe` (the default), the wake word is still detected
+entirely locally, and nothing leaves the machine until it fires. After it
+does, the recording of **that utterance** is uploaded to OpenAI's
+transcription model, and the resulting words — not the audio — are sent to
+the text model along with the conversation so far. The reply is spoken by
+local Piper.
+
+This sends less than the previous `realtime` mode, which streamed live
+microphone audio for the whole session. Either way the wake-word detection
+itself is local and no audio is sent while Gary is asleep.
+
+Conversations are sent with `store: false`, so OpenAI does not keep them for
+later retrieval, and the history is dropped when Gary sleeps.
+
 ## What Gary says out loud
 
 Everything Gary says when you did not ask him something — a new email, an

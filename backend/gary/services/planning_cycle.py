@@ -33,6 +33,8 @@ from gary.services.calendar_blocks import (
     protected_intervals,
 )
 from gary.models.conversation import MESSAGE_MAX, MESSAGE_MIN, spoken_text
+from gary.models.reorg import CHANGE_KINDS
+from gary.models.reorg import MAX_CHANGES as MAX_REORG_CHANGES
 from gary.services.conversation_service import quiet_since
 from gary.services.common import (
     looks_like_repeat,
@@ -80,6 +82,8 @@ CYCLE_ACTION_TYPES = (
     # Gary running Alex's engineering queue between conversations.
     "create_engineering_ticket",
     "set_engineering_priority",
+    # Gary arguing that the company is organised wrongly.
+    "propose_reorganisation",
 )
 # Caps for unattended cycles. The company runs itself between conversations,
 # so the limits are what stops a cycle commissioning work all day: a cycle
@@ -96,6 +100,10 @@ MAX_CYCLE_TICKETS = 1
 MAX_DAILY_TICKETS = 3
 # Reshuffling the queue is cheaper than adding to it, but not free.
 MAX_CYCLE_PRIORITY_CHANGES = 2
+# A reorganisation is one per cycle, and not again for a fortnight: a company
+# that reshuffles itself weekly is malfunctioning, not managing.
+MAX_CYCLE_REORGS = 1
+REORG_QUIET_DAYS = 14
 MAX_DAILY_DELEGATIONS = 4
 MAX_DAILY_REVIEWS = 1
 # An objective close enough to recent work for the same specialist is a loop,
@@ -273,6 +281,7 @@ def validate_cycle_actions(
         "ask_user": 0,
         "create_engineering_ticket": 0,
         "set_engineering_priority": 0,
+        "propose_reorganisation": 0,
     }
     delegated_agents: set[str] = set()
     earliest = format_utc(to_datetime(now) + dt.timedelta(minutes=MIN_LEAD_MINUTES))
@@ -301,6 +310,13 @@ def validate_cycle_actions(
         tickets_by_id = {ticket["id"]: ticket for ticket in tickets_by_task.values()}
         tickets_today = repos.engineering.count_created_since(day_start) if day_start else 0
         seen_tickets: set[str] = set()
+        # When the company was last reshuffled, so it is not done again yet.
+        reorg_since = format_utc(to_datetime(now) - dt.timedelta(days=REORG_QUIET_DAYS))
+        reorganised_recently = any(
+            action["action_type"] == "propose_reorganisation"
+            and action["status"] not in ("rejected", "failed")
+            for action in repos.actions.list_recent(reorg_since, 200)
+        )
         # What the team is already doing, so a cycle cannot re-commission it.
         since = format_utc(to_datetime(now) - dt.timedelta(days=REPEAT_ASSIGNMENT_DAYS))
         recent_assignments: dict[str, list[frozenset[str]]] = {}
@@ -462,6 +478,54 @@ def validate_cycle_actions(
                         "task_id": None,
                         "project_id": project_id,
                         "task_title": f"review: {topic[:80]}",
+                    }
+                )
+                counts[action_type] += 1
+                continue
+
+            if action_type == "propose_reorganisation":
+                if counts[action_type] >= MAX_CYCLE_REORGS:
+                    reject(f"at most {MAX_CYCLE_REORGS} reorganisation per cycle")
+                    continue
+                if reorganised_recently:
+                    reject(
+                        f"the company was reorganised in the last {REORG_QUIET_DAYS} days"
+                    )
+                    continue
+                proposed = proposal.get("changes")
+                rationale = " ".join(str(proposal.get("rationale") or "").split())[:2000]
+                if not isinstance(proposed, list) or not proposed:
+                    reject("a reorganisation needs at least one change")
+                    continue
+                if len(rationale) < 20:
+                    reject("a reorganisation needs a rationale")
+                    continue
+                changes = []
+                for item in proposed[:MAX_REORG_CHANGES]:
+                    if not isinstance(item, dict):
+                        continue
+                    kind = str(item.get("change") or "").strip()
+                    if kind not in CHANGE_KINDS:
+                        continue
+                    changes.append(
+                        {
+                            "agent_id": str(item.get("agent_id") or "").strip().lower()[:32],
+                            "change": kind,
+                            "to": " ".join(str(item.get("to") or "").split())[:600],
+                            "reason": " ".join(str(item.get("reason") or "").split())[:600],
+                        }
+                    )
+                if not changes:
+                    reject("no valid changes in that reorganisation")
+                    continue
+                accepted.append(
+                    {
+                        "action_type": action_type,
+                        "payload": {"changes": changes, "rationale": rationale},
+                        "reason": str(proposal.get("reason") or rationale)[:1000] or None,
+                        "task_id": None,
+                        "project_id": None,
+                        "task_title": f"reorganise {len(changes)} role(s)",
                     }
                 )
                 counts[action_type] += 1

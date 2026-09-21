@@ -38,14 +38,14 @@ def request_for(agent_id: str, calls: list | None = None) -> ExecutionRequest:
         expected_output="A report",
         output_model=FINDINGS_MODELS[agent.report_kind],
         tools=[bound(name) for name in agent.allowed_tools],
-        model="gpt-5.4-mini",
+        model="gpt-5.6-luna",
         max_iterations=agent.max_iterations,
         max_execution_seconds=agent.max_execution_seconds,
     )
 
 
 def llm():
-    return crewai.LLM(model="gpt-5.4-mini", api_key="sk-test-not-used")
+    return crewai.LLM(model="gpt-5.6-luna", api_key="sk-test-not-used")
 
 
 @pytest.mark.parametrize("agent_id", ["susan", "dave", "linda", "catherine", "lauren"])
@@ -110,7 +110,7 @@ def test_live_susan_structured_report():
         "Objective: list two widely used open-source browser automation libraries and one "
         "tradeoff between them. Keep it short. Return the report."
     )
-    request.model = os.environ.get("GARY_EMPLOYEE_MODEL", "gpt-5.4-mini")
+    request.model = os.environ.get("GARY_EMPLOYEE_MODEL", "gpt-5.6-luna")
     result = CrewAIExecutor(os.environ["OPENAI_API_KEY"]).run(request)
     report = FINDINGS_MODELS["research"].model_validate(
         result.output.model_dump() if hasattr(result.output, "model_dump") else result.output

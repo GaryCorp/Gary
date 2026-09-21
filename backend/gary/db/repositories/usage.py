@@ -2,7 +2,16 @@ import sqlite3
 
 from gary.db.repositories.base import insert_row, new_id, now_utc, rows_to_dicts
 
-SOURCES = ("planning_cycle", "specialist", "web_search", "voice", "other")
+SOURCES = (
+    "planning_cycle",
+    "specialist",
+    "web_search",
+    "voice",
+    # Turning what Alex said into words. Billed by the minute, not by token,
+    # so it is kept apart from the conversation it belongs to.
+    "voice_transcription",
+    "other",
+)
 
 
 class ModelUsageRepository:
@@ -36,6 +45,7 @@ class ModelUsageRepository:
                 "occurred_at": occurred_at or now,
                 "source": source,
                 "model": model or "unknown",
+                "audio_seconds": tokens.get("audio_seconds", 0) or 0,
                 "input_tokens": tokens.get("input_tokens", 0),
                 "cached_input_tokens": tokens.get("cached_input_tokens", 0),
                 "output_tokens": tokens.get("output_tokens", 0),
@@ -59,6 +69,7 @@ class ModelUsageRepository:
         COALESCE(SUM(audio_input_tokens), 0) AS audio_input_tokens,
         COALESCE(SUM(audio_output_tokens), 0) AS audio_output_tokens,
         COALESCE(SUM(total_tokens), 0) AS total_tokens,
+        COALESCE(SUM(audio_seconds), 0) AS audio_seconds,
         COALESCE(SUM(COALESCE(reported_cost_usd, cost_usd)), 0) AS cost_usd,
         SUM(CASE WHEN cost_usd IS NULL AND reported_cost_usd IS NULL THEN 1 ELSE 0 END)
             AS unpriced_calls

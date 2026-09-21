@@ -22,18 +22,36 @@ logger = logging.getLogger("gary.pricing")
 
 DEFAULT_PRICES_FILE = "/data/model_prices.json"
 PER_TOKENS = 1_000_000
-RATE_FIELDS = ("input", "cached_input", "output", "audio_input", "audio_output")
+# Token rates are US dollars per million tokens; per_minute is dollars per
+# minute of audio, which is how transcription models bill. A model may have
+# both: whichever rates are set are the ones that apply.
+TOKEN_RATE_FIELDS = ("input", "cached_input", "output", "audio_input", "audio_output")
+RATE_FIELDS = (*TOKEN_RATE_FIELDS, "per_minute")
+
+
+def rate_phrase(field: str, value: float, spoken: bool = False) -> str:
+    """One rate, in the unit it is actually charged in.
+
+    ``spoken`` puts the currency where a person says it, because Piper reads
+    this aloud and "$" is not a word.
+    """
+    money = f"{value} dollars" if spoken else f"${value}"
+    if field == "per_minute":
+        return f"{money} per minute of audio"
+    return f"{money} per million {field.replace('_', ' ')} tokens"
 
 
 @dataclass(frozen=True)
 class ModelPrice:
-    """US dollars per million tokens."""
+    """US dollars per million tokens, except per_minute: dollars per minute
+    of audio, which is how transcription models bill."""
 
     input: float = 0.0
     cached_input: float | None = None
     output: float = 0.0
     audio_input: float | None = None
     audio_output: float | None = None
+    per_minute: float | None = None
 
     def rate(self, field: str) -> float:
         value = getattr(self, field, None)
@@ -47,18 +65,22 @@ class ModelPrice:
             return self.input
         if field == "audio_output":
             return self.output
+        # per_minute has no text equivalent: a model that does not bill by
+        # the minute simply has no audio charge.
         return 0.0
 
 
 @dataclass(frozen=True)
 class Usage:
-    """Tokens from one model call."""
+    """What one model call consumed: tokens, and audio duration when the
+    model bills by the minute."""
 
     input_tokens: int = 0
     cached_input_tokens: int = 0
     output_tokens: int = 0
     audio_input_tokens: int = 0
     audio_output_tokens: int = 0
+    audio_seconds: float = 0.0
 
     @property
     def total_tokens(self) -> int:
@@ -77,6 +99,7 @@ class Usage:
             "audio_input_tokens": self.audio_input_tokens,
             "audio_output_tokens": self.audio_output_tokens,
             "total_tokens": self.total_tokens,
+            "audio_seconds": self.audio_seconds,
         }
 
 
@@ -157,6 +180,25 @@ class PriceTable:
     def known_models(self) -> list[str]:
         return sorted(self._prices)
 
+    def describe(self, model: str | None) -> dict:
+        """One model's price, in the units a person reads: dollars per
+        million tokens. ``priced`` is false when nothing is known, which is
+        reported rather than treated as free."""
+        price = self.get(model)
+        if price is None:
+            return {"model": model, "priced": False, "rates": {}}
+        return {
+            "model": model,
+            "priced": True,
+            # A zero rate costs nothing, so showing it would only suggest
+            # the model charges for something it does not.
+            "rates": {
+                field: getattr(price, field)
+                for field in RATE_FIELDS
+                if getattr(price, field, None)
+            },
+        }
+
     def cost(self, model: str | None, usage: Usage) -> float | None:
         """Dollars for this call, or None when the model has no price."""
         price = self.get(model)
@@ -170,6 +212,9 @@ class PriceTable:
             + usage.audio_input_tokens * price.rate("audio_input")
             + usage.audio_output_tokens * price.rate("audio_output")
         ) / PER_TOKENS
+        # Audio is billed by the minute. A model with only a per-minute rate
+        # contributes nothing above; one with only token rates nothing here.
+        dollars += usage.audio_seconds / 60.0 * price.rate("per_minute")
         return round(dollars, 6)
 
     # -------------------------------------------------------------- writing
@@ -185,8 +230,13 @@ class PriceTable:
             for field in RATE_FIELDS
         }
         merged = {field: value for field, value in merged.items() if value is not None}
-        if "input" not in merged or "output" not in merged:
-            raise ValueError("a price needs at least input and output rates")
+        # A transcription model bills only by the minute and has no token
+        # rates at all, so either kind of rate is enough to be priced.
+        has_tokens = "input" in merged and "output" in merged
+        if not has_tokens and "per_minute" not in merged:
+            raise ValueError(
+                "a price needs input and output rates, or per_minute for audio"
+            )
         price = ModelPrice(**merged)
         self._prices[model.strip().casefold()] = price
         self._save()

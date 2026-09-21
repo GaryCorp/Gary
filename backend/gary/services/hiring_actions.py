@@ -1,10 +1,19 @@
-"""The hire action: proposal, approval, roster entry.
+"""The hire action: proposal, approval, engineering ticket.
 
-Gary proposes; policy makes it yellow and web-only; Alex approves on the
-approvals page; only then does a row appear in ``hired_employees`` and the
-registry gain a colleague. Nothing here can widen what an employee may do:
-the tools are filtered through ``HIREABLE_TOOLS`` at proposal time, again
-when the row is written, and again every time the roster loads.
+Gary proposes a colleague; policy makes it yellow and web-only; Alex approves
+on the approvals page. Approving does **not** create the colleague. It files
+a private GitHub issue holding Gary's specification, assigned to Alex, who
+writes the new employee into ``roster.py`` and deploys.
+
+That split is deliberate. Gary is good at noticing a gap and describing the
+role; bringing a new agent with real tools into existence is a code change
+that deserves review. Nothing can act until Alex has landed it, so an
+approval by itself can no longer put a working agent in the company.
+
+Employees hired under the earlier data-driven flow keep working: the
+``hired_employees`` table, ``definition_from_row`` and dismissal are
+unchanged, and the roster still loads both kinds. Only new hires take this
+route.
 
 The checks run twice on purpose. ``check`` runs when the proposal is made and
 again at execution, so a name, id or notebook that was free when Gary asked
@@ -33,10 +42,74 @@ from gary.services.action_service import ActionHandler
 logger = logging.getLogger("gary.hiring")
 
 
-def hire_action_handler(registry) -> dict[str, ActionHandler]:
-    """The ``hire_employee`` handler, bound to the live roster."""
+# What "done" means for a hire ticket, written so Alex can work from it and
+# so nothing is considered finished until the colleague actually exists.
+ACCEPTANCE = (
+    "The employee is defined in backend/gary/agents/roster.py and appears in "
+    "the roster's definitions tuple.",
+    "validate_roster_tools passes: every tool is in TOOL_CATALOG and none is in "
+    "FORBIDDEN_TOOLS.",
+    "They report to Gary, cannot delegate, and their report is advisory.",
+    "They appear on the /team page and in team_list after a rebuild.",
+    "Gary can delegate to them and receives a structured report back.",
+    "Their Joplin notebook exists, so their own-notebook tools work.",
+)
+
+
+def hire_spec(payload: HireEmployeePayload, tools: list[str]) -> dict:
+    """Gary's proposal, as an engineering specification.
+
+    Everything Alex needs to write the roster entry, stated as requirements
+    rather than as code, because how it is built is his decision.
+    """
+    requirements = [
+        f"agent_id: {payload.agent_id}",
+        f"name: {payload.name}",
+        f"title: {payload.title}",
+        f"department: {payload.department}",
+        f"Joplin notebook: {payload.notebook}",
+        f"specialty: {scrub(payload.specialty, SPECIALTY_LIMIT)}",
+    ]
+    if payload.personality:
+        requirements.append(
+            f"personality: {scrub(payload.personality, PERSONALITY_LIMIT)}"
+        )
+    requirements.append(
+        "tools Gary proposed, as the smallest set that does the job: "
+        + ", ".join(tools)
+    )
+    return {
+        "title": f"Hire {payload.name} as {payload.title}",
+        "objective": (
+            f"GaryCorp needs a {payload.title} in {payload.department}. "
+            f"The gap: {scrub(payload.capability_gap, GAP_LIMIT)} "
+            "Gary proposed this colleague and Alex approved the proposal; this "
+            "ticket is to build them."
+        ),
+        "requirements": requirements,
+        "acceptance_criteria": list(ACCEPTANCE),
+    }
+
+
+def hire_action_handler(registry, engineering=None) -> dict[str, ActionHandler]:
+    """The ``hire_employee`` handler.
+
+    ``engineering`` is a callable returning the engineering ticket service, or
+    None where GitHub is not configured; it is resolved lazily because it is
+    wired after Gary's container exists.
+    """
+
+    def require_engineering():
+        service = engineering() if callable(engineering) else engineering
+        if service is None:
+            raise HiringError(
+                "Hiring files a GitHub engineering ticket, and the GitHub "
+                "integration is not configured on this deployment."
+            )
+        return service
 
     def _check(repos: Repositories, payload: HireEmployeePayload) -> dict:
+        require_engineering()
         existing = registry.all()
         check_proposal(
             agent_id=payload.agent_id,
@@ -53,57 +126,92 @@ def hire_action_handler(registry) -> dict[str, ActionHandler]:
         tools = normalize_tools(payload.tools)
         if repos.hires.get(payload.agent_id) is not None:
             raise HiringError(f"{payload.agent_id} has already been hired")
-        return {"tools": tools}
+        # One ticket per colleague: a retry must not file a second issue.
+        spec = hire_spec(payload, tools)
+        for ticket in repos.engineering.list_open(100):
+            task = repos.tasks.get(ticket["task_id"])
+            if task and task["title"] == spec["title"]:
+                raise HiringError(
+                    f"{payload.name} already has engineering ticket "
+                    f"#{ticket['github_issue_number']}; build that one"
+                )
+        return {"tools": tools, "spec": spec}
 
     def _summarize(payload: HireEmployeePayload, context: dict) -> str:
         tools = context.get("tools") or normalize_tools(payload.tools)
         return (
-            f"Hire {payload.name} as {payload.title} ({payload.department}), "
-            f"reporting to Gary, with {len(tools)} tools: {', '.join(tools)}. "
+            f"Open an engineering ticket to build {payload.name} as "
+            f"{payload.title} ({payload.department}), reporting to Gary, with "
+            f"{len(tools)} tools: {', '.join(tools)}. "
             f"Gap: {payload.capability_gap[:200]}"
         )
 
+    async def _file_ticket(payload: HireEmployeePayload, context: dict) -> dict:
+        """Create the task and the private issue. No colleague is created.
+
+        Runs with no transaction open, per the external side-effect rule. The
+        task has to exist first because an engineering ticket is keyed to one
+        (engineering_tickets.task_id is unique, which is also what makes
+        creation idempotent).
+        """
+        from gary.models.engineering import CreateEngineeringTicketRequest
+        from gary.models.task import CreateTaskRequest
+
+        service = require_engineering()
+        spec = context.get("spec") or hire_spec(payload, normalize_tools(payload.tools))
+
+        task = service.gary.tasks.create_task(
+            CreateTaskRequest(title=spec["title"], priority=7), GARY_ACTOR
+        )
+        ticket = await service.create_ticket(
+            CreateEngineeringTicketRequest(
+                task_id=task["id"],
+                title=spec["title"],
+                objective=spec["objective"],
+                requirements=spec["requirements"],
+                acceptance_criteria=spec["acceptance_criteria"],
+                priority="P2",
+                kind="feature",
+                # A new agent with tools is exactly what Dave's gate is for.
+                security_review_required=True,
+            )
+        )
+        return {
+            "task_id": task["id"],
+            "ticket_id": ticket.id,
+            "issue_number": ticket.github_issue_number,
+            "url": ticket.github_url,
+        }
+
     def _record(repos: Repositories, payload: HireEmployeePayload, result: dict, now: str) -> dict:
-        tools = normalize_tools(payload.tools)
-        hire = repos.hires.hire(
-            agent_id=payload.agent_id,
-            name=scrub(payload.name, NAME_LIMIT),
-            title=scrub(payload.title, TITLE_LIMIT),
-            department=scrub(payload.department, TITLE_LIMIT),
-            notebook=scrub(payload.notebook, NAME_LIMIT),
-            specialty=scrub(payload.specialty, SPECIALTY_LIMIT),
-            personality=scrub(payload.personality or "", PERSONALITY_LIMIT) or None,
-            capability_gap=scrub(payload.capability_gap, GAP_LIMIT),
-            allowed_tools=tools,
-            proposed_by=GARY_ACTOR,
-            approved_by=USER_ACTOR,
-            now=now,
-        )
-        repos.agents.upsert(
-            hire["agent_id"], hire["name"], hire["title"], hire["department"],
-            GARY_ACTOR, True, True, now,
-        )
+        """Record that the work was commissioned. Nobody joined GaryCorp."""
         repos.audit.write(
             USER_ACTOR,
-            "employee_hired",
-            f"{hire['name']} joined GaryCorp as {hire['title']}",
+            "employee_requested",
+            f"Engineering ticket #{result.get('issue_number')} opened to build "
+            f"{payload.name} as {payload.title}",
             "agent",
-            hire["agent_id"],
+            payload.agent_id,
             {
-                "department": hire["department"],
-                "tools": list(tools),
-                "capability_gap": hire["capability_gap"][:500],
+                "department": payload.department,
+                "tools": list(normalize_tools(payload.tools)),
+                "capability_gap": scrub(payload.capability_gap, GAP_LIMIT)[:500],
                 "proposed_by": GARY_ACTOR,
+                "issue_number": result.get("issue_number"),
+                "ticket_id": result.get("ticket_id"),
             },
             now=now,
         )
-        # The next roster read includes them.
-        registry.refresh(force=True)
-        logger.info("Hired %s (%s) with tools %s", hire["name"], hire["agent_id"], list(tools))
+        logger.info(
+            "Hire of %s (%s) filed as issue #%s; nobody joins until it is built",
+            payload.name, payload.agent_id, result.get("issue_number"),
+        )
         return {
-            "agent_id": hire["agent_id"],
-            "name": hire["name"],
-            "tools": list(tools),
+            "agent_id": payload.agent_id,
+            "name": payload.name,
+            "issue_number": result.get("issue_number"),
+            "url": result.get("url"),
+            "joined": False,
         }
 
     return {
@@ -111,8 +219,9 @@ def hire_action_handler(registry) -> dict[str, ActionHandler]:
             payload_model=HireEmployeePayload,
             summarize=_summarize,
             check=_check,
+            execute=_file_ticket,
             record=_record,
-            audit_event="employee_hired",
+            audit_event="employee_requested",
         )
     }
 
@@ -163,4 +272,12 @@ def proposal_context(registry, repos: Repositories) -> dict:
     }
 
 
-__all__ = ["dismiss", "hire_action_handler", "proposal_context", "HiringError", "json"]
+__all__ = [
+    "ACCEPTANCE",
+    "dismiss",
+    "hire_action_handler",
+    "hire_spec",
+    "proposal_context",
+    "HiringError",
+    "json",
+]

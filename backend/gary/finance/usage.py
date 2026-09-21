@@ -12,6 +12,7 @@ reported as unmeasured, never as zero.
 
 import datetime as dt
 import logging
+import time
 
 from gary.db import Database
 from gary.db.repositories import Repositories
@@ -48,7 +49,13 @@ class UsageLedger:
         detail: str | None = None,
     ) -> float | None:
         """Record one model call. Returns its cost, or None when unpriced."""
-        if usage.total_tokens <= 0 and reported_cost_usd is None:
+        # A transcription call has no tokens at all, only a duration, so
+        # tokens alone are not enough to decide there is nothing to record.
+        if (
+            usage.total_tokens <= 0
+            and usage.audio_seconds <= 0
+            and reported_cost_usd is None
+        ):
             return None
         cost = self.prices.cost(model, usage)
         try:
@@ -71,6 +78,30 @@ class UsageLedger:
         return cost
 
     # ------------------------------------------------------------ reporting
+
+    def models_in_use(self, roles: dict[str, str]) -> list[dict]:
+        """Which model does which job, and what each one costs.
+
+        ``roles`` maps a job ("voice", "planning", ...) to the model the
+        deployment is configured to use. Until a model has actually been
+        called it appears nowhere in the ledger, so this is the only way to
+        see what is configured -- and the only way to notice that the thing
+        about to spend money has no price.
+        """
+        seen: dict[str, dict] = {}
+        for role, model in roles.items():
+            if not model:
+                continue
+            entry = seen.setdefault(
+                model, {**self.prices.describe(model), "roles": []}
+            )
+            entry["roles"].append(role)
+        return sorted(seen.values(), key=lambda row: row["model"])
+
+    def unpriced_in_use(self, roles: dict[str, str]) -> list[str]:
+        """Configured models with no price. These are what make a spend
+        ceiling unenforceable, whether or not they have been called yet."""
+        return [row["model"] for row in self.models_in_use(roles) if not row["priced"]]
 
     def _since(self, days: int) -> str:
         return format_utc(clock_now_dt(self.clock) - dt.timedelta(days=days))
@@ -136,6 +167,115 @@ class UsageLedger:
                 ),
             ],
         }
+
+
+class SpendGate:
+    """A hard daily ceiling on what GaryCorp may spend on thinking.
+
+    The company runs itself for days at a time, so the thing that must not be
+    possible is a stuck state quietly spending all week. Every path that can
+    call a model asks this first: planning cycles, specialist runs, and the
+    voice session.
+
+    The ceiling is measured against priced calls only, which is the honest
+    limit of what it can promise. An unpriced model contributes tokens but no
+    cost, so while any call today is unpriced the ceiling **cannot** be
+    enforced -- ``state()`` says so rather than reporting the company as
+    comfortably within budget. It does not block on unpriced calls, because
+    that would stop a working deployment the moment a new model appeared;
+    setting a price is what makes the ceiling real.
+    """
+
+    # Spend is read this often at most; a 15-minute loop and a chatty voice
+    # session must not turn the ceiling into a query storm.
+    CACHE_SECONDS = 5.0
+
+    def __init__(
+        self,
+        ledger: "UsageLedger",
+        ceiling_usd: float,
+        monotonic=None,
+        roles: dict[str, str] | None = None,
+        require_priced: bool = False,
+    ):
+        self.ledger = ledger
+        self.ceiling_usd = float(ceiling_usd)
+        self._monotonic = monotonic or time.monotonic
+        # Which model does which job. Checked even before a model has been
+        # called, so a deployment that cannot be costed is caught at startup
+        # rather than after it has spent something.
+        self.roles = roles or {}
+        # When true, work that spends money is refused while a model it would
+        # use has no price: an unmeasurable spend cannot be capped.
+        self.require_priced = require_priced
+        self._cached: dict | None = None
+        self._cached_at = 0.0
+
+    def state(self, force: bool = False) -> dict:
+        now = self._monotonic()
+        if not force and self._cached is not None and now - self._cached_at < self.CACHE_SECONDS:
+            return self._cached
+
+        today = self.ledger.spent_today()
+        spent = today["cost_usd"]
+        unpriced = today.get("unpriced_calls") or 0
+        unpriced_models = self.ledger.unpriced_in_use(self.roles)
+        enabled = self.ceiling_usd > 0
+        within = not enabled or spent < self.ceiling_usd
+        state = {
+            "enabled": enabled,
+            "ceiling_usd": round(self.ceiling_usd, 4),
+            "spent_usd": spent,
+            "remaining_usd": round(max(0.0, self.ceiling_usd - spent), 4) if enabled else None,
+            "unpriced_calls": unpriced,
+            "unpriced_models": unpriced_models,
+            # What the ceiling can actually promise right now.
+            "enforceable": enabled and unpriced == 0 and not unpriced_models,
+            "within_ceiling": within,
+            "allowed": within and not (self.require_priced and unpriced_models),
+            "since": today["since"],
+        }
+        state["reason"] = self._reason(state)
+        self._cached, self._cached_at = state, now
+        return state
+
+    @staticmethod
+    def _reason(state: dict) -> str | None:
+        if not state["within_ceiling"]:
+            return (
+                f"GaryCorp has spent ${state['spent_usd']:.2f} on AI today, which is its "
+                f"daily ceiling of ${state['ceiling_usd']:.2f}. Work stops until midnight."
+            )
+        if not state["allowed"]:
+            names = ", ".join(state["unpriced_models"])
+            return (
+                f"No price is set for {names}, so what the company spends cannot be "
+                "measured and the daily ceiling cannot hold. Unattended work stops until "
+                "a price is set."
+            )
+        if not state["enabled"]:
+            return None
+        if not state["enforceable"]:
+            missing = state["unpriced_models"]
+            what = ", ".join(missing) if missing else f"{state['unpriced_calls']} call(s) today"
+            return (
+                f"{what} has no price, so the ${state['ceiling_usd']:.2f} daily ceiling "
+                "cannot be enforced. Set a price with the costs CLI."
+            )
+        return None
+
+    def allowed(self) -> bool:
+        return self.state()["allowed"]
+
+    def require(self, what: str = "this") -> None:
+        """Raise when the company may not spend any more today."""
+        state = self.state()
+        if not state["allowed"]:
+            raise SpendCeilingReached(state["reason"] or f"The daily AI spend ceiling stops {what}")
+
+
+class SpendCeilingReached(RuntimeError):
+    """The company has spent its daily allowance. Not an error in the work."""
 
 
 def clock_now_dt(clock: Clock) -> dt.datetime:

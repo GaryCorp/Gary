@@ -54,6 +54,8 @@ EXPECTED_TOOLS = {
     "engineering_set_priority",
     "hiring_context",
     "propose_new_employee",
+    "org_chart",
+    "propose_reorganisation",
     "ask_user",
     "spoken_recent",
     "spoken_repeat",

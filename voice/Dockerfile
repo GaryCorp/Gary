@@ -52,7 +52,7 @@ RUN mkdir -p /models/piper \
     && rm -rf /tmp/piper \
     && chown -R "${APP_UID}:${APP_GID}" /models/piper
 
-COPY voice_client.py .
+COPY voice_client.py segmentation.py .
 
 USER appuser
 

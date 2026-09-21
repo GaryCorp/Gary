@@ -336,7 +336,7 @@ docker compose up -d --force-recreate backend
 
 If voice fails right after changing `OPENAI_REALTIME_MODEL`, check the backend
 logs for a model error: the voice model must be a Realtime model
-(`gpt-realtime-*`). General models such as `gpt-5.6-terra` only work as
+(`gpt-realtime-*`). General models such as `gpt-5.6-luna` only work as
 `PLANNING_MODEL` (see [Choosing models](CONFIGURATION.md#choosing-models)).
 
 ## Compose validation

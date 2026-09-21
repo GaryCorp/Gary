@@ -1,4 +1,5 @@
 import asyncio
+import io
 import json
 import math
 import os
@@ -6,6 +7,7 @@ import queue
 import re
 import threading
 import time
+import wave
 from collections import deque
 
 import numpy as np
@@ -13,6 +15,8 @@ import sounddevice as sd
 import websockets
 from faster_whisper import WhisperModel
 from piper import PiperVoice, SynthesisConfig
+
+from segmentation import Utterance
 
 
 BACKEND_WS_URL = os.getenv(
@@ -72,6 +76,27 @@ PIPER_LENGTH_SCALE = float(
 
 # Keep the mic muted briefly after playback so room echo is not sent.
 SPEAKING_TAIL_SECONDS = 0.4
+
+# transcribe: record a whole utterance locally and send it once, which is what
+# the transcription model needs. realtime: stream audio continuously, which is
+# what the Realtime API needs. Must match the backend's VOICE_MODE.
+VOICE_MODE = os.getenv("VOICE_MODE", "transcribe").strip().lower()
+
+# How much quiet ends an utterance. The Realtime API used to decide this
+# server-side; with transcription nothing does, so it is decided here.
+UTTERANCE_SILENCE_SECONDS = float(
+    os.getenv("UTTERANCE_SILENCE_SECONDS", "1.2")
+)
+# Below this the room counts as quiet. The same threshold the wake-word check
+# uses to skip near-silence.
+UTTERANCE_ENERGY = float(
+    os.getenv("UTTERANCE_ENERGY", "0.006")
+)
+# Nothing sensible is one utterance for longer than this, and an open
+# microphone must not become an unbounded upload.
+MAX_UTTERANCE_SECONDS = float(
+    os.getenv("MAX_UTTERANCE_SECONDS", "30")
+)
 
 AUDIO_DEVICE_RAW = os.getenv(
     "AUDIO_DEVICE",
@@ -256,6 +281,17 @@ def wake_detected(
         word in accepted
         for word in words
     )
+
+
+def wav_bytes(audio: np.ndarray, rate: int = SAMPLE_RATE) -> bytes:
+    """PCM16 wrapped in a WAV container, which is what the upload needs."""
+    buffer = io.BytesIO()
+    with wave.open(buffer, "wb") as handle:
+        handle.setnchannels(CHANNELS)
+        handle.setsampwidth(2)
+        handle.setframerate(rate)
+        handle.writeframes(pcm16_bytes(audio))
+    return buffer.getvalue()
 
 
 def microphone_energy(
@@ -505,6 +541,17 @@ async def receiver(
                 # only opens on the wake word.
                 speak(message)
 
+        elif event_type == "bridge.reply":
+            # The finished answer in transcribe mode. There are no deltas to
+            # assemble: it arrives whole and is spoken whole.
+            text = event.get("text", "")
+            print(f"\n{text}", flush=True)
+            speak(text)
+
+        elif event_type == "bridge.transcript":
+            # What the backend heard, so a misheard request is visible.
+            print(f"[heard] {event.get('text', '')}", flush=True)
+
         elif event_type == "bridge.notice":
             print(
                 f"\n[{event.get('message')}]",
@@ -557,6 +604,13 @@ async def run():
                         websocket,
                         state,
                     )
+                )
+
+                utterance = Utterance(
+                    BLOCK_MS,
+                    UTTERANCE_SILENCE_SECONDS,
+                    UTTERANCE_ENERGY,
+                    MAX_UTTERANCE_SECONDS,
                 )
 
                 pre_roll = deque(
@@ -619,9 +673,34 @@ async def run():
                                 )
                                 continue
 
-                            await websocket.send(
-                                pcm16_bytes(audio)
-                            )
+                            if VOICE_MODE == "transcribe":
+                                # Collect until he stops, then send the whole
+                                # utterance once. The backend transcribes it.
+                                if utterance.add(audio, microphone_energy(audio)):
+                                    seconds = utterance.seconds
+                                    spoken = np.concatenate(utterance.take())
+                                    await websocket.send(
+                                        json.dumps(
+                                            {
+                                                "type": "bridge.utterance",
+                                                "seconds": round(seconds, 2),
+                                            }
+                                        )
+                                    )
+                                    await websocket.send(wav_bytes(spoken))
+                                    print(
+                                        f"[sent {seconds:.1f}s of speech]",
+                                        flush=True,
+                                    )
+                                    # Waiting on a reply is not idle time.
+                                    state["hard_deadline"] = max(
+                                        state["hard_deadline"],
+                                        now + ACTIVE_SESSION_SECONDS,
+                                    )
+                            else:
+                                await websocket.send(
+                                    pcm16_bytes(audio)
+                                )
 
                             hard_expired = (
                                 now
@@ -641,6 +720,7 @@ async def run():
                                 state["active"] = False
                                 state["followup_deadline"] = 0.0
 
+                                utterance.reset()
                                 pre_roll.clear()
                                 wake_window.clear()
 
@@ -719,18 +799,30 @@ async def run():
 
                             state["followup_deadline"] = 0.0
 
-                            print(
-                                f"[{WAKE_WORD_DISPLAY} activated — streaming pre-roll + live audio]",
-                                flush=True,
-                            )
-
                             buffered = np.concatenate(
                                 list(pre_roll)
                             )
 
-                            await websocket.send(
-                                pcm16_bytes(buffered)
-                            )
+                            if VOICE_MODE == "transcribe":
+                                # The pre-roll holds the words spoken just
+                                # before the wake word was recognised, so it
+                                # starts the utterance rather than being sent
+                                # on its own.
+                                utterance.reset()
+                                for block in pre_roll:
+                                    utterance.add(block, microphone_energy(block))
+                                print(
+                                    f"[{WAKE_WORD_DISPLAY} activated — listening]",
+                                    flush=True,
+                                )
+                            else:
+                                print(
+                                    f"[{WAKE_WORD_DISPLAY} activated — streaming pre-roll + live audio]",
+                                    flush=True,
+                                )
+                                await websocket.send(
+                                    pcm16_bytes(buffered)
+                                )
 
         except Exception as exc:
             print(

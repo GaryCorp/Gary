@@ -42,6 +42,98 @@ def shift(now: str, **delta) -> str:
     return format_utc(to_datetime(now) + dt.timedelta(**delta))
 
 
+# How far back a failure still counts as "nobody has dealt with this".
+HEALTH_WINDOW_HOURS = 72
+
+
+def company_health(repos: Repositories, now: str) -> dict:
+    """What has gone wrong and nobody has looked at.
+
+    A company that runs itself for days accumulates failures quietly: an
+    assignment that died, a ticket that fell off the board, an approval or a
+    question that expired unanswered. Each is individually small and none of
+    them raises itself, so without this Gary has no way to tell a quiet week
+    from a stuck one -- which is what "escalate only what needs you" depends
+    on.
+
+    Pure reads, and counts rather than dumps, so it is cheap enough to run on
+    every management tick.
+    """
+    since = shift(now, hours=-HEALTH_WINDOW_HOURS)
+
+    failed_assignments = [
+        assignment
+        for assignment in repos.assignments.list_recent(None, None, 50)
+        if assignment["status"] == "failed" and (assignment["created_at"] or "") >= since
+    ]
+    broken_tickets = [
+        ticket
+        for ticket in repos.engineering.list_all(50)
+        if ticket["sync_state"] in ("degraded", "needs_reconciliation")
+    ]
+    expired_approvals = [
+        approval
+        for approval in repos.approvals.list_recent_resolved(50)
+        if approval["status"] == "expired" and (approval["resolved_at"] or "") >= since
+    ]
+    expired_questions = [
+        message
+        for message in repos.spoken.list_recent(since, 50)
+        if message["status"] == "expired" and message["expects_reply"]
+    ]
+    overdue = repos.tasks.list_overdue(now)
+
+    problems = {
+        "failed_assignments": [
+            {"assignment_id": a["id"], "agent_id": a["assigned_to"],
+             "objective": a["objective"][:120], "at": a["completed_at"] or a["created_at"]}
+            for a in failed_assignments
+        ],
+        "broken_engineering_tickets": [
+            {"ticket_id": t["id"], "issue_number": t["github_issue_number"],
+             "sync_state": t["sync_state"], "error": (t["sync_error"] or "")[:200],
+             "at": t["updated_at"]}
+            for t in broken_tickets
+        ],
+        "expired_approvals": [
+            {"approval_id": a["id"], "summary": a["summary"][:120], "at": a["resolved_at"]}
+            for a in expired_approvals
+        ],
+        "unanswered_questions": [
+            {"message_id": m["id"], "asked": m["text"][:120], "at": m["created_at"]}
+            for m in expired_questions
+        ],
+        "overdue_tasks": [
+            {"task_id": t["id"], "title": t["title"], "deadline": t["deadline"],
+             "at": t["deadline"]}
+            for t in overdue
+        ],
+    }
+    counts = {name: len(items) for name, items in problems.items()}
+    return {
+        "healthy": not any(counts.values()),
+        "counts": counts,
+        # Trimmed: the planner needs to know what, not every instance.
+        **{name: items[:5] for name, items in problems.items()},
+    }
+
+
+# How far back the team's record is read for planning.
+SCORECARD_DAYS = 30
+
+
+def team_scorecards(repos: Repositories, now: str) -> list[dict]:
+    """Each employee's record, for arguing about the company's shape."""
+    from gary.services.performance import employee_scorecard
+
+    since = shift(now, hours=-24 * SCORECARD_DAYS)
+    return [
+        employee_scorecard(repos, row["id"], since, now)
+        for row in repos.agents.list_all()
+        if row["is_employee"] and row["active"]
+    ]
+
+
 def engineering_queue(repos: Repositories) -> list[dict]:
     """Open engineering tickets, as the planner needs to see them: what the
     work is, how urgent, and whether it is already on the calendar."""
@@ -181,6 +273,11 @@ def collect_operations(repos: Repositories, now: str) -> dict:
         # Alex's engineering queue. Without it a cycle cannot tell which work
         # is already ticketed, what is most urgent, or what to schedule.
         "engineering_tickets": engineering_queue(repos)[:CONTEXT_LIST_LIMIT],
+        # What is stuck. A quiet week and a broken one look identical without it.
+        "company_health": company_health(repos, now),
+        # What each person's record shows, so a proposal about the company's
+        # shape argues from the same numbers a review would.
+        "team_scorecards": team_scorecards(repos, now),
         # What Gary has put to Alex himself. Without these a cycle re-asks
         # what is already open and never acts on what Alex answered.
         "open_questions": [

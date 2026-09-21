@@ -248,8 +248,61 @@ Gary notices a recurring capability gap
    → propose_new_employee  → a yellow action
    → Gary tells you out loud that he has proposed her, and why
    → you approve at http://localhost:8000/approvals   (never by voice)
-   → a row in hired_employees, and the roster gains a colleague
+   → a private GitHub issue with the full spec, assigned to you
+   → you write the employee into roster.py and deploy
+   → the roster gains a colleague
 ```
+
+**Approving does not hire anyone.** It commissions the work. Gary describes
+the role — id, name, title, department, notebook, specialty, personality and
+the smallest set of tools that does the job — and that becomes an engineering
+ticket with `security_review_required`, so it cannot be closed without Dave's
+review. Nobody can act until you have written them into `roster.py` and
+deployed. A hand-written roster entry is bound by `FORBIDDEN_TOOLS` and
+`TOOL_CATALOG` rather than by `HIREABLE_TOOLS`, so you can give a new
+colleague real capabilities; the approval gate and your own code review are
+what stand in for the ceiling.
+
+Employees hired before this change keep working exactly as they were: the
+`hired_employees` table, the roster loading and `dismiss` are unchanged.
+
+## Reorganisation
+
+Gary can argue that the company is organised wrongly and propose a different
+shape: a change of **title**, **department**, **reporting line**, or **what
+someone is for**. He reads `org_chart`, which puts each person's record next
+to their role, and must point at a number — someone with no work, someone
+overloaded, two people covering the same ground.
+
+```text
+Gary notices the shape does not match the record
+   → org_chart (roles, plus each person's last month)
+   → propose_reorganisation  → a yellow action
+   → you approve at http://localhost:8000/approvals
+   → a private GitHub issue with the before → after diff
+   → you edit roster.py and deploy
+   → the org chart moves
+```
+
+**Why it has to be a code change.** `sync_roster` mirrors `roster.py` into
+the `agents` table on every startup, so a reorganisation written to the
+database would be reverted on the next restart. The roster in code is the
+only thing that decides anything.
+
+**What a reorganisation can never do.** It cannot change `allowed_tools` or
+`can_delegate` — there is no field for either, so a proposal asking for one
+fails validation before policy sees it. Gary remains the only one who
+delegates. He also cannot reorganise himself: a change naming `gary` is
+refused in code, not discouraged in a prompt. Python also refuses a reporting
+loop, reporting to oneself, an unknown colleague, and a change that changes
+nothing.
+
+A cycle may propose **one** reorganisation, and none at all if the company
+was reorganised in the last 14 days.
+
+**Worth knowing:** with delegation off the table, a reporting-line change
+moves the chart but not what the system does. The change that actually alters
+behaviour is **focus**, because that feeds the agent's prompt.
 
 **What a hire can never be.** The roster in code stays the permission
 authority. A hired employee may only hold tools from `HIREABLE_TOOLS`
@@ -433,7 +486,7 @@ Run against the real models before release:
 
 Specialists use `GARY_EMPLOYEE_MODEL` (default: the planning model) through
 CrewAI, with the existing `OPENAI_API_KEY`. Susan's and Catherine's `web_search` uses OpenAI's
-hosted web search with `AGENT_WEB_SEARCH_MODEL` (default `gpt-5.4-mini`); each
+hosted web search with `AGENT_WEB_SEARCH_MODEL` (default `gpt-5.6-luna`); each
 search is about 15,000 tokens. Token usage per run is stored in `agent_runs`.
 ### What the AI costs
 
@@ -446,7 +499,7 @@ than billed amounts.
 ```bash
 docker compose exec backend python -m app.costs report --days 7
 docker compose exec backend python -m app.costs prices
-docker compose exec backend python -m app.costs set-price gpt-5.4-mini --input 0.25 --output 2
+docker compose exec backend python -m app.costs set-price gpt-5.6-luna --input 0.2 --output 1.2
 curl -s localhost:8000/costs?days=7
 ```
 
@@ -457,6 +510,6 @@ claimed. Ask Catherine for the same picture by voice ("what is the team's AI
 costing us"); she reads the ledger through `read_ai_usage`.
 
 Lauren's EASE analyses run inside the `ease-api` container on its own model
-(`EASE_LLM_MODEL`, default `gpt-5.4-mini` with the same OpenAI key), about two
+(`EASE_LLM_MODEL`, default `gpt-5.6-luna` with the same OpenAI key), about two
 dozen model calls each; their tokens are not included in `agent_runs` or the
 cost ledger, and are reported as unmeasured rather than as zero.

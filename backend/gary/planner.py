@@ -187,6 +187,38 @@ SET_PRIORITY_SCHEMA = {
     },
 }
 
+REORGANISE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["action_type", "changes", "rationale", "reason"],
+    "properties": {
+        "action_type": {"type": "string", "enum": ["propose_reorganisation"]},
+        "changes": {
+            "type": "array",
+            "description": "Between one and five changes to the company's shape.",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["agent_id", "change", "to", "reason"],
+                "properties": {
+                    "agent_id": {"type": "string"},
+                    "change": {
+                        "type": "string",
+                        "enum": ["title", "department", "reports_to", "focus"],
+                    },
+                    "to": {"type": "string"},
+                    "reason": {
+                        "type": "string",
+                        "description": "What in their record supports this.",
+                    },
+                },
+            },
+        },
+        "rationale": {"type": "string", "description": "Why this shape is better."},
+        "reason": _REASON,
+    },
+}
+
 PLAN_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -207,6 +239,7 @@ PLAN_SCHEMA = {
                     ASK_USER_SCHEMA,
                     ENGINEERING_TICKET_SCHEMA,
                     SET_PRIORITY_SCHEMA,
+                    REORGANISE_SCHEMA,
                 ]
             },
         },
@@ -263,7 +296,8 @@ You receive JSON with:
   open_questions (what you have already put to {principal} and are waiting on),
   answered_questions (what he answered, in his words), and
   engineering_tickets ({principal}'s engineering queue: what is ticketed, at
-  what priority, and whether it is on the calendar);
+  what priority, and whether it is on the calendar), and team_scorecards
+  (what each specialist's record actually shows);
 - busy_times, working hours, working days, and protected times;
 - planning_notes: {principal}'s planning notes for active projects and preferences,
   and your previous daily summary;
@@ -303,6 +337,14 @@ Return:
   blocking other work.
   Engineering tickets are ordinary tasks as well, so schedule them with
   schedule_task like anything else, putting P0 and P1 work first.
+  propose_reorganisation argues that the company is organised wrongly and
+  proposes a different shape: a change of title, department, reporting line,
+  or what someone is for. Propose it only when team_scorecards supports it --
+  someone with no work, someone overloaded, two people covering the same
+  ground -- and never to make the chart tidier. You cannot change what anyone
+  is permitted to do, and you cannot reorganise yourself. It waits for
+  {principal} and then becomes engineering work; nothing moves until he does
+  it. At most one, and not at all if the company was reorganised recently.
   ask_user speaks to {principal} directly, outside any conversation, and is
   only for something that genuinely needs him now: a decision only he can
   make, a commitment about to be missed, an approval about to expire. It is

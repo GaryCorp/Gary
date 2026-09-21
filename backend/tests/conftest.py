@@ -6,6 +6,11 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# The voice service's pure logic (utterance segmentation) is mounted at /voice
+# by scripts/test.sh. Its own module has no third-party imports, so it can be
+# tested here without the audio stack.
+if Path("/voice").exists():
+    sys.path.insert(0, "/voice")
 
 from gary import build_gary  # noqa: E402
 from gary.models.action import (  # noqa: E402

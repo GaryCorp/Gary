@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from gary.container import Gary
 from gary.db.repositories import Repositories
 from gary.policy import APPROVAL_EXPIRY_HOURS
+from gary.services.planning_service import company_health
 from gary.timeutil import format_utc, to_datetime
 
 logger = logging.getLogger("gary.management_loop")
@@ -31,6 +32,14 @@ FOLLOWUP_WINDOW_MINUTES = 30
 APPROVAL_WARNING_HOURS = 6
 # A management cycle runs at most this often, whatever wakes the loop.
 MIN_GAP_MINUTES = 10
+# Which health problems are worth waking Gary for. An overdue task already has
+# its own trigger, so counting it here would double-fire.
+NEW_PROBLEM_SOURCES = (
+    "failed_assignments",
+    "broken_engineering_tickets",
+    "expired_approvals",
+    "unanswered_questions",
+)
 
 
 @dataclass
@@ -40,6 +49,8 @@ class Triggers:
     reasons: list[str] = field(default_factory=list)
     reports: int = 0
     skipped: str | None = None
+    # What company_health found on this tick, for the status page.
+    health: dict = field(default_factory=dict)
 
     def __bool__(self) -> bool:
         return bool(self.reasons) and self.skipped is None
@@ -129,6 +140,24 @@ def find_triggers(
             triggers.reasons.append(
                 f"{len(lapsing)} question{'s' if len(lapsing) != 1 else ''} about to expire"
             )
+
+        # Something broke and nobody has dealt with it. Only what became a
+        # problem since the last cycle counts: a ticket that has been stuck
+        # for three days must not wake Gary every fifteen minutes for three
+        # days, which would spend the daily budget on noticing the same thing.
+        health = company_health(repos, now)
+        newly_broken = sum(
+            1
+            for name in NEW_PROBLEM_SOURCES
+            for item in health.get(name, [])
+            if since is None or (item.get("at") or "") > since
+        )
+        if newly_broken:
+            triggers.reasons.append(
+                f"{newly_broken} thing{'s' if newly_broken != 1 else ''} in the company "
+                "need attention"
+            )
+        triggers.health = health
 
     return triggers
 

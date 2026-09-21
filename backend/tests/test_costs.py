@@ -212,8 +212,8 @@ BILLED_PAYLOAD = {
             "object": "bucket",
             "start_time": 1758153600,
             "results": [
-                {"amount": {"value": 1.25, "currency": "usd"}, "line_item": "gpt-5.6-terra, input"},
-                {"amount": {"value": 0.75, "currency": "usd"}, "line_item": "gpt-5.6-terra, output"},
+                {"amount": {"value": 1.25, "currency": "usd"}, "line_item": "gpt-5.6-luna, input"},
+                {"amount": {"value": 0.75, "currency": "usd"}, "line_item": "gpt-5.6-luna, output"},
             ],
         },
         {

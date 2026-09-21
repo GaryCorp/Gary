@@ -56,9 +56,9 @@ Gary uses two OpenAI models:
 | Setting | Used for | Must be |
 |---|---|---|
 | `OPENAI_REALTIME_MODEL` | Voice conversations | A Realtime model (`gpt-realtime-*`) |
-| `PLANNING_MODEL` | Planning cycles: scheduled morning, midday, and evening runs, "replan", "close out the day", and replans after missed work | A Responses API model with structured outputs, such as `gpt-5.4-mini` or `gpt-5.6-terra` |
+| `PLANNING_MODEL` | Planning cycles: scheduled morning, midday, and evening runs, "replan", "close out the day", and replans after missed work | A Responses API model with structured outputs, such as `gpt-5.6-luna` |
 
-A general model such as `gpt-5.6-terra` cannot be the voice model, and a
+A general model such as `gpt-5.6-luna` cannot be the voice model, and a
 Realtime model cannot be the planning model.
 
 To see which models your API key can use:
@@ -75,6 +75,45 @@ docker compose up -d backend
 
 A larger planning model may plan better but costs more per run. Runs happen up
 to three times a day, plus any you request and replans after missed work.
+
+### `VOICE_MODE`
+
+Default: `transcribe`.
+
+How a spoken turn is handled.
+
+| Mode | What happens | Cost |
+|---|---|---|
+| `transcribe` | The local wake word fires, the voice service records the utterance and ends it on silence, the backend transcribes it with `VOICE_TRANSCRIBE_MODEL`, and the words go to `VOICE_TEXT_MODEL`. Piper speaks the reply. | Audio is billed per minute; the conversation itself is ordinary text tokens. |
+| `realtime` | One OpenAI Realtime session does VAD, transcription, the model turn and tool calls. | Audio tokens throughout, which is the expensive part. |
+
+The **voice service and the backend must agree**: both read `VOICE_MODE`, and
+`compose.yaml` passes the same value to each. In `transcribe` mode the
+utterance is segmented locally (`UTTERANCE_SILENCE_SECONDS`), so the backend
+receives one complete recording rather than a stream.
+
+### `VOICE_TRANSCRIBE_MODEL`
+
+No default. The transcription model, used only in `transcribe` mode. It bills
+**per minute of audio**, so give it a per-minute price or the daily spend
+ceiling cannot hold:
+
+```bash
+docker compose exec backend python -m app.costs set-price <model> --per-minute 0.006
+docker compose exec backend python -m app.costs models
+```
+
+### `VOICE_TEXT_MODEL`
+
+Default: empty, meaning `PLANNING_MODEL`. The model that answers once the
+words exist.
+
+### `UTTERANCE_SILENCE_SECONDS`
+
+Default: `1.2`. How much quiet ends an utterance in `transcribe` mode. Lower
+feels snappier but cuts people off mid-sentence; higher waits longer before
+Gary starts thinking. `MAX_UTTERANCE_SECONDS` (default `30`) sends a very long
+one anyway, so an open microphone cannot become an unbounded upload.
 
 ### `OPENAI_REALTIME_MODEL`
 
@@ -305,6 +344,78 @@ announce, and makes the daily backup. Each is announced once. Announcements
 respect `EMAIL_CHECK_QUIET_HOURS`. `0` turns the check off (backups still run
 at startup).
 
+### `MAX_DAILY_AI_SPEND_USD`
+
+Default:
+
+```text
+10.00
+```
+
+A hard daily ceiling on what GaryCorp may spend on AI, measured against local
+midnight. When it is reached **everything that calls a model stops** —
+scheduled cycles, the management loop, specialist runs, and voice
+conversations — until the next day. Gary still tells you he has stopped and
+why, because local Piper TTS costs nothing. `0` turns the ceiling off.
+
+To lift a stop before midnight, raise this value and restart the backend.
+There is deliberately no voice override: a conversation is itself a model
+call.
+
+**It can only be enforced for models that have a price.** An unpriced model
+contributes tokens but no cost, so the ceiling cannot see that spending.
+When any call in the day is unpriced, the gate reports that it cannot be
+enforced and Gary raises it with you, rather than reporting the company as
+within budget. Check and fix with:
+
+```bash
+docker compose exec backend python -m app.costs report
+docker compose exec backend python -m app.costs set-price <model> --input X --output Y
+```
+
+### `REQUIRE_PRICED_MODELS`
+
+Default: `true`.
+
+Refuses unattended work — scheduled cycles, the management loop and
+specialist runs — while any model the deployment is configured to use has no
+price. Spending that cannot be measured cannot be capped, so the ceiling
+would otherwise be decoration. Voice still works, so Gary can tell you which
+model needs a price.
+
+This is checked against the **configured** models, not just ones that have
+already been called, so a missing price is caught before it costs anything.
+See what is configured and what it costs:
+
+```bash
+docker compose exec backend python -m app.costs models
+```
+
+Set it to `false` to keep running with spend you cannot measure; the system
+still refuses to claim the ceiling is enforced.
+
+### `WEEKLY_REVIEW_DAY`
+
+Default: `4` (Friday; 0 is Monday).
+
+The day Gary writes the weekly review, after that day's evening cycle. The
+review is assembled from SQLite with no model call, so it is still written on
+a day the spend ceiling stopped everything else. It goes to
+**Gary › Daily Summaries** as `Weekly review YYYY-MM-DD` and Gary speaks a
+short summary of it.
+
+### Running through the weekend
+
+`MANAGEMENT_WEEKDAYS` falls back to `PLANNING_WEEKDAYS`, so by default the
+company pauses Saturday and Sunday. For seven-day operation:
+
+```text
+MANAGEMENT_WEEKDAYS=mon,tue,wed,thu,fri,sat,sun
+```
+
+Scheduled planning cycles still follow `PLANNING_WEEKDAYS`, so this makes the
+management loop continuous without putting weekend work on your calendar.
+
 ## Scheduled planning
 
 ### `PLANNING_TIMES`
@@ -333,14 +444,14 @@ may place calendar blocks.
 
 ### `PLANNING_MODEL`
 
-Default: `gpt-5.4-mini`.
+Default: `gpt-5.6-luna`.
 
 The model for planning cycles, called once per run through the Responses API
 with a strict JSON schema. Any model that supports structured outputs works,
 for example:
 
 ```text
-PLANNING_MODEL=gpt-5.6-terra
+PLANNING_MODEL=gpt-5.6-luna
 ```
 
 Not a Realtime model (see [Choosing models](#choosing-models)).
@@ -390,12 +501,12 @@ Settings for Susan, Dave, Linda, Catherine, and Lauren (see [Team](TEAM.md)).
 Default: empty, which uses `PLANNING_MODEL`.
 
 The model the specialists run on through CrewAI. Any model with tool calling and
-structured outputs, such as `gpt-5.4-mini` or `gpt-5.6-terra`; not a Realtime
+structured outputs, such as `gpt-5.6-luna`; not a Realtime
 model.
 
 ### `AGENT_WEB_SEARCH_MODEL`
 
-Default: `gpt-5.4-mini`. The model for Susan's and Catherine's read-only web search (OpenAI's
+Default: `gpt-5.6-luna`. The model for Susan's and Catherine's read-only web search (OpenAI's
 hosted `web_search` tool). Each search is roughly 15,000 tokens.
 
 ### Execution limits
@@ -452,7 +563,7 @@ Lauren's ethics framework runs as the `ease-api` container, with
 | `EASE_API_KEY` | empty | API key for EASE. When set, both EASE and the backend use it; empty means EASE requires no key (it listens only on loopback and the assistant network). |
 | `EASE_LLM_PROVIDER` | `openai` | EASE's model provider: `openai`, `anthropic`, or `google`. |
 | `EASE_LLM_API_KEY` | `OPENAI_API_KEY` | Key for that provider. |
-| `EASE_LLM_MODEL` | `gpt-5.4-mini` | EASE's model. |
+| `EASE_LLM_MODEL` | `gpt-5.6-luna` | EASE's model. |
 
 Rebuild after changing EASE's code: `docker compose up -d --build ease-api ease-worker`.
 
