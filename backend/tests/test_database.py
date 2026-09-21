@@ -13,8 +13,8 @@ from conftest import START, make_project, make_task
 
 def test_migrations_apply_once_and_record_version(db_path):
     db = Database(db_path)
-    assert apply_migrations(db) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
-    assert get_schema_version(db) == 11
+    assert apply_migrations(db) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    assert get_schema_version(db) == 12
     assert apply_migrations(db) == []
 
     conn = db.connect()

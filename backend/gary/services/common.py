@@ -4,6 +4,7 @@ import re
 from typing import Callable
 
 from gary.db.repositories import Repositories
+from gary.services.readiness import task_readiness
 from gary.timeutil import format_utc, utc_now
 
 Clock = Callable[[], dt.datetime]
@@ -32,6 +33,18 @@ def require_project(repos: Repositories, project_id: str | None) -> dict | None:
     if project is None:
         raise NotFoundError(f"No project with id {project_id}")
     return project
+
+
+def task_readiness_in(repos: Repositories, task: dict, now: str) -> dict:
+    """task_readiness with its dependencies and project status read from the
+    database, so every caller answers "is this ready" the same way."""
+    project = repos.projects.get(task["project_id"]) if task["project_id"] else None
+    return task_readiness(
+        task,
+        repos.dependencies.list_dependencies(task["id"]),
+        now,
+        project_status=project["status"] if project else None,
+    )
 
 
 def require_task(repos: Repositories, task_id: str | None) -> dict | None:

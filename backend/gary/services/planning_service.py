@@ -169,8 +169,10 @@ def collect_operations(repos: Repositories, now: str) -> dict:
     open_tasks = repos.tasks.list_open()
     for task in open_tasks:
         dependencies = repos.dependencies.list_dependencies(task["id"])
-        readiness = task_readiness(task, dependencies, now)
         project = all_projects.get(task["project_id"])
+        readiness = task_readiness(
+            task, dependencies, now, project_status=project["status"] if project else None
+        )
         entry = {
             "task_id": task["id"],
             "title": task["title"],

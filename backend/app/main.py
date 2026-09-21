@@ -41,6 +41,7 @@ from app.config import (
     PLANNING_SCHEDULE,
     PLANNING_WEEKDAYS,
     PRINCIPAL_NAME,
+    PRODUCTION_SCHEDULE,
     REQUIRE_PRICED_MODELS,
     SESSION_SECRET,
     SPENDING_LIMITS,
@@ -118,6 +119,7 @@ from gary.services.planning_cycle import (
     PlanningCycleError,
     due_planning_types,
 )
+from gary.services.production import ProductionService, episode_label
 from gary.services.reorg_actions import reorg_action_handler
 from gary.services.team_actions import team_action_handlers
 from gary.services.weekly_review import WeeklyReview
@@ -153,10 +155,14 @@ async def lifespan(app: FastAPI):
     # Anything Gary decided to say and could not deliver yet, including the
     # Joplin note for what he already said.
     speaking = asyncio.create_task(run_spoken_delivery())
+    # The weekly video schedule, planned ahead and put on the calendar.
+    production_loop = (
+        asyncio.create_task(run_production_schedule()) if production else None
+    )
     try:
         yield
     finally:
-        for task in (scheduler, engineering_sync, management, speaking):
+        for task in (scheduler, engineering_sync, management, speaking, production_loop):
             if task is not None:
                 task.cancel()
                 try:
@@ -768,6 +774,76 @@ async def run_management_loop() -> None:
             logger.exception("Management loop check failed")
 
 
+production = (
+    ProductionService(
+        gary_ops.db,
+        gary_ops.actions,
+        PRODUCTION_SCHEDULE,
+        ZoneInfo(LOCAL_TIMEZONE),
+        gary_ops.planning.clock,
+    )
+    if PRODUCTION_SCHEDULE
+    else None
+)
+
+
+def production_announcement(result: dict) -> str | None:
+    """What Gary says when the schedule moved on: a new batch planned, or a
+    shoot or publish slot he could not put on the calendar."""
+    parts = []
+    if result["created"]:
+        names = " and ".join(episode_label(PRODUCTION_SCHEDULE, n) for n in result["created"])
+        parts.append(
+            f"I have planned {names}, with their scripts, shoot, edits and publish "
+            "dates on the task list."
+        )
+    if result["failed"]:
+        titles = ", ".join(single_line(item["task"])[:80] for item in result["failed"][:2])
+        parts.append(
+            f"I could not put {titles} on your calendar today, and I will try again tomorrow."
+        )
+    return " ".join(parts) or None
+
+
+# A calendar write that failed is retried on the next tick, up to this many
+# attempts a day; a failure is only announced once the day's tries are used.
+PRODUCTION_ATTEMPTS_PER_DAY = 4
+
+
+async def run_production_schedule() -> None:
+    """Plan the video schedule at startup and then once a local day.
+
+    Idempotent and makes no model call, so running it costs nothing; once a
+    day is enough because a batch is planned two weeks ahead. A failed
+    calendar write (often a brief network error) is retried every tick, a
+    few times a day, rather than every few minutes forever.
+    """
+    timezone = ZoneInfo(LOCAL_TIMEZONE)
+    done_day, attempts = None, {}
+    while True:
+        today = dt.datetime.now(timezone).date()
+        if today != done_day:
+            tries = attempts[today] = attempts.get(today, 0) + 1
+            attempts = {today: tries}
+            try:
+                result = await production.run()
+                if result["created"] or result["scheduled"] or result["failed"]:
+                    logger.warning("Production schedule: %s", result)
+                giving_up = tries >= PRODUCTION_ATTEMPTS_PER_DAY
+                if not result["failed"] or giving_up:
+                    done_day = today
+                announcement = production_announcement(
+                    {**result, "failed": result["failed"] if giving_up else []}
+                )
+                if announcement:
+                    await speak_to_user(announcement, source="operations")
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Planning the video schedule failed")
+        await asyncio.sleep(15 * 60)
+
+
 weekly_review = WeeklyReview(
     gary_ops.db, ZoneInfo(LOCAL_TIMEZONE), usage_ledger, gary_ops.planning.clock
 )
@@ -912,6 +988,23 @@ async def management_status():
         "spend": spend_gate.state(),
         "company_health": triggers.health,
     }
+
+
+@app.get("/production/status")
+async def production_status():
+    """The weekly video schedule: every planned episode and where its work
+    stands. Read-only."""
+    if production is None:
+        return {"enabled": False, "detail": "Set PRODUCTION_FIRST_SHOOT to turn it on."}
+    timezone = ZoneInfo(LOCAL_TIMEZONE)
+    episodes = await asyncio.to_thread(production.status)
+    for episode in episodes:
+        for key in ("shoot_at", "publish_at"):
+            episode[key] = to_local(episode[key], timezone)
+        for task in episode["tasks"]:
+            task["deadline"] = to_local(task["deadline"], timezone)
+            task["scheduled_start"] = to_local(task["scheduled_start"], timezone)
+    return {"enabled": True, "series": PRODUCTION_SCHEDULE.series, "episodes": episodes}
 
 
 @app.get("/engineering/status")

@@ -46,7 +46,7 @@ from gary.policy import (
     WEB_ONLY_APPROVAL_ACTIONS,
 )
 from gary.services.calendar_blocks import find_free_blocks
-from gary.services.readiness import task_readiness
+from gary.services.common import task_readiness_in
 from gary.timeutil import format_utc, to_local, utc_now
 
 logger = logging.getLogger("gary.agents.gateway")
@@ -160,7 +160,7 @@ def _task_brief(task: dict, call: ToolCall, repos: Repositories | None = None, n
         "scheduled_end": _local(task["scheduled_end"], call),
     }
     if repos is not None:
-        readiness = task_readiness(task, repos.dependencies.list_dependencies(task["id"]), now)
+        readiness = task_readiness_in(repos, task, now)
         brief["ready"] = readiness["ready"]
         brief["blocked_by"] = readiness["blocked_by"]
     return brief

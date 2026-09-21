@@ -26,7 +26,7 @@ from gary.agents.gateway import (
 )
 from gary.agents.models import GaryCorpAgentDefinition
 from gary.db.repositories import Repositories
-from gary.services.readiness import task_readiness
+from gary.services.common import task_readiness_in
 from gary.timeutil import format_utc, to_local
 
 logger = logging.getLogger("gary.agents.context")
@@ -55,7 +55,7 @@ def _project_and_tasks(repos: Repositories, project_id: str | None, services: Ag
         return {}
     tasks = []
     for task in repos.tasks.list_for_project(project_id):
-        readiness = task_readiness(task, repos.dependencies.list_dependencies(task["id"]), now)
+        readiness = task_readiness_in(repos, task, now)
         tasks.append(
             {
                 "task_id": task["id"],

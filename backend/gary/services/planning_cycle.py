@@ -40,8 +40,9 @@ from gary.services.common import (
     looks_like_repeat,
     normalize_title,
     objective_key,
+    task_readiness_in,
 )
-from gary.services.readiness import CLOSED_STATUSES, task_readiness
+from gary.services.readiness import CLOSED_STATUSES
 from gary.timeutil import format_utc, parse_timestamp, to_datetime, to_local
 from gary.tools.base import TIMESTAMP_FIELDS
 
@@ -729,9 +730,7 @@ def validate_cycle_actions(
                 if task["calendar_event_id"]:
                     reject("the task is already on the calendar")
                     continue
-                readiness = task_readiness(
-                    task, repos.dependencies.list_dependencies(task_id), now
-                )
+                readiness = task_readiness_in(repos, task, now)
                 if not readiness["ready"]:
                     reject(f"the task is not ready: {', '.join(readiness['reasons'])}")
                     continue

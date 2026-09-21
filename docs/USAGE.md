@@ -384,6 +384,34 @@ recipient, text, or times, and it remains the only way to approve a card
 purchase or a hire. Unanswered approvals expire after 72 hours. Gary only
 reports an action as done when it actually succeeded.
 
+## Your weekly video schedule
+
+Gary plans a video a week for you once `PRODUCTION_FIRST_SHOOT` is set (see
+CONFIGURATION.md). By default two episodes are filmed on the same Saturday, and
+then one is published every Friday at 17:00:
+
+| When | What | Who puts it on the calendar |
+|---|---|---|
+| The shoot's week, by Friday 17:00 | Script each episode (2 h each) | the planner, in working hours |
+| Saturday 10:00–14:00 | Film both episodes | Gary, at that fixed time |
+| Publish week, by Wednesday 17:00 | Edit (4 h) | the planner |
+| Publish week, by Thursday 17:00 | Thumbnail and title (1 h) | the planner |
+| Friday 16:30–17:00 | Publish | Gary, at that fixed time |
+
+Each episode is an ordinary project (Video 1, Video 2, ...) with those tasks,
+their deadlines and their dependencies, so everything that works for other
+projects works here: "what should I work on", the morning briefing, overdue
+alerts, and replanning after a missed block. A batch is planned two weeks
+before its shoot, and Gary tells you when he has planned one.
+
+Mark work done as you finish it ("Gary, I finished the Video 1 script"), so
+the next step becomes ready and the planner can schedule it. See the whole
+schedule at `http://localhost:8000/production/status`.
+
+To park other projects without losing their tasks, set them to `planned`:
+their tasks are then not offered for scheduling until the project is
+`active` again.
+
 ## Letting the company run itself
 
 GaryCorp keeps working between conversations: three planning cycles a day, a

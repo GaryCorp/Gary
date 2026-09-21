@@ -8,12 +8,18 @@ overwritten by the computed score.
 from gary.timeutil import to_datetime
 
 READY_STATUSES = ("todo", "scheduled")
+# A project that is planned but not started holds its work back: its tasks
+# keep their dependencies and estimates but are not offered for scheduling.
+NOT_STARTED_PROJECT_STATUSES = ("planned",)
 CLOSED_STATUSES = ("completed", "cancelled")
 
 
-def task_readiness(task: dict, dependencies: list[dict], now: str) -> dict:
+def task_readiness(
+    task: dict, dependencies: list[dict], now: str, project_status: str | None = None
+) -> dict:
     """A task is ready when its status is todo or scheduled, every dependency
-    is completed, and its earliest start has passed."""
+    is completed, its earliest start has passed, and its project (if any) has
+    started."""
     blocked_by = [dep["title"] for dep in dependencies if dep["status"] != "completed"]
     reasons = []
 
@@ -23,6 +29,8 @@ def task_readiness(task: dict, dependencies: list[dict], now: str) -> dict:
         reasons.append("waiting on unfinished dependencies")
     if task["earliest_start"] and task["earliest_start"] > now:
         reasons.append("earliest start has not arrived")
+    if project_status in NOT_STARTED_PROJECT_STATUSES:
+        reasons.append("its project has not started")
 
     return {
         "task_id": task["id"],

@@ -16,8 +16,9 @@ from gary.services.common import (
     metadata_json,
     require_project,
     require_task,
+    task_readiness_in,
 )
-from gary.services.readiness import CLOSED_STATUSES, task_readiness
+from gary.services.readiness import CLOSED_STATUSES
 
 TASK_LIST_LIMIT = 100
 
@@ -195,7 +196,7 @@ class TaskService:
             if task is None:
                 raise NotFoundError(f"No task with id {task_id}")
             dependencies = repos.dependencies.list_dependencies(task_id)
-            readiness = task_readiness(task, dependencies, now)
+            readiness = task_readiness_in(repos, task, now)
             return {
                 **task,
                 "depends_on": dependencies,
@@ -269,4 +270,4 @@ class TaskService:
         with self.db.read() as conn:
             repos = Repositories.bind(conn)
             task = require_task(repos, task_id)
-            return task_readiness(task, repos.dependencies.list_dependencies(task_id), now)
+            return task_readiness_in(repos, task, now)

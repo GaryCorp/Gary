@@ -281,8 +281,13 @@ Key rules:
   UTC, so SQL comparisons stay correct across daylight saving time. Tools show
   them in `LOCAL_TIMEZONE`.
 - **Readiness**: a task is ready when it is `todo` or `scheduled`, every
-  dependency is completed, and its earliest start has passed. Circular
+  dependency is completed, its earliest start has passed, and its project is
+  not `planned` (a planned project holds its work back). Circular
   dependencies are rejected inside a write-locked transaction.
+- **Weekly video schedule** (`services/production.py`): a daily job, with no
+  model call, that plans each batch of episodes as projects and tasks two
+  weeks before the shoot, and puts the shoot and publish slots on the
+  calendar through `schedule_task`. See USAGE.md.
 - **Planning score** is deterministic Python: priority × 10, +40 overdue, +30 /
   +20 / +10 for deadlines within 24 / 72 / 168 hours, +15 if other open tasks
   depend on it, +20 if it fulfils an open commitment, and (project priority −

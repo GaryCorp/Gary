@@ -49,7 +49,7 @@ python -m gary.integrations.github.setup                # verify the private Git
 ```
 
 Read-only status endpoints (loopback only): `/health`, `/management/status`,
-`/engineering/status`, `/costs`, and the pages `/`, `/team`, `/approvals`,
+`/engineering/status`, `/production/status`, `/costs`, and the pages `/`, `/team`, `/approvals`,
 `/finance`, `/events`.
 
 ## Services
@@ -186,6 +186,15 @@ GitHub ticket sync, the missed-block replan, new-email announcements, the daily
 SQLite backup (`gary/backup.py`, to `data/backups/`, 14 kept), and the weekly
 review (`WEEKLY_REVIEW_DAY`), written to Joplin from SQLite with **no model
 call** so it still works when spending is stopped.
+
+The weekly video schedule (`services/production.py`, on when
+`PRODUCTION_FIRST_SHOOT` is set) is the same kind of job: once a day, with no
+model call, it plans each batch of episodes two weeks before its shoot as
+ordinary projects and tasks with deadlines worked back from the publish time
+(`production_episodes.episode_number` is the idempotency key), and schedules
+the fixed-time shoot and publish slots through `schedule_task`. The planner
+fits the flexible work around them. Tasks in a `planned` project are never
+ready (`readiness.py`), which is how work is parked without deleting it.
 
 ### Cost accounting
 

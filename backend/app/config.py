@@ -17,6 +17,7 @@ from gary.services.planning_cycle import (
     parse_weekdays,
     parse_work_hours,
 )
+from gary.services.production import schedule_from_settings
 
 
 CLIENT_SECRETS_FILE = os.getenv(
@@ -205,6 +206,19 @@ MAX_MANAGEMENT_CYCLES_PER_DAY = env_int("MAX_MANAGEMENT_CYCLES_PER_DAY", 24, 0, 
 # When it is reached everything that calls a model stops until local midnight,
 # including voice; raise it here and restart to lift the stop. 0 turns it off.
 MAX_DAILY_AI_SPEND_USD = float(os.getenv("MAX_DAILY_AI_SPEND_USD", "10.00"))
+
+
+# The weekly video schedule (gary/services/production.py). Empty
+# PRODUCTION_FIRST_SHOOT turns it off.
+PRODUCTION_SCHEDULE = schedule_from_settings(
+    os.getenv("PRODUCTION_FIRST_SHOOT", ""),
+    series=os.getenv("PRODUCTION_SERIES", "Video"),
+    first_episode=os.getenv("PRODUCTION_FIRST_EPISODE", "1"),
+    episodes_per_shoot=os.getenv("PRODUCTION_EPISODES_PER_SHOOT", "2"),
+    publish_day=os.getenv("PRODUCTION_PUBLISH_DAY", "fri"),
+    publish_time=os.getenv("PRODUCTION_PUBLISH_TIME", "17:00"),
+    shoot_time=os.getenv("PRODUCTION_SHOOT_TIME", "10:00"),
+)
 
 
 # Which weekday the weekly review is written on (0 = Monday).

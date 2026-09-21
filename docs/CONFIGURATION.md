@@ -446,6 +446,50 @@ MANAGEMENT_WEEKDAYS=mon,tue,wed,thu,fri,sat,sun
 Scheduled planning cycles still follow `PLANNING_WEEKDAYS`, so this makes the
 management loop continuous without putting weekend work on your calendar.
 
+## Weekly video schedule
+
+Gary plans one video a week, filmed in batches, and puts the shoot and the
+publish slot on your calendar. How to work with it is in USAGE.md.
+
+### `PRODUCTION_FIRST_SHOOT`
+
+Default: empty (the schedule is off).
+
+The date of the first shoot, as `YYYY-MM-DD`. Every later shoot is
+`PRODUCTION_EPISODES_PER_SHOOT` weeks after it. A shoot whose date has
+already passed when Gary first sees it is skipped rather than planned into
+the past, and the episode numbering carries on after it.
+
+### `PRODUCTION_SERIES`
+
+Default: `Video`. Episodes are named `<series> <number>`, such as `Video 1`.
+
+### `PRODUCTION_FIRST_EPISODE`
+
+Default: `1`. The number of the first shoot's first episode.
+
+### `PRODUCTION_EPISODES_PER_SHOOT`
+
+Default: `2` (1 to 8). How many episodes one shoot films. The shoots are that
+many weeks apart, so one episode is still published every week.
+
+### `PRODUCTION_PUBLISH_DAY` and `PRODUCTION_PUBLISH_TIME`
+
+Default: `fri` and `17:00`. When each episode goes out. The first episode of a
+batch goes out on the first publish day after its shoot, and the rest follow
+a week apart.
+
+### `PRODUCTION_SHOOT_TIME`
+
+Default: `10:00`. When a shoot starts; it lasts 2 hours per episode. The shoot
+is put on the calendar at this time even though it is outside working hours,
+because it is a fixed appointment.
+
+Stage lengths (script 2 h, edit 4 h, thumbnail 1 h, publish 30 min) and the
+two-week planning horizon are set in `backend/gary/services/production.py`.
+Changing any of these settings affects batches planned afterwards, not
+episodes already on the list.
+
 ## Scheduled planning
 
 ### `PLANNING_TIMES`

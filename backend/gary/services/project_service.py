@@ -14,8 +14,8 @@ from gary.services.common import (
     clock_now,
     default_clock,
     metadata_json,
+    task_readiness_in,
 )
-from gary.services.readiness import task_readiness
 from gary.services.task_service import add_dependency_in, create_task_in
 
 
@@ -101,9 +101,7 @@ class ProjectService:
 
             tasks = []
             for task in by_key.values():
-                readiness = task_readiness(
-                    task, repos.dependencies.list_dependencies(task["id"]), now
-                )
+                readiness = task_readiness_in(repos, task, now)
                 tasks.append(
                     {
                         "id": task["id"],
@@ -124,9 +122,7 @@ class ProjectService:
                 raise NotFoundError(f"No project with id {project_id}")
             tasks = repos.tasks.list_for_project(project_id)
             for task in tasks:
-                readiness = task_readiness(
-                    task, repos.dependencies.list_dependencies(task["id"]), now
-                )
+                readiness = task_readiness_in(repos, task, now)
                 task["ready"] = readiness["ready"]
                 task["blocked_by"] = readiness["blocked_by"]
             followups = repos.followups.list_pending_for_project(project_id)
