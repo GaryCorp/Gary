@@ -66,10 +66,15 @@ why Gary's prompt forbids markdown, lists and symbols.
 
 ### Composition root vs domain
 
-`backend/app/main.py` (~4.3k lines) is the composition root: env config, Google
-OAuth and the encrypted token store, Gmail/Calendar/Joplin clients, the Realtime
-session, web pages, and the background loops started in `lifespan`. It wires
-concrete integrations into `gary/`.
+`backend/app/` is the composition root and wires concrete integrations into
+`gary/`. `main.py` (~2.8k lines) builds the shared objects (`gary_ops`, the
+planning cycle, the agents), the web pages, the voice WebSocket, the tool
+dispatcher, and the background loops started in `lifespan`. Beside it:
+`config.py` (every env setting), `google_auth.py` (encrypted token store,
+OAuth flow, which mailbox a call uses), `google_calendar.py`, `gmail.py`,
+`joplin.py`, `voice_tools.py` (tool schemas) and `instructions.py` (Gary's
+prompt). These import from `config` and each other, never from `main`; tests
+patch a name in the module that defines it.
 
 `backend/gary/` is the domain and has no knowledge of FastAPI or Google:
 

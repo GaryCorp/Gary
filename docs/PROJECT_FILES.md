@@ -148,20 +148,43 @@ Python package marker.
 
 ### `backend/app/main.py`
 
-Contains:
+Builds the shared objects and contains:
 
-- FastAPI routes;
-- Google OAuth;
-- encrypted token persistence;
-- Calendar API read/create helpers;
-- Realtime WebSocket bridge;
-- constrained calendar read, create, and delete function tools;
-- Gmail tools;
-- Joplin note and notebook tools;
+- FastAPI routes, including the approvals, team, finance and events pages;
+- the Google sign-in routes (your account and Gary's mailbox);
+- the Realtime WebSocket bridge and the voice tool dispatcher;
 - Google Calendar and Gmail action handlers for the operations package;
-- the approvals web page;
 - the planning scheduler, Joplin planning notebook, and busy-calendar reader;
-- the hourly new email check.
+- the management loop, spoken delivery, and the new email announcements.
+
+### `backend/app/config.py`
+
+Every setting read from the environment (`.env`), and fixed limits.
+
+### `backend/app/google_auth.py`
+
+The encrypted Google token store, the OAuth flow, and which account (yours or
+Gary's own mailbox) a call goes through.
+
+### `backend/app/google_calendar.py`
+
+Calendar read, create, and delete helpers.
+
+### `backend/app/gmail.py`
+
+Gmail tools and the new email check.
+
+### `backend/app/joplin.py`
+
+Joplin note and notebook tools.
+
+### `backend/app/voice_tools.py`
+
+The tool definitions given to Gary's voice model.
+
+### `backend/app/instructions.py`
+
+Gary's system prompt for a voice session.
 
 ## `voice/`
 

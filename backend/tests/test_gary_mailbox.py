@@ -59,12 +59,16 @@ def import_main():
                 os.environ.pop(name, None)
             else:
                 os.environ[name] = value
-    # If app.main had already been imported, it would hold the real paths.
-    assert main.TOKEN_STORE_FILE == scratch / "token_store.enc"
+    # If app.config had already been imported, it would hold the real paths.
+    import app.config
+
+    assert app.config.TOKEN_STORE_FILE == scratch / "token_store.enc"
     return main
 
 
 main = import_main()
+
+from app import config, gmail, google_auth  # noqa: E402  (after the env is set)
 
 
 class FakeGmail:
@@ -135,28 +139,30 @@ def credentials(token: str) -> Credentials:
         token_uri=TOKEN_URI,
         client_id="client",
         client_secret="secret",
-        scopes=main.SCOPES,
+        scopes=config.SCOPES,
     )
 
 
 @pytest.fixture
 def accounts(monkeypatch, tmp_path):
     """A fresh token store and one fake Gmail per signed-in account."""
-    store = main.EncryptedTokenStore(tmp_path / "token_store.enc")
-    monkeypatch.setattr(main, "store", store)
-    monkeypatch.setattr(main, "GARY_EMAIL_ADDRESS", GARY)
+    # One store is shared by google_auth and the sign-in routes in main, so
+    # it is pointed at a fresh file rather than replaced.
+    store = google_auth.store
+    monkeypatch.setattr(store, "path", tmp_path / "token_store.enc")
+    monkeypatch.setattr(google_auth, "GARY_EMAIL_ADDRESS", GARY)
 
     gmails = {
         "token-user": FakeGmail([email("u1", "Sam <sam@example.com>", "Lease")]),
         "token-gary": FakeGmail([email("g1", "Pat <pat@example.com>", "Hello Gary")]),
         "token-wrong": FakeGmail(),
     }
-    monkeypatch.setattr(main, "gmail_service", lambda creds: gmails[creds.token])
+    monkeypatch.setattr(gmail, "gmail_service", lambda creds: gmails[creds.token])
     return store, gmails
 
 
 def sign_in(store, mailbox: str, address: str, token: str, sub: str) -> None:
-    run(store.save_user(sub, address, credentials(token), main.SCOPES, mailbox))
+    run(store.save_user(sub, address, credentials(token), config.SCOPES, mailbox))
 
 
 def new_session() -> dict:
@@ -171,7 +177,7 @@ def test_signing_in_gary_leaves_the_users_account_and_calendar_alone(accounts):
     assert run(store.active_email()) == USER
     assert run(store.active_email("gary")) == GARY
     # The calendar and everything else keyed on the active user is unchanged.
-    user_id, creds = run(main.credentials_for_active_user())
+    user_id, creds = run(google_auth.credentials_for_active_user())
     assert (user_id, creds.token) == ("sub-user", "token-user")
 
     run(store.clear_active("gary"))
@@ -184,24 +190,24 @@ def test_gary_mailbox_fails_closed_until_the_configured_address_signs_in(account
     sign_in(store, "user", USER, "token-user", "sub-user")
 
     with pytest.raises(RuntimeError, match="not connected"):
-        run(main.credentials_for_mailbox("gary"))
+        run(google_auth.credentials_for_mailbox("gary"))
 
     # A different account in Gary's slot is never used.
     sign_in(store, "gary", "someone-else@gmail.com", "token-wrong", "sub-wrong")
     with pytest.raises(RuntimeError, match="not connected"):
-        run(main.credentials_for_mailbox("gary"))
+        run(google_auth.credentials_for_mailbox("gary"))
 
     sign_in(store, "gary", GARY, "token-gary", "sub-gary")
-    assert run(main.credentials_for_mailbox("gary")).token == "token-gary"
+    assert run(google_auth.credentials_for_mailbox("gary")).token == "token-gary"
 
 
 def test_gary_mailbox_is_refused_when_no_address_is_configured(accounts, monkeypatch):
-    monkeypatch.setattr(main, "GARY_EMAIL_ADDRESS", "")
-    assert main.default_send_mailbox() == "user"
+    monkeypatch.setattr(google_auth, "GARY_EMAIL_ADDRESS", "")
+    assert google_auth.default_send_mailbox() == "user"
     with pytest.raises(ValueError, match="GARY_EMAIL_ADDRESS is not set"):
-        main.check_mailbox("gary")
+        google_auth.check_mailbox("gary")
     with pytest.raises(ValueError, match="mailbox must be"):
-        main.check_mailbox("everyone")
+        google_auth.check_mailbox("everyone")
 
 
 def test_email_is_read_and_answered_through_the_mailbox_it_came_from(accounts):
@@ -210,16 +216,16 @@ def test_email_is_read_and_answered_through_the_mailbox_it_came_from(accounts):
     sign_in(store, "gary", GARY, "token-gary", "sub-gary")
     session = new_session()
 
-    listed = run(main.list_unread_emails(5, session, mailbox="gary"))
+    listed = run(gmail.list_unread_emails(5, session, mailbox="gary"))
     assert listed["mailbox"] == "gary"
     assert [e["email_id"] for e in listed["emails"]] == ["g1"]
 
-    read = run(main.read_email("g1", session))
+    read = run(gmail.read_email("g1", session))
     assert read["mailbox"] == "gary"
     assert "g1" in gmails["token-gary"].gets
     assert "g1" not in gmails["token-user"].gets
 
-    reply = run(main.send_email_reply("g1", "Thanks", True, session))
+    reply = run(gmail.send_email_reply("g1", "Thanks", True, session))
     assert reply["from_mailbox"] == "gary"
     assert len(gmails["token-gary"].sent) == 1
     assert gmails["token-user"].sent == []
@@ -231,11 +237,11 @@ def test_the_users_inbox_is_still_the_default_for_reading(accounts):
     sign_in(store, "gary", GARY, "token-gary", "sub-gary")
     session = new_session()
 
-    listed = run(main.list_unread_emails(5, session))
+    listed = run(gmail.list_unread_emails(5, session))
     assert listed["mailbox"] == "user"
     assert [e["email_id"] for e in listed["emails"]] == ["u1"]
 
-    run(main.send_email_reply("u1", "On it", True, session))
+    run(gmail.send_email_reply("u1", "On it", True, session))
     assert len(gmails["token-user"].sent) == 1
     assert gmails["token-gary"].sent == []
 
@@ -246,7 +252,7 @@ def test_new_email_comes_from_gary_and_counts_the_users_contacts_as_known(accoun
     sign_in(store, "gary", GARY, "token-gary", "sub-gary")
     gmails["token-user"].sent_to.add("sam@example.com")
 
-    sent = run(main.send_new_email(
+    sent = run(gmail.send_new_email(
         "sam@example.com", "Lease", "Following up", True, False, new_session()
     ))
     assert sent["from_mailbox"] == "gary"
@@ -261,7 +267,7 @@ def test_a_stranger_still_needs_the_address_spelled_back(accounts):
     sign_in(store, "gary", GARY, "token-gary", "sub-gary")
 
     with pytest.raises(ValueError, match="never emailed"):
-        run(main.send_new_email(
+        run(gmail.send_new_email(
             "new@example.com", "Hi", "Hello", True, False, new_session()
         ))
     assert gmails["token-gary"].sent == []
@@ -273,7 +279,7 @@ def test_the_user_can_still_send_from_their_own_address(accounts):
     sign_in(store, "gary", GARY, "token-gary", "sub-gary")
     gmails["token-user"].sent_to.add("sam@example.com")
 
-    sent = run(main.send_new_email(
+    sent = run(gmail.send_new_email(
         "sam@example.com", "Lease", "From me", True, False, new_session(),
         from_mailbox="user",
     ))
@@ -287,16 +293,16 @@ def test_sending_from_gary_fails_rather_than_falling_back_to_the_user(accounts):
     sign_in(store, "user", USER, "token-user", "sub-user")
 
     with pytest.raises(RuntimeError, match="not connected"):
-        run(main.send_new_email(
+        run(gmail.send_new_email(
             "sam@example.com", "Lease", "Hello", True, True, new_session()
         ))
     assert gmails["token-user"].sent == []
 
 
 def test_new_email_in_garys_inbox_is_announced_as_garys():
-    one = main.new_email_announcement([("Pat", "Hello")], 1, "gary")
-    assert one.startswith(f"{main.WAKE_WORD_DISPLAY}'s inbox has a new email from Pat")
-    assert main.new_email_announcement([("Sam", "Lease")], 1).startswith("You have")
+    one = gmail.new_email_announcement([("Pat", "Hello")], 1, "gary")
+    assert one.startswith(f"{config.WAKE_WORD_DISPLAY}'s inbox has a new email from Pat")
+    assert gmail.new_email_announcement([("Sam", "Lease")], 1).startswith("You have")
 
 
 class FakeFlow:
@@ -305,7 +311,7 @@ class FakeFlow:
         self.claims = {"sub": f"sub-{email}", "email": email, "email_verified": verified}
         self.credentials = credentials("token-new")
         self.credentials._id_token = "id-token"
-        self.oauth2session = type("S", (), {"token": {"scope": main.GARY_MAILBOX_SCOPES}})()
+        self.oauth2session = type("S", (), {"token": {"scope": config.GARY_MAILBOX_SCOPES}})()
         self.requested: dict = {}
 
     def authorization_url(self, **options):
@@ -357,7 +363,7 @@ def test_gary_sign_in_asks_google_for_garys_account_and_no_calendar(web):
     assert response.status_code in (302, 307)
     assert run(store.active_email("gary")) == GARY
     assert run(store.active_email()) is None
-    assert "https://www.googleapis.com/auth/calendar.events" not in main.GARY_MAILBOX_SCOPES
+    assert "https://www.googleapis.com/auth/calendar.events" not in config.GARY_MAILBOX_SCOPES
 
 
 def test_gary_sign_in_refuses_any_other_account(web):
