@@ -563,7 +563,7 @@ Gary starts normally and the engineering tools report `unavailable`.
 | `GITHUB_REPOSITORY` | empty | The **private** repository issues are created in |
 | `GITHUB_PROJECT_NUMBER` | empty | The **private** Engineering Project number, from its URL |
 | `GITHUB_ENGINEER_USERNAME` | empty | GitHub username issues are assigned to |
-| `GITHUB_SYNC_INTERVAL_MINUTES` | 30 | How often GitHub state is pulled into SQLite; `0` disables |
+| `GITHUB_SYNC_INTERVAL_MINUTES` | 5 | How often GitHub state is pulled into SQLite (unfinished tickets only); `0` disables |
 
 The repository and Project must both be private: every write is refused
 otherwise, and nothing in Gary can change visibility. Verify the setup with

@@ -276,7 +276,8 @@ decides implementation. No credentials, customer data, or secret values.
 `sync_engineering_ticket` / `sync_all_engineering_tickets` (in code:
 `sync_ticket`, `sync_all`) read issue state, Project Status, assignee, and
 labels, and adopt GitHub's status. The backend runs `sync_all` every
-`GITHUB_SYNC_INTERVAL_MINUTES` (default 30, `0` disables) and Gary can run it
+`GITHUB_SYNC_INTERVAL_MINUTES` (default 5, `0` disables; only unfinished tickets
+are checked, so an idle board costs no API calls) and Gary can run it
 on demand with `engineering_sync`. There is no webhook receiver in v1; the
 service boundary is shaped so one can push into `sync_ticket` later.
 
@@ -319,7 +320,7 @@ actually changes.
 | `GITHUB_REPOSITORY` | Private repository name |
 | `GITHUB_PROJECT_NUMBER` | Private Engineering Project number |
 | `GITHUB_ENGINEER_USERNAME` | GitHub username issues are assigned to |
-| `GITHUB_SYNC_INTERVAL_MINUTES` | Periodic sync, default 30, `0` to disable |
+| `GITHUB_SYNC_INTERVAL_MINUTES` | Periodic sync, default 5, `0` to disable |
 
 ## Startup and degraded operation
 
