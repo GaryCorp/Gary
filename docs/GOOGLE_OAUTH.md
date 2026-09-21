@@ -86,6 +86,24 @@ If you signed in before Gmail support was added, the home page shows
 permissions. Make sure both Gmail boxes are ticked; the backend stores only the
 scopes Google actually granted, and Gary tells you if Gmail access is missing.
 
+### Gary's own mailbox
+
+Gary can have a Gmail account of his own beside yours. Your account keeps the
+calendar and your inbox; Gary's is used only for email.
+
+1. Create the Gmail account, for example `garyhasaccess@gmail.com`.
+2. If the OAuth app is in testing mode, add that address as a test user on
+   the consent screen. The same `client_secret.json` and redirect URI work.
+3. Set `GARY_EMAIL_ADDRESS=garyhasaccess@gmail.com` in `.env` and restart:
+   `docker compose up -d backend`.
+4. Open `http://localhost:8000`, click **Sign in garyhasaccess@gmail.com**
+   under **Gary's mailbox**, choose that account, and tick both Gmail boxes.
+   Gary's sign-in asks only for Gmail, not the calendar.
+
+The home page then shows both accounts. Signing in any other account as Gary's
+mailbox, or Gary's account as yours, is refused and changes nothing.
+**Disconnect** next to Gary's mailbox signs out only that account.
+
 ## 8. Local token persistence
 
 Google credential data is encrypted before being written to:
@@ -112,5 +130,5 @@ docker compose down
 rm -f data/token_store.enc
 ```
 
-This removes the local encrypted copy. It does not itself revoke the OAuth grant
-inside your Google account.
+This removes the local encrypted copy, for both your account and Gary's
+mailbox. It does not itself revoke the OAuth grant inside either Google account.

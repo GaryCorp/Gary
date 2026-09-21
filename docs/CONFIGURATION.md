@@ -482,6 +482,24 @@ senders skipped): `snippets` (sender, subject, and Gmail's short preview),
 
 Default: `Alex`. The name Gary uses for you in conversation and planning.
 
+### `GARY_EMAIL_ADDRESS`
+
+Default: empty (no separate mailbox).
+
+Gary's own Gmail address, for example `garyhasaccess@gmail.com`, separate from
+yours. Your Google account keeps the calendar and your inbox; Gary's account is
+signed in on its own from the home page and is given Gmail access only, never
+calendar access. Only this exact address is accepted as Gary's mailbox, and
+your own sign-in refuses it, so the two accounts cannot be swapped by
+choosing the wrong one at Google's sign-in screen.
+
+When set, new emails Gary sends (spoken or proposed by planning) come from this
+address, replies come from whichever mailbox the email arrived in, and new
+email in Gary's inbox is announced as Gary's. If the address is set but not
+signed in, sending from it fails rather than falling back to your address.
+Planning cycles still see only your inbox (`PLANNING_EMAIL`). See
+[Google OAuth](GOOGLE_OAUTH.md#garys-own-mailbox).
+
 ### Planning notes
 
 To give Gary context for a project, create a note in **Gary › Planning** in

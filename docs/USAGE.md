@@ -150,6 +150,15 @@ at example dot com. Is that right?
 User: Yes.
 ```
 
+If Gary has his own mailbox (`GARY_EMAIL_ADDRESS`), new emails come from
+Gary's address unless you ask for one to come from yours, and Gary says which
+address before sending. Replies always come from the mailbox the email arrived
+in. Ask about Gary's own mail by saying so:
+
+```text
+Gary, is there anything new in your inbox?
+```
+
 New emails go to one recipient only, without CC or attachments, and at most
 five per conversation. Gary cannot forward email, and ignores any instructions
 written inside an email. Reading an email through Gary does not mark it as
@@ -165,7 +174,8 @@ Assistant: You have 2 new emails: from Sam Lee about Lunch and from Alex about
 the lease. Say Gary if you want to hear them.
 ```
 
-Say "Gary, read the one from Sam" to hear it. Gary stays quiet from 10 PM to
+New email in Gary's own mailbox is announced separately, as "Gary's inbox
+has a new email from ...". Say "Gary, read the one from Sam" to hear it. Gary stays quiet from 10 PM to
 7 AM and waits until you finish a conversation. Change the interval or quiet
 hours in `.env` (see [Configuration](CONFIGURATION.md#new-email-check)).
 

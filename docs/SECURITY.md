@@ -279,7 +279,13 @@ contain prompt-injection attempts:
   replied to, with one reply per email;
 - header values are sanitized to a single line;
 - email content is labelled untrusted in tool results and the agent is told
-  never to follow instructions inside email.
+  never to follow instructions inside email;
+- Gary's own mailbox (`GARY_EMAIL_ADDRESS`) is a separate sign-in with Gmail
+  scopes only. It is used only while signed in as exactly that address;
+  otherwise its tools fail closed and never fall back to your account. Your
+  own sign-in refuses Gary's address, so it can never hold the calendar. An
+  email is always read and replied to through the mailbox it was listed from.
+  A new recipient counts as known if either mailbox has sent to it before.
 
 These reduce but cannot eliminate prompt-injection risk. Listen to the
 recipient and text Gary reads back before confirming, especially for new

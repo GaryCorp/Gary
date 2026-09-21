@@ -147,11 +147,29 @@ Email safeguards:
 Scopes are `gmail.readonly` and `gmail.send`; the backend cannot modify or
 delete mail.
 
+#### Two mailboxes
+
+With `GARY_EMAIL_ADDRESS` set, the encrypted token store holds two Google
+accounts in separate slots: yours (`active_user_id`: calendar and your inbox)
+and Gary's (`gary_user_id`: Gmail scopes only, signed in at `/login/gary`).
+Both sign-ins use the same OAuth client and callback; the callback refuses any
+account but `GARY_EMAIL_ADDRESS` in Gary's slot, and refuses that address in
+yours. `list_unread_emails`, `search_emails`, and `find_email_contact` take a
+`mailbox` (`user`, the default, or `gary`); each listed email remembers its
+mailbox, so `read_email` and `send_email_reply` always go through the account
+it came from. `send_new_email` and the planning `send_external_email` action
+send from Gary's mailbox by default; `send_new_email` takes
+`from_mailbox: "user"` when you ask. The new-recipient check counts your Sent
+mail as well as Gary's. Gary's mailbox is used only while signed in as exactly
+`GARY_EMAIL_ADDRESS`; otherwise its calls fail rather than fall back to yours.
+The calendar always uses your account.
+
 #### New email check
 
 While the voice service is connected, the backend checks for unread Primary
 inbox email received since the last check, every
-`EMAIL_CHECK_INTERVAL_MINUTES`. It builds the announcement itself from sender
+`EMAIL_CHECK_INTERVAL_MINUTES`, in your inbox and, separately, in Gary's
+mailbox if one is configured (announced as "Gary's inbox has ..."). It builds the announcement itself from sender
 names and subjects and sends it to the voice service as a `bridge.announce`
 message, which Piper speaks. OpenAI is not involved and Gary does not wake.
 

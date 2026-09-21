@@ -66,6 +66,8 @@ services:
       # Defaults to PLANNING_WEEKDAYS; set all seven days to run through a weekend.
       MANAGEMENT_WEEKDAYS: "${MANAGEMENT_WEEKDAYS-}"
       PRINCIPAL_NAME: "${PRINCIPAL_NAME:-Alex}"
+      # Gary's own Gmail account, signed in at /login/gary. Empty = none.
+      GARY_EMAIL_ADDRESS: "${GARY_EMAIL_ADDRESS:-}"
 
       # GaryCorp specialists (Susan, Dave, Linda, Catherine, Lauren). Empty model = PLANNING_MODEL.
       GARY_EMPLOYEE_MODEL: "${GARY_EMPLOYEE_MODEL:-}"

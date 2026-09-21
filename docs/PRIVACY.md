@@ -51,6 +51,10 @@ inbox email in the backend only; none of it is sent to OpenAI. Gary speaks the
 senders and subjects aloud, so anyone nearby can hear them. Set
 `EMAIL_CHECK_INTERVAL_MINUTES=0` to turn it off.
 
+If `GARY_EMAIL_ADDRESS` is set, the same applies to Gary's own mailbox: its
+mail is read only when you ask about it, and its new-mail check stays in the
+backend. Planning cycles never see Gary's mailbox.
+
 Google OAuth credentials are stored locally in encrypted form.
 
 ## Joplin notes

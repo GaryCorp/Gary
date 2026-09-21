@@ -158,6 +158,10 @@ if PLANNING_EMAIL not in ("snippets", "subjects", "off"):
 # A missed scheduled block triggers replanning at most this often.
 EVENT_PLANNING_MIN_GAP_MINUTES = 120
 PRINCIPAL_NAME = os.getenv("PRINCIPAL_NAME", "Alex").strip() or "Alex"
+# Gary's own Gmail account, signed in separately at /login/gary. The user's
+# account keeps the calendar and the user's inbox; only this exact address is
+# accepted as Gary's mailbox. Empty = Gary has no mailbox of his own.
+GARY_EMAIL_ADDRESS = os.getenv("GARY_EMAIL_ADDRESS", "").strip().lower()
 # Realtime responses that fail on the tokens-per-minute limit are retried
 # after OpenAI's suggested wait, a limited number of times in a row.
 REALTIME_RATE_LIMIT_RETRIES = 2
@@ -253,6 +257,17 @@ SCOPES = [
     GMAIL_READ_SCOPE,
     GMAIL_SEND_SCOPE,
 ]
+# Gary's mailbox never gets calendar access: the calendar is the user's.
+GARY_MAILBOX_SCOPES = [
+    "openid",
+    "https://www.googleapis.com/auth/userinfo.email",
+    GMAIL_READ_SCOPE,
+    GMAIL_SEND_SCOPE,
+]
+# The two Google accounts: "user" (calendar and the user's inbox) and "gary".
+USER_MAILBOX = "user"
+GARY_MAILBOX = "gary"
+MAILBOXES = (USER_MAILBOX, GARY_MAILBOX)
 
 # Unread mail in the Primary inbox tab only (no promotions, social, updates).
 UNREAD_PRIMARY_QUERY = "in:inbox is:unread category:primary"
@@ -335,13 +350,22 @@ fernet = Fernet(TOKEN_ENCRYPTION_KEY.encode())
 
 
 class EncryptedTokenStore:
+    """Google credentials, encrypted at rest.
+
+    Holds up to two signed-in accounts, one per mailbox: the user's
+    (active_user_id: calendar and the user's inbox) and Gary's own
+    (gary_user_id: Gary's inbox only). Signing one in never touches the other.
+    """
+
+    SLOT_KEYS = {USER_MAILBOX: "active_user_id", GARY_MAILBOX: "gary_user_id"}
+
     def __init__(self, path: Path):
         self.path = path
         self._lock = asyncio.Lock()
 
     def _read_unlocked(self) -> dict:
         if not self.path.exists():
-            return {"active_user_id": None, "users": {}}
+            return {"active_user_id": None, "gary_user_id": None, "users": {}}
 
         try:
             decrypted = fernet.decrypt(self.path.read_bytes())
@@ -350,6 +374,7 @@ class EncryptedTokenStore:
             raise RuntimeError("Encrypted token store is unreadable") from exc
 
         data.setdefault("active_user_id", None)
+        data.setdefault("gary_user_id", None)
         data.setdefault("users", {})
         return data
 
@@ -366,6 +391,7 @@ class EncryptedTokenStore:
         email: str,
         credentials: Credentials,
         granted_scopes: list[str],
+        mailbox: str = USER_MAILBOX,
     ) -> None:
         async with self._lock:
             data = self._read_unlocked()
@@ -378,25 +404,25 @@ class EncryptedTokenStore:
                 "client_secret": credentials.client_secret,
                 "scopes": granted_scopes,
             }
-            data["active_user_id"] = user_id
+            data[self.SLOT_KEYS[mailbox]] = user_id
             self._write_unlocked(data)
 
-    async def active_user_id(self) -> str | None:
+    async def active_user_id(self, mailbox: str = USER_MAILBOX) -> str | None:
         async with self._lock:
-            return self._read_unlocked().get("active_user_id")
+            return self._read_unlocked().get(self.SLOT_KEYS[mailbox])
 
-    async def active_email(self) -> str | None:
+    async def active_email(self, mailbox: str = USER_MAILBOX) -> str | None:
         async with self._lock:
             data = self._read_unlocked()
-            user_id = data.get("active_user_id")
+            user_id = data.get(self.SLOT_KEYS[mailbox])
             if not user_id:
                 return None
             return data["users"].get(user_id, {}).get("email")
 
-    async def active_scopes(self) -> list[str]:
+    async def active_scopes(self, mailbox: str = USER_MAILBOX) -> list[str]:
         async with self._lock:
             data = self._read_unlocked()
-            user_id = data.get("active_user_id")
+            user_id = data.get(self.SLOT_KEYS[mailbox])
             if not user_id:
                 return []
             return data["users"].get(user_id, {}).get("scopes", [])
@@ -424,20 +450,20 @@ class EncryptedTokenStore:
 
             return credentials
 
-    async def clear_active(self) -> None:
+    async def clear_active(self, mailbox: str = USER_MAILBOX) -> None:
         async with self._lock:
             data = self._read_unlocked()
-            data["active_user_id"] = None
+            data[self.SLOT_KEYS[mailbox]] = None
             self._write_unlocked(data)
 
 
 store = EncryptedTokenStore(TOKEN_STORE_FILE)
 
 
-def make_flow(state: str | None = None) -> Flow:
+def make_flow(state: str | None = None, mailbox: str = USER_MAILBOX) -> Flow:
     return Flow.from_client_secrets_file(
         CLIENT_SECRETS_FILE,
-        scopes=SCOPES,
+        scopes=GARY_MAILBOX_SCOPES if mailbox == GARY_MAILBOX else SCOPES,
         redirect_uri=REDIRECT_URI,
         state=state,
     )
@@ -455,6 +481,51 @@ async def credentials_for_active_user() -> tuple[str, Credentials]:
         raise RuntimeError("Google credentials are unavailable")
 
     return user_id, credentials
+
+
+def gary_mailbox_configured() -> bool:
+    return bool(GARY_EMAIL_ADDRESS)
+
+
+def check_mailbox(mailbox: str) -> str:
+    mailbox = (mailbox or USER_MAILBOX).strip().lower()
+    if mailbox not in MAILBOXES:
+        raise ValueError("mailbox must be 'user' or 'gary'")
+    if mailbox == GARY_MAILBOX and not gary_mailbox_configured():
+        raise ValueError(
+            "There is no separate mailbox for " + WAKE_WORD_DISPLAY + "; GARY_EMAIL_ADDRESS is not set"
+        )
+    return mailbox
+
+
+async def credentials_for_mailbox(mailbox: str) -> Credentials:
+    """Credentials for the user's mailbox or Gary's.
+
+    Gary's mailbox fails closed: it must be signed in, and signed in as
+    exactly GARY_EMAIL_ADDRESS, or nothing is read or sent through it.
+    """
+    mailbox = check_mailbox(mailbox)
+    if mailbox == USER_MAILBOX:
+        _, credentials = await credentials_for_active_user()
+        return credentials
+
+    user_id = await store.active_user_id(GARY_MAILBOX)
+    email = (await store.active_email(GARY_MAILBOX) or "").lower()
+    if not user_id or email != GARY_EMAIL_ADDRESS:
+        raise RuntimeError(
+            f"{WAKE_WORD_DISPLAY}'s mailbox is not connected. Tell the user to open "
+            f"http://localhost:8000 and sign in {GARY_EMAIL_ADDRESS} under "
+            f"{WAKE_WORD_DISPLAY}'s mailbox."
+        )
+    credentials = await store.get_credentials(user_id)
+    if not credentials:
+        raise RuntimeError(f"{WAKE_WORD_DISPLAY}'s Google credentials are unavailable")
+    return credentials
+
+
+def default_send_mailbox() -> str:
+    """New emails come from Gary's own address whenever one is configured."""
+    return GARY_MAILBOX if gary_mailbox_configured() else USER_MAILBOX
 
 
 def calendar_service(credentials: Credentials):
@@ -808,7 +879,9 @@ def strip_quoted_reply(text: str) -> str:
     return re.sub(r"\n\s*\n+", "\n\n", text).strip()
 
 
-def remember_email(email_session: dict, message: dict) -> dict:
+def remember_email(
+    email_session: dict, message: dict, mailbox: str = USER_MAILBOX
+) -> dict:
     from_name, from_address = parseaddr(message_header(message, "From"))
     _, reply_to = parseaddr(message_header(message, "Reply-To"))
 
@@ -823,6 +896,8 @@ def remember_email(email_session: dict, message: dict) -> dict:
         "message_id": message_header(message, "Message-ID"),
         "references": message_header(message, "References"),
         "received": email_received_local(message),
+        # Reading and replying go through the account the email is in.
+        "mailbox": mailbox,
     }
     email_session["emails"][message["id"]] = known
     return known
@@ -845,6 +920,7 @@ async def fetch_email_metadata(service, email_id: str) -> dict:
 def email_summary(message: dict, known: dict) -> dict:
     return {
         "email_id": message["id"],
+        "mailbox": known["mailbox"],
         "from_name": known["from_name"],
         "from_address": known["from_address"],
         "subject": known["subject"] or "(no subject)",
@@ -871,8 +947,10 @@ UNKNOWN_EMAIL_ID_ERROR = (
 async def list_unread_emails(
     max_results: int,
     email_session: dict,
+    mailbox: str = USER_MAILBOX,
 ) -> dict:
-    _, credentials = await credentials_for_active_user()
+    mailbox = check_mailbox(mailbox)
+    credentials = await credentials_for_mailbox(mailbox)
     require_gmail_scope(credentials, GMAIL_READ_SCOPE)
 
     if isinstance(max_results, bool) or not isinstance(max_results, int):
@@ -907,11 +985,12 @@ async def list_unread_emails(
             skipped_no_reply += 1
             continue
 
-        known = remember_email(email_session, message)
+        known = remember_email(email_session, message, mailbox)
         emails.append(email_summary(message, known))
 
     return {
         "success": True,
+        "mailbox": mailbox,
         "timezone": LOCAL_TIMEZONE,
         "count": len(emails),
         "skipped_no_reply_senders": skipped_no_reply,
@@ -924,8 +1003,10 @@ async def search_emails(
     query: str,
     max_results: int,
     email_session: dict,
+    mailbox: str = USER_MAILBOX,
 ) -> dict:
-    _, credentials = await credentials_for_active_user()
+    mailbox = check_mailbox(mailbox)
+    credentials = await credentials_for_mailbox(mailbox)
     require_gmail_scope(credentials, GMAIL_READ_SCOPE)
 
     query = single_line(query)[:EMAIL_SEARCH_QUERY_LIMIT]
@@ -949,7 +1030,7 @@ async def search_emails(
     emails = []
     for ref in listed.get("messages", []):
         message = await fetch_email_metadata(service, ref["id"])
-        known = remember_email(email_session, message)
+        known = remember_email(email_session, message, mailbox)
         emails.append(
             {
                 **email_summary(message, known),
@@ -962,6 +1043,7 @@ async def search_emails(
 
     return {
         "success": True,
+        "mailbox": mailbox,
         "timezone": LOCAL_TIMEZONE,
         "query": query,
         "count": len(emails),
@@ -970,8 +1052,8 @@ async def search_emails(
     }
 
 
-async def find_email_contact(name: str) -> dict:
-    _, credentials = await credentials_for_active_user()
+async def find_email_contact(name: str, mailbox: str = USER_MAILBOX) -> dict:
+    credentials = await credentials_for_mailbox(mailbox)
     require_gmail_scope(credentials, GMAIL_READ_SCOPE)
 
     # Strip Gmail query syntax so the name is searched as plain text.
@@ -1060,12 +1142,13 @@ async def read_email(
     email_id: str,
     email_session: dict,
 ) -> dict:
-    _, credentials = await credentials_for_active_user()
-    require_gmail_scope(credentials, GMAIL_READ_SCOPE)
-
     email_id = (email_id or "").strip()
     if email_id not in email_session["emails"]:
         raise ValueError(UNKNOWN_EMAIL_ID_ERROR)
+
+    mailbox = email_session["emails"][email_id]["mailbox"]
+    credentials = await credentials_for_mailbox(mailbox)
+    require_gmail_scope(credentials, GMAIL_READ_SCOPE)
 
     service = gmail_service(credentials)
     message = await asyncio.to_thread(
@@ -1075,12 +1158,13 @@ async def read_email(
         .execute()
     )
 
-    known = remember_email(email_session, message)
+    known = remember_email(email_session, message, mailbox)
     body = strip_quoted_reply(extract_email_text(message.get("payload", {})))
 
     return {
         "success": True,
         "email_id": email_id,
+        "mailbox": mailbox,
         "from_name": known["from_name"],
         "from_address": known["from_address"],
         "to": known["to"],
@@ -1100,9 +1184,6 @@ async def send_email_reply(
     confirmed: bool,
     email_session: dict,
 ) -> dict:
-    _, credentials = await credentials_for_active_user()
-    require_gmail_scope(credentials, GMAIL_SEND_SCOPE)
-
     if confirmed is not True:
         raise ValueError(
             "Reply not confirmed. Read the reply and recipient to the user, "
@@ -1113,6 +1194,10 @@ async def send_email_reply(
     known = email_session["emails"].get(email_id)
     if not known:
         raise ValueError(UNKNOWN_EMAIL_ID_ERROR)
+
+    # A reply always comes from the mailbox the email arrived in.
+    credentials = await credentials_for_mailbox(known["mailbox"])
+    require_gmail_scope(credentials, GMAIL_SEND_SCOPE)
 
     if email_id in email_session["replied"]:
         raise ValueError("A reply to this email was already sent in this conversation")
@@ -1157,6 +1242,7 @@ async def send_email_reply(
     return {
         "success": True,
         "sent": True,
+        "from_mailbox": known["mailbox"],
         "to": to_address,
         "subject": subject,
         "sent_message_id": sent.get("id"),
@@ -1185,8 +1271,10 @@ async def send_new_email(
     confirmed: bool,
     new_recipient_confirmed: bool,
     email_session: dict,
+    from_mailbox: str = "",
 ) -> dict:
-    _, credentials = await credentials_for_active_user()
+    from_mailbox = check_mailbox(from_mailbox or default_send_mailbox())
+    credentials = await credentials_for_mailbox(from_mailbox)
     require_gmail_scope(credentials, GMAIL_SEND_SCOPE)
     # The sent-mail history check below needs read access.
     require_gmail_scope(credentials, GMAIL_READ_SCOPE)
@@ -1230,8 +1318,15 @@ async def send_new_email(
     service = gmail_service(credentials)
 
     # A misheard address, or one planted in an email, is most likely to be
-    # new, so first-time recipients need their address spelled back.
+    # new, so first-time recipients need their address spelled back. Someone
+    # the user has emailed counts as known even when Gary's mailbox sends.
     previously_emailed = await has_emailed_address(service, to_address)
+    if not previously_emailed and from_mailbox != USER_MAILBOX:
+        _, user_credentials = await credentials_for_active_user()
+        require_gmail_scope(user_credentials, GMAIL_READ_SCOPE)
+        previously_emailed = await has_emailed_address(
+            gmail_service(user_credentials), to_address
+        )
     if not previously_emailed and new_recipient_confirmed is not True:
         raise ValueError(
             f"The user has never emailed {to_address} before. Spell the full "
@@ -1246,6 +1341,7 @@ async def send_new_email(
     return {
         "success": True,
         "sent": True,
+        "from_mailbox": from_mailbox,
         "to": to_address,
         "subject": subject,
         "first_email_to_recipient": not previously_emailed,
@@ -1301,6 +1397,7 @@ class NewEmailWatcher:
 
 
 email_watcher = NewEmailWatcher()
+gary_email_watcher = NewEmailWatcher()
 
 
 def spoken_sender(from_header: str) -> str:
@@ -1308,14 +1405,20 @@ def spoken_sender(from_header: str) -> str:
     return name or address.split("@")[0]
 
 
-def new_email_announcement(emails: list[tuple[str, str]], total: int) -> str:
+def new_email_announcement(
+    emails: list[tuple[str, str]], total: int, mailbox: str = USER_MAILBOX
+) -> str:
     described = [
         f"from {sender} about {subject}" if subject else f"from {sender}"
         for sender, subject in emails[:3]
     ]
 
+    # Email to Gary's own address is announced as Gary's, so the user knows
+    # which inbox it is in.
+    whose = "You have" if mailbox == USER_MAILBOX else f"{WAKE_WORD_DISPLAY}'s inbox has"
+
     if total == 1:
-        text = f"You have a new email {described[0]}."
+        text = f"{whose} a new email {described[0]}."
         return f"{text} Say {WAKE_WORD_DISPLAY} if you want to hear it."
 
     if len(described) == 1:
@@ -1326,19 +1429,21 @@ def new_email_announcement(emails: list[tuple[str, str]], total: int) -> str:
         joined = f"{', '.join(described[:-1])}, and {described[-1]}"
 
     if total <= len(described):
-        text = f"You have {total} new emails: {joined}."
+        text = f"{whose} {total} new emails: {joined}."
     else:
-        text = f"You have {total} new emails, including {joined}."
+        text = f"{whose} {total} new emails, including {joined}."
 
     return f"{text} Say {WAKE_WORD_DISPLAY} if you want to hear them."
 
 
-async def check_new_emails(watcher: NewEmailWatcher) -> str | None:
+async def check_new_emails(
+    watcher: NewEmailWatcher, mailbox: str = USER_MAILBOX
+) -> str | None:
     """Return a spoken summary of unread Primary email since the last check.
 
     Runs entirely in the backend: nothing is sent to OpenAI.
     """
-    _, credentials = await credentials_for_active_user()
+    credentials = await credentials_for_mailbox(mailbox)
     require_gmail_scope(credentials, GMAIL_READ_SCOPE)
 
     started = int(time.time())
@@ -1377,7 +1482,7 @@ async def check_new_emails(watcher: NewEmailWatcher) -> str | None:
 
     if not new_emails:
         return None
-    return new_email_announcement(new_emails, len(new_emails))
+    return new_email_announcement(new_emails, len(new_emails), mailbox)
 
 
 async def announce_new_emails(websocket: WebSocket) -> None:
@@ -1387,21 +1492,28 @@ async def announce_new_emails(websocket: WebSocket) -> None:
         if in_quiet_hours(dt.datetime.now(ZoneInfo(LOCAL_TIMEZONE))):
             continue
 
-        try:
-            announcement = await check_new_emails(email_watcher)
-        except Exception as exc:
-            await websocket.send_text(
-                json.dumps(
-                    {
-                        "type": "bridge.notice",
-                        "message": f"New email check skipped: {exc}",
-                    }
-                )
-            )
-            continue
+        checks = [(USER_MAILBOX, email_watcher)]
+        if gary_mailbox_configured():
+            checks.append((GARY_MAILBOX, gary_email_watcher))
 
-        if announcement:
-            await speak_to_user(announcement, source="email")
+        # Each inbox is checked on its own, so one that fails (Gary's not yet
+        # signed in, say) does not stop the other being announced.
+        for mailbox, watcher in checks:
+            try:
+                announcement = await check_new_emails(watcher, mailbox)
+            except Exception as exc:
+                await websocket.send_text(
+                    json.dumps(
+                        {
+                            "type": "bridge.notice",
+                            "message": f"New email check skipped ({mailbox}): {exc}",
+                        }
+                    )
+                )
+                continue
+
+            if announcement:
+                await speak_to_user(announcement, source="email")
 
 
 class JoplinError(RuntimeError):
@@ -1858,12 +1970,14 @@ def record_move_event(repos, payload: MoveCalendarEventPayload, result: dict, no
 
 
 async def execute_send_email(payload: SendExternalEmailPayload, context: dict) -> dict:
-    _, credentials = await credentials_for_active_user()
+    # Email Gary initiates comes from Gary's own address when there is one.
+    mailbox = default_send_mailbox()
+    credentials = await credentials_for_mailbox(mailbox)
     require_gmail_scope(credentials, GMAIL_SEND_SCOPE)
     sent = await send_plain_email(
         gmail_service(credentials), payload.to, payload.subject, payload.body
     )
-    return {"sent_message_id": sent.get("id"), "to": payload.to}
+    return {"sent_message_id": sent.get("id"), "to": payload.to, "from_mailbox": mailbox}
 
 
 def external_action_handlers() -> dict[str, ActionHandler]:
@@ -3119,6 +3233,14 @@ LIST_UNREAD_EMAILS_TOOL = {
                 "maximum": 10,
                 "description": "Maximum emails to return; use 5 by default.",
             },
+            "mailbox": {
+                "type": "string",
+                "enum": ["user", "gary"],
+                "description": (
+                    "Whose inbox: 'user' (the user's own, the default) or "
+                    "'gary' (your own mailbox)."
+                ),
+            },
         },
         "required": [],
         "additionalProperties": False,
@@ -3151,6 +3273,14 @@ SEARCH_EMAILS_TOOL = {
                 "maximum": 10,
                 "description": "Maximum emails to return; use 5 by default.",
             },
+            "mailbox": {
+                "type": "string",
+                "enum": ["user", "gary"],
+                "description": (
+                    "Whose inbox: 'user' (the user's own, the default) or "
+                    "'gary' (your own mailbox)."
+                ),
+            },
         },
         "required": ["query"],
         "additionalProperties": False,
@@ -3172,6 +3302,14 @@ FIND_EMAIL_CONTACT_TOOL = {
             "name": {
                 "type": "string",
                 "description": "Name or part of the address, for example 'Sam Lee'.",
+            },
+            "mailbox": {
+                "type": "string",
+                "enum": ["user", "gary"],
+                "description": (
+                    "Whose inbox: 'user' (the user's own, the default) or "
+                    "'gary' (your own mailbox)."
+                ),
             },
         },
         "required": ["name"],
@@ -3279,6 +3417,15 @@ SEND_NEW_EMAIL_TOOL = {
                 "description": (
                     "True only if the user has never emailed this address and "
                     "confirmed it after you spelled it out. Otherwise false."
+                ),
+            },
+            "from_mailbox": {
+                "type": "string",
+                "enum": ["user", "gary"],
+                "description": (
+                    "Which address sends it. Leave it out for the default: your "
+                    "own mailbox when you have one. Use 'user' only when the user "
+                    "asks for the email to come from their own address."
                 ),
             },
         },
@@ -3526,6 +3673,26 @@ async def home(request: Request):
     else:
         google_status = '<p><a href="/login">Sign in with Google</a></p>'
 
+    if gary_mailbox_configured():
+        gary_email = await store.active_email(GARY_MAILBOX)
+        gary_scopes = await store.active_scopes(GARY_MAILBOX)
+        if (
+            gary_email
+            and gary_email.lower() == GARY_EMAIL_ADDRESS
+            and GMAIL_READ_SCOPE in gary_scopes
+            and GMAIL_SEND_SCOPE in gary_scopes
+        ):
+            google_status += (
+                f"<p>{html.escape(WAKE_WORD_DISPLAY)}'s mailbox: "
+                f"<strong>{html.escape(gary_email)}</strong> connected "
+                '(<a href="/logout/gary">disconnect</a>)</p>'
+            )
+        else:
+            google_status += (
+                f"<p>{html.escape(WAKE_WORD_DISPLAY)}'s mailbox: not connected. "
+                f'<a href="/login/gary">Sign in {html.escape(GARY_EMAIL_ADDRESS)}</a></p>'
+            )
+
     pending = await asyncio.to_thread(gary_ops.approvals.list_pending)
     approvals_link = (
         f"<strong>Approvals ({len(pending)} waiting)</strong>"
@@ -3565,14 +3732,34 @@ async def home(request: Request):
 
 @app.get("/login")
 async def login(request: Request):
+    return start_google_login(request, USER_MAILBOX)
+
+
+@app.get("/login/gary")
+async def login_gary(request: Request):
+    if not gary_mailbox_configured():
+        return HTMLResponse(
+            "GARY_EMAIL_ADDRESS is not set, so there is no mailbox to connect.",
+            status_code=400,
+        )
+    return start_google_login(request, GARY_MAILBOX)
+
+
+def start_google_login(request: Request, mailbox: str) -> RedirectResponse:
     state = secrets.token_urlsafe(32)
     request.session["oauth_state"] = state
+    request.session["oauth_mailbox"] = mailbox
 
-    flow = make_flow(state)
+    flow = make_flow(state, mailbox)
+    options = {}
+    if mailbox == GARY_MAILBOX:
+        # Preselect Gary's account so the browser's usual one is not reused.
+        options["login_hint"] = GARY_EMAIL_ADDRESS
     authorization_url, _ = flow.authorization_url(
         access_type="offline",
         include_granted_scopes="true",
-        prompt="consent",
+        prompt="consent select_account",
+        **options,
     )
     # The callback builds a new Flow, so keep the PKCE verifier for it.
     request.session["oauth_code_verifier"] = flow.code_verifier
@@ -3594,7 +3781,11 @@ async def oauth2callback(request: Request):
             status_code=400,
         )
 
-    flow = make_flow(received_state)
+    mailbox = request.session.pop("oauth_mailbox", USER_MAILBOX)
+    if mailbox not in MAILBOXES:
+        return HTMLResponse("Unknown mailbox.", status_code=400)
+
+    flow = make_flow(received_state, mailbox)
     flow.code_verifier = request.session.pop("oauth_code_verifier", None)
     flow.fetch_token(authorization_response=str(request.url))
     credentials = flow.credentials
@@ -3608,15 +3799,42 @@ async def oauth2callback(request: Request):
     user_id = claims["sub"]
     email = claims.get("email", user_id)
 
+    # Keep the two accounts apart: Gary's slot takes only GARY_EMAIL_ADDRESS,
+    # and the user's slot (the calendar) never takes Gary's account.
+    signed_in_as = (email or "").lower()
+    if mailbox == GARY_MAILBOX and (
+        signed_in_as != GARY_EMAIL_ADDRESS or not claims.get("email_verified")
+    ):
+        return HTMLResponse(
+            f"{html.escape(WAKE_WORD_DISPLAY)}'s mailbox must be "
+            f"{html.escape(GARY_EMAIL_ADDRESS)}, but Google signed in "
+            f"{html.escape(email)}. Nothing was changed. "
+            '<a href="/login/gary">Try again</a> and choose the right account.',
+            status_code=400,
+        )
+    if (
+        mailbox == USER_MAILBOX
+        and GARY_EMAIL_ADDRESS
+        and signed_in_as == GARY_EMAIL_ADDRESS
+    ):
+        return HTMLResponse(
+            f"{html.escape(email)} is {html.escape(WAKE_WORD_DISPLAY)}'s mailbox, "
+            "not your account, so it cannot hold your calendar. Nothing was "
+            f'changed. Use <a href="/login/gary">{html.escape(WAKE_WORD_DISPLAY)}\'s '
+            "mailbox sign-in</a> for it.",
+            status_code=400,
+        )
+
     # Store the scopes Google actually granted; the user can untick some.
     granted = flow.oauth2session.token.get("scope") or credentials.scopes or []
     if isinstance(granted, str):
         granted = granted.split()
 
-    await store.save_user(user_id, email, credentials, list(granted))
+    await store.save_user(user_id, email, credentials, list(granted), mailbox)
 
-    request.session["user_id"] = user_id
-    request.session["email"] = email
+    if mailbox == USER_MAILBOX:
+        request.session["user_id"] = user_id
+        request.session["email"] = email
 
     return RedirectResponse("/")
 
@@ -3990,6 +4208,13 @@ async def logout(request: Request):
     return RedirectResponse("/")
 
 
+@app.get("/logout/gary")
+async def logout_gary(request: Request):
+    # Disconnects Gary's mailbox only; the user's account stays signed in.
+    await store.clear_active(GARY_MAILBOX)
+    return RedirectResponse("/")
+
+
 def authorized_voice_bridge(websocket: WebSocket) -> bool:
     auth = websocket.headers.get("authorization", "")
     prefix = "Bearer "
@@ -4081,15 +4306,20 @@ async def run_tool_call(name: str, arguments_json: str, session: dict) -> dict:
             result = await list_unread_emails(
                 max_results=arguments.get("max_results", 5),
                 email_session=session,
+                mailbox=arguments.get("mailbox", USER_MAILBOX),
             )
         elif name == "search_emails":
             result = await search_emails(
                 query=arguments["query"],
                 max_results=arguments.get("max_results", 5),
                 email_session=session,
+                mailbox=arguments.get("mailbox", USER_MAILBOX),
             )
         elif name == "find_email_contact":
-            result = await find_email_contact(name=arguments["name"])
+            result = await find_email_contact(
+                name=arguments["name"],
+                mailbox=arguments.get("mailbox", USER_MAILBOX),
+            )
         elif name == "read_email":
             result = await read_email(
                 email_id=arguments["email_id"],
@@ -4135,6 +4365,7 @@ async def run_tool_call(name: str, arguments_json: str, session: dict) -> dict:
                     "new_recipient_confirmed", False
                 ),
                 email_session=session,
+                from_mailbox=arguments.get("from_mailbox", ""),
             )
         else:
             raise ValueError(f"Unknown tool: {name}")
@@ -4203,6 +4434,20 @@ voice_turn = VoiceTurn(
     dispatch=run_tool_call,
     usage=usage_ledger,
 )
+
+
+def gary_mailbox_instructions() -> str:
+    if not gary_mailbox_configured():
+        return ""
+    return f"""
+You have your own Gmail mailbox, {GARY_EMAIL_ADDRESS}, separate from the
+user's. The email tools read the user's inbox unless you pass mailbox set to
+gary; do that when the user asks about your email or your inbox. New emails
+you send come from your own address; send from the user's address only when
+the user asks for that. A reply always comes from the mailbox the email
+arrived in. When you confirm an email or reply before sending, say which
+address it comes from. The calendar is always the user's.
+"""
 
 
 def build_instructions() -> str:
@@ -4307,7 +4552,7 @@ CC recipients or attachments.
 
 Never include calendar details or content from other emails in an email or
 reply unless the user asks you to.
-
+{gary_mailbox_instructions()}
 Notes:
 Use create_joplin_note when the user asks to make, take, write, jot down, or
 save a note. Notes go in the Joplin notebook named {JOPLIN_NOTEBOOK} unless the
