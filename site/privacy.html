@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Policy · the_swarm</title>
+  <meta name="description" content="How the_swarm accesses, uses, stores and shares Google user data.">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <a class="name" href="./">the_swarm</a>
+    <nav>
+      <a href="./">Home</a>
+      <a href="privacy.html" aria-current="page">Privacy policy</a>
+    </nav>
+  </header>
+
+  <main>
+    <h1>Privacy policy</h1>
+    <p class="meta">Effective 21 September 2026</p>
+
+    <p>
+      the_swarm is a personal, self-hosted voice assistant ("Gary") that its
+      developer runs on their own computer. It connects only to the
+      developer's own Google account and to the assistant's own Gmail account.
+      It is not offered to the public. This policy explains what Google user
+      data the_swarm accesses, how it is used, stored and shared, and how to
+      remove it.
+    </p>
+
+    <h2>Google data the_swarm accesses</h2>
+    <table>
+      <thead>
+        <tr><th>Permission</th><th>What it is used for</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Basic profile and email address<br><code>openid</code>, <code>userinfo.email</code></td>
+          <td>To identify which Google account signed in, so the developer's
+            account and the assistant's mailbox are never confused.</td>
+        </tr>
+        <tr>
+          <td>Calendar events<br><code>calendar.events</code></td>
+          <td>Developer's account only. To list events when asked, to create,
+            move or delete events when asked, and to read busy times so work
+            can be scheduled around existing commitments.</td>
+        </tr>
+        <tr>
+          <td>Read Gmail<br><code>gmail.readonly</code></td>
+          <td>To list, search and read email when asked, to find a contact's
+            address, and to announce new mail. the_swarm cannot change,
+            label, archive or delete email.</td>
+        </tr>
+        <tr>
+          <td>Send Gmail<br><code>gmail.send</code></td>
+          <td>To send replies and new emails, only after the developer has
+            heard the message read back and confirmed it, or approved it.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>How the data is used</h2>
+    <p>
+      Google data is used only to provide the assistant's features to the
+      developer: answering questions about their calendar and email, drafting
+      and sending email they confirm, scheduling their work, and planning
+      their day. It is not used for advertising, is not sold, and is not used
+      to build profiles for anyone else.
+    </p>
+    <ul>
+      <li><strong>When the developer asks about email or the calendar</strong>,
+        the relevant details (for example sender, subject, a short preview, or
+        the text of an email they ask to hear, or event titles and times) are
+        sent to the AI model that runs the conversation.</li>
+      <li><strong>The daily planning runs</strong> see the developer's busy
+        times as start and end times only, with no event titles or attendees,
+        and the sender, subject and a short preview of up to ten unread
+        emails. Never full emails or email addresses.</li>
+      <li><strong>The new-mail check</strong> reads only the sender and subject
+        of new unread email. It runs entirely on the developer's computer and
+        is not sent to any AI model.</li>
+    </ul>
+
+    <h2>Who the data is shared with</h2>
+    <p>
+      Google user data is shared only with <strong>OpenAI</strong>, through its
+      API, as needed to run the conversation and planning features above.
+      Requests are sent with storage turned off, and OpenAI's API terms state
+      that API data is not used to train its models by default. Google user
+      data is not shared with anyone else. Email content is removed from
+      anything sent to other services the_swarm uses, such as GitHub.
+    </p>
+
+    <h2>Storage and security</h2>
+    <ul>
+      <li>the_swarm has no servers of its own. Everything runs on the
+        developer's computer.</li>
+      <li>Google sign-in credentials are stored on that computer, encrypted,
+        with the encryption key kept separately.</li>
+      <li>Email and calendar content is not copied into a database. The only
+        email details kept are the sender names and subjects in the record of
+        what the assistant has said out loud, stored locally.</li>
+      <li>The assistant's web pages are reachable only from the developer's
+        own computer.</li>
+    </ul>
+
+    <h2>Limited Use</h2>
+    <p>
+      the_swarm's use and transfer of information received from Google APIs
+      to any other app will adhere to the
+      <a href="https://developers.google.com/terms/api-services-user-data-policy">Google
+      API Services User Data Policy</a>, including the Limited Use
+      requirements. Google user data is not used to develop, improve or train
+      generalised AI or machine-learning models.
+    </p>
+
+    <h2>Retention and deletion</h2>
+    <ul>
+      <li>Data from Google is kept only for as long as the assistant needs it
+        to answer a request. Conversations are discarded when the assistant
+        goes back to sleep.</li>
+      <li>To remove access at any time, open
+        <a href="https://myaccount.google.com/permissions">Google Account ›
+        Third-party connections</a> and remove the_swarm. This stops all
+        further access, and the stored sign-in on the developer's computer
+        stops working.</li>
+      <li>To ask for any locally stored data to be deleted, email the contact
+        address below.</li>
+    </ul>
+
+    <h2>Children</h2>
+    <p>the_swarm is not directed at children and does not knowingly collect
+      data from anyone under 13.</p>
+
+    <h2>Changes</h2>
+    <p>If this policy changes, the new version will be posted on this page
+      with a new effective date.</p>
+
+    <h2>Contact</h2>
+    <p>
+      <a href="mailto:garyhasaccess@gmail.com">garyhasaccess@gmail.com</a>
+    </p>
+  </main>
+
+  <footer>
+    the_swarm · <a href="./">Home</a> ·
+    <a href="mailto:garyhasaccess@gmail.com">garyhasaccess@gmail.com</a>
+  </footer>
+</body>
+</html>
