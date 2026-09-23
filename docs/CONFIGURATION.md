@@ -252,10 +252,27 @@ Lower values improve reaction speed but consume more CPU.
 Default:
 
 ```text
-45
+30
 ```
 
-Upper active-session window.
+How long the microphone stays open with nothing happening. The window is
+refreshed while the conversation is going: Alex speaking, an utterance
+waiting to be answered, or Gary talking. Once Gary has answered it drops to
+`FOLLOWUP_GRACE_SECONDS`, so the session ends shortly after a reply rather
+than a full window later.
+
+### `MAX_SESSION_SECONDS`
+
+Default:
+
+```text
+180
+```
+
+The hard end of one activation, set when the wake word is heard and never
+refreshed. Without it a room where somebody keeps talking holds the
+microphone open indefinitely, one utterance at a time, and every utterance is
+transcribed and billed. Say the wake word again to start a new session.
 
 ### `FOLLOWUP_GRACE_SECONDS`
 

@@ -16,7 +16,7 @@ import websockets
 from faster_whisper import WhisperModel
 from piper import PiperVoice, SynthesisConfig
 
-from segmentation import Utterance
+from segmentation import Session, Utterance
 
 
 BACKEND_WS_URL = os.getenv(
@@ -60,6 +60,9 @@ WAKE_CHECK_INTERVAL_SECONDS = float(
 
 ACTIVE_SESSION_SECONDS = float(
     os.getenv("ACTIVE_SESSION_SECONDS", "45")
+)
+MAX_SESSION_SECONDS = float(
+    os.getenv("MAX_SESSION_SECONDS", "180")
 )
 FOLLOWUP_GRACE_SECONDS = float(
     os.getenv("FOLLOWUP_GRACE_SECONDS", "10")
@@ -506,19 +509,10 @@ async def receiver(
 
             print(flush=True)
 
-            now = time.monotonic()
-            state["last_response_done"] = now
-            state["followup_deadline"] = (
-                now + FOLLOWUP_GRACE_SECONDS
-            )
+            state["session"].replied(time.monotonic())
 
         elif event_type == "input_audio_buffer.speech_started":
-            now = time.monotonic()
-
-            state["hard_deadline"] = max(
-                state["hard_deadline"],
-                now + ACTIVE_SESSION_SECONDS,
-            )
+            state["session"].heard_speech(time.monotonic())
 
         elif event_type == "error":
             print(
@@ -533,7 +527,7 @@ async def receiver(
                 flush=True,
             )
 
-            if state["active"]:
+            if state["session"].active:
                 # Don't talk over a conversation; speak it on going to sleep.
                 state["announcements"].append(message)
             else:
@@ -547,6 +541,9 @@ async def receiver(
             text = event.get("text", "")
             print(f"\n{text}", flush=True)
             speak(text)
+            # Without this the session only ended when the idle window ran
+            # out, so Gary kept listening long after he had answered.
+            state["session"].replied(time.monotonic())
 
         elif event_type == "bridge.transcript":
             # What the backend heard, so a misheard request is visible.
@@ -591,10 +588,11 @@ async def run():
                 )
 
                 state = {
-                    "active": False,
-                    "hard_deadline": 0.0,
-                    "followup_deadline": 0.0,
-                    "last_response_done": 0.0,
+                    "session": Session(
+                        ACTIVE_SESSION_SECONDS,
+                        FOLLOWUP_GRACE_SECONDS,
+                        MAX_SESSION_SECONDS,
+                    ),
                     "tts_text": "",
                     "announcements": [],
                 }
@@ -658,19 +656,13 @@ async def run():
 
                         now = time.monotonic()
 
-                        if state["active"]:
+                        session = state["session"]
+
+                        if session.active:
                             if assistant_speaking():
                                 # Half-duplex: keep Gary's own voice out of
                                 # the mic stream, and don't time out mid-reply.
-                                if state["followup_deadline"] > 0:
-                                    state["followup_deadline"] = (
-                                        now + FOLLOWUP_GRACE_SECONDS
-                                    )
-
-                                state["hard_deadline"] = max(
-                                    state["hard_deadline"],
-                                    now + FOLLOWUP_GRACE_SECONDS,
-                                )
+                                session.speaking(now)
                                 continue
 
                             if VOICE_MODE == "transcribe":
@@ -693,32 +685,14 @@ async def run():
                                         flush=True,
                                     )
                                     # Waiting on a reply is not idle time.
-                                    state["hard_deadline"] = max(
-                                        state["hard_deadline"],
-                                        now + ACTIVE_SESSION_SECONDS,
-                                    )
+                                    session.heard_speech(now)
                             else:
                                 await websocket.send(
                                     pcm16_bytes(audio)
                                 )
 
-                            hard_expired = (
-                                now
-                                > state["hard_deadline"]
-                            )
-
-                            followup_expired = (
-                                state["followup_deadline"] > 0
-                                and now
-                                > state["followup_deadline"]
-                            )
-
-                            if (
-                                hard_expired
-                                or followup_expired
-                            ):
-                                state["active"] = False
-                                state["followup_deadline"] = 0.0
+                            if session.expired(now):
+                                session.sleep()
 
                                 utterance.reset()
                                 pre_roll.clear()
@@ -790,14 +764,7 @@ async def run():
                             )
 
                         if wake_detected(text):
-                            state["active"] = True
-
-                            state["hard_deadline"] = (
-                                now
-                                + ACTIVE_SESSION_SECONDS
-                            )
-
-                            state["followup_deadline"] = 0.0
+                            session.wake(now)
 
                             buffered = np.concatenate(
                                 list(pre_roll)

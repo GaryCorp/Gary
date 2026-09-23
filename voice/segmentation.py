@@ -81,3 +81,74 @@ __all__ = [
     "DEFAULT_ENERGY",
     "DEFAULT_MAX_SECONDS",
 ]
+
+
+# How long the microphone stays open with nothing happening.
+DEFAULT_IDLE_SECONDS = 30.0
+# After Gary answers, how long Alex has to follow up without the wake word.
+DEFAULT_FOLLOWUP_SECONDS = 10.0
+# The hard end of one activation, however busy the room is. Without it every
+# utterance pushes the idle window out again, and a room with a television in
+# it keeps the microphone open (and transcription billing) indefinitely.
+DEFAULT_MAX_SESSION_SECONDS = 180.0
+
+
+class Session:
+    """How long the microphone stays open after the wake word.
+
+    Two clocks, and the earlier one wins:
+
+    * an idle window, refreshed by things that mean the conversation is still
+      going (Alex speaking, waiting for an answer, Gary talking), shortened to
+      the follow-up grace once Gary has answered; and
+    * a hard deadline set when the wake word was heard, which nothing
+      refreshes.
+
+    The hard deadline is the point. It is what stops a noisy room holding the
+    session open forever, one utterance at a time.
+
+    Free of the audio stack: the caller passes a monotonic ``now``.
+    """
+
+    def __init__(
+        self,
+        idle_seconds: float = DEFAULT_IDLE_SECONDS,
+        followup_seconds: float = DEFAULT_FOLLOWUP_SECONDS,
+        max_seconds: float = DEFAULT_MAX_SESSION_SECONDS,
+    ):
+        self.idle_seconds = idle_seconds
+        self.followup_seconds = followup_seconds
+        self.max_seconds = max_seconds
+        self.active = False
+        self.idle_deadline = 0.0
+        self.hard_deadline = 0.0
+
+    def wake(self, now: float) -> None:
+        self.active = True
+        self.idle_deadline = now + self.idle_seconds
+        self.hard_deadline = now + self.max_seconds
+
+    def sleep(self) -> None:
+        self.active = False
+        self.idle_deadline = 0.0
+        self.hard_deadline = 0.0
+
+    def heard_speech(self, now: float) -> None:
+        """Alex is talking, or his words are on their way to be answered."""
+        self.idle_deadline = max(self.idle_deadline, now + self.idle_seconds)
+
+    def speaking(self, now: float) -> None:
+        """Gary is talking: never time out mid-reply, and leave the grace
+        running from the moment he stops."""
+        self.idle_deadline = max(self.idle_deadline, now + self.followup_seconds)
+
+    def replied(self, now: float) -> None:
+        """Gary has answered. The session now ends after the short follow-up
+        grace, not after another full idle window."""
+        self.idle_deadline = now + self.followup_seconds
+
+    def expired(self, now: float) -> bool:
+        return self.active and (now > self.idle_deadline or now > self.hard_deadline)
+
+    def remaining(self, now: float) -> float:
+        return max(0.0, min(self.idle_deadline, self.hard_deadline) - now)
