@@ -324,6 +324,7 @@ class GaryCorpAgentRunner:
             entity_type="agent_assignment",
             entity_id=state.assignment_id,
             detail=agent.agent_id,
+            agent_id=agent.agent_id,
         )
         if state.tool_usage.get("total_tokens"):
             self.usage.record(
@@ -336,6 +337,7 @@ class GaryCorpAgentRunner:
                 entity_type="agent_assignment",
                 entity_id=state.assignment_id,
                 detail=f"{agent.agent_id} web search",
+                agent_id=agent.agent_id,
             )
 
     async def run_assignment(self, assignment_id: str, shared_reports: list[dict] | None = None) -> dict:

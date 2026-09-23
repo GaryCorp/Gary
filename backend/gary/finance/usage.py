@@ -47,6 +47,7 @@ class UsageLedger:
         entity_type: str | None = None,
         entity_id: str | None = None,
         detail: str | None = None,
+        agent_id: str | None = None,
     ) -> float | None:
         """Record one model call. Returns its cost, or None when unpriced."""
         # A transcription call has no tokens at all, only a duration, so
@@ -70,6 +71,7 @@ class UsageLedger:
                     entity_type=entity_type,
                     entity_id=entity_id,
                     detail=detail,
+                    agent_id=agent_id,
                     now=now,
                 )
         except Exception:
@@ -133,6 +135,7 @@ class UsageLedger:
             repos = Repositories.bind(conn)
             totals = repos.usage.totals_since(since)
             by_source = repos.usage.by_source_since(since)
+            by_agent = repos.usage.by_agent_since(since)
             by_model = repos.usage.by_model_since(since)
             daily = repos.usage.daily_since(since, offset)
             unpriced = repos.usage.unpriced_models_since(since)
@@ -146,6 +149,8 @@ class UsageLedger:
             "since": since,
             "total": money(totals),
             "by_source": [money(row) for row in by_source],
+            # What each person's thinking cost: the CFO's view of the team.
+            "by_agent": [money(row) for row in by_agent],
             "by_model": [money(row) for row in by_model],
             "daily": [money(row) for row in daily],
             "today": self.spent_today(),

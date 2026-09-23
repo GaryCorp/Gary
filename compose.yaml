@@ -60,7 +60,7 @@ services:
       # Scheduled planning cycle. Set PLANNING_TIMES empty to turn it off.
       PLANNING_TIMES: "${PLANNING_TIMES-morning=08:00,midday=12:30,evening=17:30}"
       PLANNING_WEEKDAYS: "${PLANNING_WEEKDAYS:-mon,tue,wed,thu,fri}"
-      PLANNING_MODEL: "${PLANNING_MODEL:-gpt-5.6-luna}"
+      PLANNING_MODEL: "${PLANNING_MODEL:-gpt-6-luna}"
       PLANNING_MAX_ACTIONS: "${PLANNING_MAX_ACTIONS:-5}"
       WORK_HOURS: "${WORK_HOURS:-9-17}"
       PROTECTED_TIMES: "${PROTECTED_TIMES-12:00-13:00}"
@@ -84,7 +84,7 @@ services:
 
       # GaryCorp specialists (Susan, Dave, Linda, Catherine, Lauren). Empty model = PLANNING_MODEL.
       GARY_EMPLOYEE_MODEL: "${GARY_EMPLOYEE_MODEL:-}"
-      AGENT_WEB_SEARCH_MODEL: "${AGENT_WEB_SEARCH_MODEL:-gpt-5.6-luna}"
+      AGENT_WEB_SEARCH_MODEL: "${AGENT_WEB_SEARCH_MODEL:-gpt-6-luna}"
       MAX_AGENT_ITERATIONS: "${MAX_AGENT_ITERATIONS:-8}"
       MAX_AGENT_EXECUTION_SECONDS: "${MAX_AGENT_EXECUTION_SECONDS:-300}"
       MAX_CONCURRENT_AGENT_RUNS: "${MAX_CONCURRENT_AGENT_RUNS:-2}"
@@ -293,7 +293,7 @@ services:
       # Google set EASE_LLM_PROVIDER, EASE_LLM_API_KEY and EASE_LLM_MODEL.
       LLM_PROVIDER: "${EASE_LLM_PROVIDER:-openai}"
       LLM_API_KEY: "${EASE_LLM_API_KEY:-${OPENAI_API_KEY}}"
-      LLM_MODEL: "${EASE_LLM_MODEL:-gpt-5.6-luna}"
+      LLM_MODEL: "${EASE_LLM_MODEL:-gpt-6-luna}"
       # Empty = no auth. Set it if anything beyond localhost can reach the API.
       API_KEY: "${EASE_API_KEY:-}"
       REDIS_URL: redis://ease-redis:6379/0

@@ -760,6 +760,7 @@ def record_voice_usage(response: dict) -> None:
             entity_type="realtime_response",
             entity_id=str(response.get("id") or ""),
             detail="voice conversation",
+            agent_id="gary",
         )
     except Exception:
         logger.exception("Could not record voice usage")

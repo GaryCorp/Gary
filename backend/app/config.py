@@ -107,7 +107,7 @@ PLANNING_SCHEDULE = parse_schedule(
 PLANNING_WEEKDAYS = parse_weekdays(os.getenv("PLANNING_WEEKDAYS", "mon,tue,wed,thu,fri"))
 
 
-PLANNING_MODEL = os.getenv("PLANNING_MODEL", "gpt-5.6-luna").strip()
+PLANNING_MODEL = os.getenv("PLANNING_MODEL", "gpt-6-luna").strip()
 
 
 PLANNING_MAX_ACTIONS = max(0, min(int(os.getenv("PLANNING_MAX_ACTIONS", "5")), 10))
@@ -158,7 +158,7 @@ GARY_EMPLOYEE_MODEL = os.getenv("GARY_EMPLOYEE_MODEL", "").strip() or PLANNING_M
 VOICE_TEXT_MODEL = os.getenv("VOICE_TEXT_MODEL", "").strip() or PLANNING_MODEL
 
 
-AGENT_WEB_SEARCH_MODEL = os.getenv("AGENT_WEB_SEARCH_MODEL", "gpt-5.6-luna").strip()
+AGENT_WEB_SEARCH_MODEL = os.getenv("AGENT_WEB_SEARCH_MODEL", "gpt-6-luna").strip()
 
 
 # The continuous management loop: how often Gary checks whether anything

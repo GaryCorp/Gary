@@ -951,6 +951,8 @@ class PlanningCycle:
             entity_type="planning_run",
             entity_id=run_id,
             detail=f"{planning_type} cycle",
+            # Planning is Gary's own thinking, and is costed as his.
+            agent_id=GARY_ACTOR,
         )
 
     async def _team_state(self, now: str) -> tuple[dict | None, list[dict], str | None]:

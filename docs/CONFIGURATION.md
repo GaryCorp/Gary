@@ -56,9 +56,9 @@ Gary uses two OpenAI models:
 | Setting | Used for | Must be |
 |---|---|---|
 | `OPENAI_REALTIME_MODEL` | Voice conversations | A Realtime model (`gpt-realtime-*`) |
-| `PLANNING_MODEL` | Planning cycles: scheduled morning, midday, and evening runs, "replan", "close out the day", and replans after missed work | A Responses API model with structured outputs, such as `gpt-5.6-luna` |
+| `PLANNING_MODEL` | Planning cycles: scheduled morning, midday, and evening runs, "replan", "close out the day", and replans after missed work | A Responses API model with structured outputs, such as `gpt-6-luna` |
 
-A general model such as `gpt-5.6-luna` cannot be the voice model, and a
+A general model such as `gpt-6-luna` cannot be the voice model, and a
 Realtime model cannot be the planning model.
 
 To see which models your API key can use:
@@ -611,14 +611,14 @@ may place calendar blocks.
 
 ### `PLANNING_MODEL`
 
-Default: `gpt-5.6-luna`.
+Default: `gpt-6-luna`.
 
 The model for planning cycles, called once per run through the Responses API
 with a strict JSON schema. Any model that supports structured outputs works,
 for example:
 
 ```text
-PLANNING_MODEL=gpt-5.6-luna
+PLANNING_MODEL=gpt-6-luna
 ```
 
 Not a Realtime model (see [Choosing models](#choosing-models)).
@@ -686,12 +686,12 @@ Settings for Susan, Dave, Linda, Catherine, and Lauren (see [Team](TEAM.md)).
 Default: empty, which uses `PLANNING_MODEL`.
 
 The model the specialists run on through CrewAI. Any model with tool calling and
-structured outputs, such as `gpt-5.6-luna`; not a Realtime
+structured outputs, such as `gpt-6-luna`; not a Realtime
 model.
 
 ### `AGENT_WEB_SEARCH_MODEL`
 
-Default: `gpt-5.6-luna`. The model for Susan's and Catherine's read-only web search (OpenAI's
+Default: `gpt-6-luna`. The model for Susan's and Catherine's read-only web search (OpenAI's
 hosted `web_search` tool). Each search is roughly 15,000 tokens.
 
 ### Execution limits
@@ -748,7 +748,7 @@ Lauren's ethics framework runs as the `ease-api` container, with
 | `EASE_API_KEY` | empty | API key for EASE. When set, both EASE and the backend use it; empty means EASE requires no key (it listens only on loopback and the assistant network). |
 | `EASE_LLM_PROVIDER` | `openai` | EASE's model provider: `openai`, `anthropic`, or `google`. |
 | `EASE_LLM_API_KEY` | `OPENAI_API_KEY` | Key for that provider. |
-| `EASE_LLM_MODEL` | `gpt-5.6-luna` | EASE's model. |
+| `EASE_LLM_MODEL` | `gpt-6-luna` | EASE's model. |
 
 Rebuild after changing EASE's code: `docker compose up -d --build ease-api ease-worker`.
 

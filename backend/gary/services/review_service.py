@@ -173,6 +173,8 @@ class PerformanceReviews:
                 entity_type="agent",
                 entity_id=subject,
                 detail=f"{kind} review of {subject}",
+                # Whose work the call was: the reviewer wrote it.
+                agent_id=reviewer_id,
             )
 
         now = clock_now(self.clock)

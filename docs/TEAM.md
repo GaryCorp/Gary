@@ -550,7 +550,7 @@ Run against the real models before release:
 
 Specialists use `GARY_EMPLOYEE_MODEL` (default: the planning model) through
 CrewAI, with the existing `OPENAI_API_KEY`. Susan's and Catherine's `web_search` uses OpenAI's
-hosted web search with `AGENT_WEB_SEARCH_MODEL` (default `gpt-5.6-luna`); each
+hosted web search with `AGENT_WEB_SEARCH_MODEL` (default `gpt-6-luna`); each
 search is about 15,000 tokens. Token usage per run is stored in `agent_runs`.
 ### What the AI costs
 
@@ -574,6 +574,6 @@ claimed. Ask Catherine for the same picture by voice ("what is the team's AI
 costing us"); she reads the ledger through `read_ai_usage`.
 
 Lauren's EASE analyses run inside the `ease-api` container on its own model
-(`EASE_LLM_MODEL`, default `gpt-5.6-luna` with the same OpenAI key), about two
+(`EASE_LLM_MODEL`, default `gpt-6-luna` with the same OpenAI key), about two
 dozen model calls each; their tokens are not included in `agent_runs` or the
 cost ledger, and are reported as unmeasured rather than as zero.

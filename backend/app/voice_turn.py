@@ -191,6 +191,7 @@ class VoiceTurn:
                 data.get("model") or self.transcribe_model,
                 self.transcription_usage(data.get("usage") or {}, seconds),
                 detail="transcribing what Alex said",
+                agent_id="gary",
             )
         except Exception:
             logger.exception("Could not record transcription usage")
@@ -263,6 +264,7 @@ class VoiceTurn:
                 entity_type="voice_turn",
                 entity_id=str(data.get("id") or ""),
                 detail="voice conversation",
+                agent_id="gary",
             )
         except Exception:
             logger.exception("Could not record voice usage")

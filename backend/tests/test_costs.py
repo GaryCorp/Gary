@@ -272,3 +272,38 @@ def test_an_ordinary_key_is_told_it_needs_an_admin_key(monkeypatch):
     client = module.OpenAICosts("sk-not-an-admin-key")
     with pytest.raises(module.ProviderCostsError, match="admin key"):
         asyncio.run(client.daily(7))
+
+
+def test_spending_is_attributed_to_whoever_did_the_thinking(gary, clock, tmp_path):
+    """Catherine reports what each employee costs, not just what the company
+    costs: the ledger had the amounts but not whose work they were."""
+    from gary.finance.pricing import usage_from_tokens
+
+    path = tmp_path / "prices.json"
+    path.write_text(json.dumps({"gpt-6-luna": {"input": 0.1, "output": 0.5}}))
+    ledger = UsageLedger(gary.db, PriceTable(path, environ={}), gary.timezone, clock)
+
+    ledger.record(
+        "specialist", "gpt-6-luna", usage_from_tokens(1_000_000, 1_000_000),
+        entity_type="agent_assignment", entity_id="a1", detail="susan", agent_id="susan",
+    )
+    ledger.record(
+        "web_search", "gpt-6-luna", usage_from_tokens(1_000_000, 0),
+        detail="susan web search", agent_id="susan",
+    )
+    ledger.record(
+        "planning_cycle", "gpt-6-luna", usage_from_tokens(1_000_000, 0),
+        entity_type="planning_run", entity_id="p1", detail="morning cycle", agent_id="gary",
+    )
+    # Company work that belongs to nobody in particular.
+    ledger.record("other", "gpt-6-luna", usage_from_tokens(1_000_000, 0), detail="a script")
+
+    by_agent = {row["agent_id"]: row for row in ledger.summary(7)["by_agent"]}
+
+    # Susan: her own call (0.10 + 0.50) and her web search (0.10).
+    assert by_agent["susan"]["cost_usd"] == 0.7
+    assert by_agent["susan"]["calls"] == 2
+    assert by_agent["gary"]["cost_usd"] == 0.1
+    assert by_agent["unattributed"]["cost_usd"] == 0.1
+    # Every dollar is still in the total, wherever it is attributed.
+    assert round(sum(row["cost_usd"] for row in by_agent.values()), 4) == 0.9

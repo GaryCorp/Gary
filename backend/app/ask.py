@@ -98,6 +98,7 @@ async def ask(prompt: str, *, show_tools: bool = True, model: str | None = None)
             "other", payload.get("model") or model,
             usage_from_openai(payload.get("usage")),
             detail="text conversation with Gary",
+            agent_id="gary",
         )
 
         calls = _calls(payload)

@@ -32,6 +32,7 @@ class ModelUsageRepository:
         entity_type: str | None = None,
         entity_id: str | None = None,
         detail: str | None = None,
+        agent_id: str | None = None,
         occurred_at: str | None = None,
         now: str | None = None,
     ) -> str:
@@ -59,6 +60,8 @@ class ModelUsageRepository:
                 "entity_type": entity_type,
                 "entity_id": entity_id,
                 "detail": detail,
+                # Whose work this call was, when it belongs to one person.
+                "agent_id": agent_id,
                 "created_at": now,
             },
         )
@@ -82,6 +85,22 @@ class ModelUsageRepository:
             f"SELECT {self._TOTALS} FROM model_usage WHERE occurred_at >= ?", (since,)
         ).fetchone()
         return dict(row)
+
+    def by_agent_since(self, since: str) -> list[dict]:
+        """What each employee's thinking cost. Calls with no agent_id (a
+        planning cycle before this was recorded, say) are reported under
+        'unattributed' rather than dropped."""
+        return rows_to_dicts(
+            self.conn.execute(
+                f"""
+                SELECT COALESCE(agent_id, 'unattributed') AS agent_id, {self._TOTALS}
+                FROM model_usage WHERE occurred_at >= ?
+                GROUP BY COALESCE(agent_id, 'unattributed')
+                ORDER BY cost_usd DESC, total_tokens DESC
+                """,
+                (since,),
+            )
+        )
 
     def by_source_since(self, since: str) -> list[dict]:
         return rows_to_dicts(

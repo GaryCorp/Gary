@@ -630,6 +630,10 @@ def _read_ai_usage(call: ToolCall):
         "average_per_day_usd": summary["average_per_day_usd"],
         "today": summary["today"],
         "by_source": summary["by_source"],
+        # What each employee's own thinking cost, priced from the company's
+        # price table. 'unattributed' is company work that belongs to nobody
+        # in particular, or calls made before this was recorded.
+        "by_agent": summary["by_agent"],
         "by_model": summary["by_model"],
         "daily": summary["daily"][-14:],
         "unpriced_models": summary["unpriced_models"],
@@ -812,8 +816,12 @@ TOOL_CATALOG: dict[str, ToolSpec] = {
         ToolSpec(
             "read_ai_usage",
             "Read what GaryCorp's AI actually costs: dollars and tokens by department "
-            "(planning, specialists, web search, voice), by model, and by day, plus today's "
-            "spend and any models with no price set.",
+            "(planning, specialists, web search, voice), by employee, by model, and by day, "
+            "plus today's spend and any models with no price set. The per-employee figures "
+            "cover everything that person's work caused -- their own model calls, their web "
+            "searches, and reviews they wrote -- priced from GaryCorp's own price table. "
+            "specialist_runs is the raw token count from each run, which is where a figure "
+            "can be checked against the provider's own reported cost.",
             UsageArgs,
             _sync(_read_ai_usage),
         ),
