@@ -148,7 +148,8 @@ TOOLS = [
     Tool(
         "team_list",
         "List GaryCorp's team (Susan: research and strategy; Dave: security; Linda: "
-        "operations; Catherine: finance; Lauren: ethics), their status, and recent assignments and reviews.",
+        "operations; Catherine: finance; Marcus: marketing; Lauren: ethics), their status, "
+        "and recent assignments and reviews.",
         obj({}),
         team_list,
     ),
@@ -159,7 +160,8 @@ TOOLS = [
         "permissions, controls. Linda: execution plans, feasibility, dependencies, "
         "scheduling. Catherine: costs, budgets, AI spending, and buying things on "
         "GaryCorp's debit card (she can only request a purchase; the user approves it "
-        "on the approvals web page). Lauren: ethical review of a decision with the EASE "
+        "on the approvals web page). Marcus: audience, positioning, messaging, channels, "
+        "and what the company can honestly claim. Lauren: ethical review of a decision with the EASE "
         "framework (stakeholders, harms, consent, safeguards). Runs in the background. "
         "Do not delegate trivial work.",
         obj(

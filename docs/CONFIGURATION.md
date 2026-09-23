@@ -701,8 +701,8 @@ hosted `web_search` tool). Each search is roughly 15,000 tokens.
 | `MAX_AGENT_ITERATIONS` | 8 | 1–25 | CrewAI iterations per run |
 | `MAX_AGENT_EXECUTION_SECONDS` | 300 | 30–1800 | Hard time limit per run |
 | `MAX_CONCURRENT_AGENT_RUNS` | 2 | 1–6 | Runs at once |
-| `MAX_ASSIGNMENTS_PER_GARY_PLAN` | 6 | 1–10 | Assignments per conversation or review |
-| `MAX_ACTIVE_AGENT_ASSIGNMENTS` | 6 | 1–20 | Queued plus running assignments |
+| `MAX_ASSIGNMENTS_PER_GARY_PLAN` | 7 | 1–10 | Assignments per conversation or review; one above the six employees, so a whole-company review still leaves room for its follow-up |
+| `MAX_ACTIVE_AGENT_ASSIGNMENTS` | 7 | 1–20 | Queued plus running assignments |
 
 Values outside the range stop the backend at startup.
 

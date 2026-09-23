@@ -268,8 +268,8 @@ AGENT_LIMITS = AgentLimits(
     max_iterations=env_int("MAX_AGENT_ITERATIONS", 8, 1, 25),
     max_execution_seconds=env_int("MAX_AGENT_EXECUTION_SECONDS", 300, 30, 1800),
     max_concurrent_runs=env_int("MAX_CONCURRENT_AGENT_RUNS", 2, 1, 6),
-    max_assignments_per_plan=env_int("MAX_ASSIGNMENTS_PER_GARY_PLAN", 6, 1, 10),
-    max_active_assignments=env_int("MAX_ACTIVE_AGENT_ASSIGNMENTS", 6, 1, 20),
+    max_assignments_per_plan=env_int("MAX_ASSIGNMENTS_PER_GARY_PLAN", 7, 1, 10),
+    max_active_assignments=env_int("MAX_ACTIVE_AGENT_ASSIGNMENTS", 7, 1, 20),
 )
 
 

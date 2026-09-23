@@ -89,6 +89,23 @@ FINANCE = {
     "recommendation": "Affordable; cap the token spend.",
     "confidence": 0.6,
 }
+MARKETING = {
+    "summary": "Worth announcing to people who already automate their own browsing, not to a general audience.",
+    "readiness": "ready_with_changes",
+    "audience": ["People who already script their own browsing", "Not: general productivity users"],
+    "positioning": "The assistant that reads the web for you without handing anyone your logins.",
+    "channels": ["The existing YouTube channel", "One launch post"],
+    "claims": ["It reads pages without storing personal data"],
+    "evidence_for_claims": ["Dave's control: no personal data is stored"],
+    "claims_we_cannot_support": ["That it is faster than a human researcher"],
+    "measures": ["Replies per launch post", "Channel subscribers in the two weeks after"],
+    "risks": ["Sounding like every other browser agent"],
+    "decisions_needed": ["Whether to name the competitors we beat"],
+    "recommendation": "Announce it narrowly, and only claim what Dave's controls guarantee.",
+    "uncertainties": ["Whether the audience cares about the privacy angle"],
+    "sources": ["https://example.invalid/browser-agents"],
+    "confidence": 0.5,
+}
 ETHICS = {
     "summary": "Acceptable if GaryCorp tells site owners what it collects and respects robots.txt.",
     "ethical_assessment": "acceptable_with_safeguards",
@@ -102,7 +119,8 @@ ETHICS = {
     "uncertainties": ["Which sites forbid automated access"],
     "confidence": 0.7,
 }
-OUTPUTS = {"susan": RESEARCH, "dave": SECURITY, "linda": OPERATIONS, "catherine": FINANCE, "lauren": ETHICS}
+OUTPUTS = {"susan": RESEARCH, "dave": SECURITY, "linda": OPERATIONS, "catherine": FINANCE,
+           "marcus": MARKETING, "lauren": ETHICS}
 
 
 class FakeExecutor:
@@ -220,14 +238,15 @@ def audit_types(gary, entity_id):
 
 # ------------------------------------------------------------------ registry
 
-def test_registry_loads_five_employees_and_gary():
+def test_registry_loads_six_employees_and_gary():
     registry = AgentRegistry()
-    assert registry.employee_ids() == ["susan", "dave", "linda", "catherine", "lauren"]
+    assert registry.employee_ids() == ["susan", "dave", "linda", "catherine", "marcus", "lauren"]
     assert [(d.name, d.title) for d in registry.employees()] == [
         ("Susan", "Director of Research & Strategy"),
         ("Dave", "Director of Security"),
         ("Linda", "Director of Operations"),
         ("Catherine", "Chief Financial Officer"),
+        ("Marcus", "Chief Marketing Officer"),
         ("Lauren", "Director of Ethics"),
     ]
     assert all(d.reports_to == "gary" for d in registry.employees())
@@ -280,17 +299,28 @@ def test_each_employee_has_exactly_its_approved_tools():
         "read_finance_status", "read_purchases", "read_ai_usage", "read_projects", "read_project",
         "read_tasks", "read_relevant_notes", "web_search", "request_card_purchase",
         "list_own_notes", "read_own_note", "write_note"}
+    assert set(registry.get("marcus").allowed_tools) == {
+        "web_search", "read_projects", "read_project", "read_tasks", "read_relevant_notes",
+        "read_previous_research", "list_own_notes", "read_own_note", "write_note"}
     assert set(registry.get("lauren").allowed_tools) == {
         "run_ease_analysis", "read_projects", "read_project", "read_tasks", "read_relevant_notes",
         "read_action_policy", "list_own_notes", "read_own_note", "write_note"}
     assert {d.agent_id: d.notebook for d in registry.employees()} == {
-        "susan": "Susan", "dave": "Dave", "linda": "Linda", "catherine": "Catherine", "lauren": "Lauren"}
+        "susan": "Susan", "dave": "Dave", "linda": "Linda", "catherine": "Catherine",
+        "marcus": "Marcus", "lauren": "Lauren"}
     assert [d.agent_id for d in registry.employees() if "run_ease_analysis" in d.allowed_tools] == ["lauren"]
     # Every note writer can read back its own notebook, and nothing else.
     for definition in registry.employees():
         assert {"write_note", "list_own_notes", "read_own_note"} <= set(definition.allowed_tools)
     assert "web_search" not in registry.get("dave").allowed_tools
     assert "web_search" not in registry.get("linda").allowed_tools
+    # The CMO advises on what to say; he cannot say it. Nothing he holds
+    # writes anywhere outside his own notebook.
+    assert "request_card_purchase" not in registry.get("marcus").allowed_tools
+    assert not any(
+        tool.startswith(("send_", "email_", "publish_", "post_"))
+        for tool in registry.get("marcus").allowed_tools
+    )
     # Spending authority belongs to Catherine alone.
     assert [d.agent_id for d in registry.employees() if "request_card_purchase" in d.allowed_tools] == ["catherine"]
 
@@ -386,7 +416,8 @@ def test_gateway_tools_filter_sensitive_data(gary):
         audit = await gateway.call("read_audit_events", {"limit": 5})
         return permissions, policy, audit
     permissions, policy, audit = run(scenario())
-    assert {a["agent_id"] for a in permissions["agents"]} == {"gary", "susan", "dave", "linda", "catherine", "lauren"}
+    assert {a["agent_id"] for a in permissions["agents"]} == {
+        "gary", "susan", "dave", "linda", "catherine", "marcus", "lauren"}
     assert policy["action_policies"]["spend_money"] == "red"
     assert policy["action_policies"]["card_purchase"] == "yellow"
     assert policy["web_only_approval_actions"] == ["card_purchase", "hire_employee"]
@@ -557,7 +588,7 @@ def test_only_managers_delegate_and_limits_apply(gary):
         service._delegate_db(request, "gary")
 
 
-def test_management_review_all_five_independent(gary):
+def test_management_review_all_six_independent(gary):
     executor = FakeExecutor()
     service = build_team(gary, executor)
 
@@ -573,8 +604,9 @@ def test_management_review_all_five_independent(gary):
     assert review.security.risk_level == "high"
     assert review.operations.deadline_assessment == "at_risk"
     assert review.finance.budget_assessment == "within_budget"
+    assert review.marketing.readiness == "ready_with_changes"
     assert review.ethics.ethical_assessment == "acceptable_with_safeguards"
-    assert len(executor.requests) == 5
+    assert len(executor.requests) == 6
     for request in executor.requests:
         assert "reports_shared_by_gary" not in request.task_description
         for other in OUTPUTS.values():
@@ -711,9 +743,9 @@ def test_gary_tools_management_review_and_budget(gary):
     assert body["operations"]["deadline_assessment"] == "at_risk"
     assert body["finance"]["estimated_monthly_cost_usd"] == 20.0
     assert body["ethics"]["ethical_assessment"] == "acceptable_with_safeguards"
-    # A full five-person review leaves room for one more assignment (e.g. the follow-up).
+    # A full six-person review leaves room for one more assignment (e.g. the follow-up).
     assert sixth["success"] is True
-    assert seventh["success"] is False and "limit 6" in seventh["error"]
+    assert seventh["success"] is False and "limit 7" in seventh["error"]
     assert bad["success"] is False
 
 
