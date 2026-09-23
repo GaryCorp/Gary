@@ -82,6 +82,7 @@ from app.pages import router as pages_router
 from app.realtime_session import RealtimeSession
 from app.system_summary import system_configuration_summary
 from app.tool_dispatch import run_integration_tool
+from app.transient import log_loop_failure
 from app.voice_tools import VOICE_TOOLS
 from app.voice_turn import VoiceTurn, VoiceTurnError
 from gary import build_gary
@@ -354,8 +355,8 @@ async def run_engineering_sync() -> None:
                     "Engineering sync: %s checked, %s synced, %s need reconciliation",
                     result["checked"], result["synced"], len(result["needs_reconciliation"]),
                 )
-        except Exception:
-            logger.exception("Engineering ticket synchronization failed")
+        except Exception as exc:
+            log_loop_failure(logger, exc, "Engineering ticket synchronization")
         await asyncio.sleep(GITHUB_SYNC_INTERVAL_MINUTES * 60)
 
 
@@ -375,7 +376,7 @@ async def announce_operations(websocket: WebSocket) -> None:
         try:
             alerts = await asyncio.to_thread(gary_ops.planning.collect_new_alerts)
         except Exception as exc:
-            logger.exception("Operations check failed")
+            log_loop_failure(logger, exc, "Operations check")
             await websocket.send_text(
                 json.dumps(
                     {
@@ -820,8 +821,8 @@ async def run_management_loop() -> None:
             raise
         except PlanningCycleError as exc:
             logger.warning("Management cycle failed: %s", exc)
-        except Exception:
-            logger.exception("Management loop check failed")
+        except Exception as exc:
+            log_loop_failure(logger, exc, "Management loop check")
 
 
 production = (
@@ -893,8 +894,8 @@ async def run_production_schedule() -> None:
                     await speak_to_user(announcement, source="operations")
             except asyncio.CancelledError:
                 raise
-            except Exception:
-                logger.exception("Planning the video schedule failed")
+            except Exception as exc:
+                log_loop_failure(logger, exc, "Planning the video schedule")
         # This week's stages as GitHub issues, and issues closed for stages
         # finished in Gary. Every tick, so the board follows within minutes.
         try:
@@ -911,8 +912,8 @@ async def run_production_schedule() -> None:
                 )
         except asyncio.CancelledError:
             raise
-        except Exception:
-            logger.exception("Syncing the video schedule's GitHub issues failed")
+        except Exception as exc:
+            log_loop_failure(logger, exc, "Syncing the video schedule's GitHub issues")
         await asyncio.sleep(15 * 60)
 
 
@@ -978,8 +979,8 @@ async def run_email_commands() -> None:
                 )
         except asyncio.CancelledError:
             raise
-        except Exception:
-            logger.exception("Reading Alex's command email failed")
+        except Exception as exc:
+            log_loop_failure(logger, exc, "Reading Alex's command email")
 
 
 accountability = Accountability(
@@ -1031,8 +1032,8 @@ async def run_accountability() -> None:
                     )
         except asyncio.CancelledError:
             raise
-        except Exception:
-            logger.exception("The morning assignment or evening check-in failed")
+        except Exception as exc:
+            log_loop_failure(logger, exc, "The morning assignment or evening check-in")
         await asyncio.sleep(5 * 60)
 
 
@@ -1095,8 +1096,8 @@ async def send_daily_report() -> None:
         )
         if commented:
             logger.warning("Hire follow-up: %s", commented)
-    except Exception:
-        logger.exception("Commenting on a hire issue failed")
+    except Exception as exc:
+        log_loop_failure(logger, exc, "Commenting on a hire issue")
 
 
 weekly_review = WeeklyReview(
@@ -1183,8 +1184,8 @@ async def run_planning_scheduler() -> None:
                     await write_weekly_review()
         except asyncio.CancelledError:
             raise
-        except Exception:
-            logger.exception("Planning scheduler check failed")
+        except Exception as exc:
+            log_loop_failure(logger, exc, "Planning scheduler check")
         await asyncio.sleep(60)
 
 
