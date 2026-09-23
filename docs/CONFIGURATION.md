@@ -470,6 +470,45 @@ answer is how the task list catches up: tell him what you finished and he
 marks it complete, which also closes its GitHub issue. The week's totals go
 into the weekly review.
 
+### `DAILY_REPORT_TIME`
+
+Default: `18:00`. Empty turns it off.
+
+When Gary emails you the day's report: what needs you (approvals waiting,
+unanswered questions, failed actions, anything stuck), what was finished,
+what the company did and what it spent, and what is on the calendar next. It
+is assembled from SQLite with **no model call**, so it still arrives on a day
+the spend ceiling stopped everything else. Sent once a day.
+
+### `EMAIL_COMMAND_POLL_MINUTES`
+
+Default: `5`. `0` turns the email command channel off; it also needs
+`GARY_EMAIL_ADDRESS`.
+
+How often Gary reads his own inbox for your commands. **Email can do exactly
+two things: pause the company and resume it.** Mail `pause` (or `stop`) to
+Gary's address and every unattended loop stops: scheduled planning, the
+management loop, the video schedule and the daily assignment. Talking to Gary
+still works, and so does `resume`.
+
+A message is acted on only when all of these hold:
+
+- it comes from the address you are signed in with, compared exactly;
+- Gmail's own `Authentication-Results` header shows SPF or DKIM **passing for
+  that domain**, so a forged `From` is not enough, and a message with no such
+  header is refused;
+- the command is the whole subject line or the whole first line of the body,
+  so "should we pause the Friday video?" is not a command;
+- it is newer than the stored cursor, so a message is obeyed once, even
+  across restarts.
+
+Anything else in Gary's inbox is stepped over. A refused command is recorded
+in the audit log as `email_command_refused`. Approving actions, spending and
+changing the company are **not** available by email and stay on the
+`/approvals` page.
+
+The paused state is in SQLite (`operating_state`), so it survives a restart.
+
 ## Weekly video schedule
 
 Gary plans one video a week, filmed in batches, and puts the shoot and the

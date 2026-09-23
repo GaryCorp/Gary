@@ -428,6 +428,28 @@ To park other projects without losing their tasks, set them to `planned`:
 their tasks are then not offered for scheduling until the project is
 `active` again.
 
+## Pausing the company from anywhere
+
+Email `pause` to Gary's own address from the account you are signed in with,
+and every unattended loop stops within `EMAIL_COMMAND_POLL_MINUTES`. Email
+`resume` to start it again. The word has to be the whole subject or the whole
+first line. Gary confirms both out loud and by email, and the pause survives a
+restart.
+
+While paused: no planning cycles, no management loop, no video schedule, no
+daily assignment. Still working: talking to Gary, the approvals page, and the
+web pages.
+
+Email can do nothing else. Approvals, spending and company changes stay on the
+approvals page. See CONFIGURATION.md for the checks a command has to pass.
+
+## The daily report
+
+At `DAILY_REPORT_TIME` (18:00 by default) Gary emails you the day: what needs
+you, what was finished, what the company did and spent, and what is next on
+the calendar. It makes no model call, so it arrives even on a day when
+spending is stopped.
+
 ## Letting the company run itself
 
 GaryCorp keeps working between conversations: three planning cycles a day, a

@@ -19,6 +19,7 @@ from gary.db.repositories.engineering import (
 from gary.db.repositories.finance import FinanceRepository
 from gary.db.repositories.hiring import HiredEmployeeRepository
 from gary.db.repositories.followups import FollowupRepository
+from gary.db.repositories.operating import OperatingStateRepository
 from gary.db.repositories.planning_runs import PlanningRunRepository
 from gary.db.repositories.production import ProductionEpisodeRepository
 from gary.db.repositories.projects import ProjectRepository
@@ -55,6 +56,7 @@ class Repositories:
     performance: PerformanceReviewRepository
     project_fields: GitHubProjectFieldRepository
     production: ProductionEpisodeRepository
+    operating: OperatingStateRepository
 
     @classmethod
     def bind(cls, conn: sqlite3.Connection) -> "Repositories":
@@ -80,6 +82,7 @@ class Repositories:
             performance=PerformanceReviewRepository(conn),
             project_fields=GitHubProjectFieldRepository(conn),
             production=ProductionEpisodeRepository(conn),
+            operating=OperatingStateRepository(conn),
         )
 
 
@@ -100,6 +103,7 @@ __all__ = [
     "FollowupRepository",
     "ModelUsageRepository",
     "PlanningRunRepository",
+    "OperatingStateRepository",
     "ProductionEpisodeRepository",
     "PerformanceReviewRepository",
     "ProjectRepository",

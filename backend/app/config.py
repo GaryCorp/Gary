@@ -235,6 +235,12 @@ def optional_time(name: str, default: str):
 
 
 MORNING_ASSIGNMENT_TIME = optional_time("MORNING_ASSIGNMENT_TIME", "08:15")
+# The daily report Gary emails Alex: what the company did, what it cost, and
+# what is waiting for him.
+DAILY_REPORT_TIME = optional_time("DAILY_REPORT_TIME", "18:00")
+# How often Gary's own inbox is read for Alex's pause/resume emails.
+# 0 turns the email command channel off.
+EMAIL_COMMAND_POLL_MINUTES = float(os.getenv("EMAIL_COMMAND_POLL_MINUTES", "5"))
 EVENING_CHECKIN_TIME = optional_time("EVENING_CHECKIN_TIME", "17:45")
 
 

@@ -23,6 +23,7 @@ from app.config import (
     EMAIL_REPLY_LIMIT,
     EMAIL_SEARCH_QUERY_LIMIT,
     EMAIL_SUBJECT_LIMIT,
+    GARY_MAILBOX,
     GMAIL_READ_SCOPE,
     GMAIL_SEND_SCOPE,
     LOCAL_TIMEZONE,
@@ -780,3 +781,56 @@ class GmailUnreadSummaries:
                 item["snippet"] = html.unescape(message.get("snippet", ""))[:200]
             emails.append(item)
         return emails
+
+
+COMMAND_LOOKBACK = "newer_than:7d"
+COMMAND_LIMIT = 10
+
+
+async def fetch_command_emails(principal_email: str, cursor_ms: int) -> list[dict]:
+    """Mail in Gary's own inbox from Alex that might be a command.
+
+    Only messages from Alex's address and newer than the stored cursor are
+    fetched, newest last so they are applied in the order he sent them. The
+    Authentication-Results header comes back with them: gary/services/
+    operating.py refuses anything Gmail did not authenticate.
+    """
+    credentials = await credentials_for_mailbox(GARY_MAILBOX)
+    require_gmail_scope(credentials, GMAIL_READ_SCOPE)
+    service = gmail_service(credentials)
+
+    listed = await asyncio.to_thread(
+        lambda: service.users()
+        .messages()
+        .list(
+            userId="me",
+            q=f"from:{principal_email} {COMMAND_LOOKBACK}",
+            maxResults=COMMAND_LIMIT,
+        )
+        .execute()
+    )
+
+    messages = []
+    for reference in listed.get("messages", []):
+        full = await asyncio.to_thread(
+            lambda ref=reference: service.users()
+            .messages()
+            .get(userId="me", id=ref["id"], format="full")
+            .execute()
+        )
+        internal_date = int(full.get("internalDate") or 0)
+        if internal_date <= cursor_ms:
+            continue
+        _, from_address = parseaddr(message_header(full, "From"))
+        messages.append(
+            {
+                "id": full["id"],
+                "internal_date_ms": internal_date,
+                "from": from_address,
+                "subject": single_line(message_header(full, "Subject"))[:200],
+                "body": extract_email_text(full.get("payload", {}))[:2000],
+                "auth_results": message_header(full, "Authentication-Results"),
+            }
+        )
+    messages.sort(key=lambda message: message["internal_date_ms"])
+    return messages

@@ -199,6 +199,16 @@ stage is also a private GitHub issue of kind `production`
 (`engineering_tickets.kind`): closing the issue completes the stage and
 completing the stage closes the issue, with no Review step.
 
+`services/operating.py` is the company's on/off switch: `operating_state`
+holds paused and the cursor into Alex's command emails, so both survive a
+restart. Alex mails `pause` or `resume` to Gary's own mailbox; a command is
+acted on only if it is from his exact address, Gmail's `Authentication-Results`
+passes SPF or DKIM for that domain, the word is the whole subject or first
+line, and the message is newer than the cursor. Pausing stops every unattended
+loop in `main.py`; voice and the web pages keep working. Email can do nothing
+else — approvals stay on the web page. `services/daily_report.py` emails Alex
+the day (no model call) at `DAILY_REPORT_TIME`.
+
 Gary also manages Alex directly (`services/accountability.py`, no model
 call): a morning assignment spoken and emailed through `email_principal` (a
 green action with no recipient field), an evening check-in on what is not

@@ -20,6 +20,8 @@ from app.config import (
     EASE_API_KEY,
     EASE_API_URL,
     EMAIL_CHECK_INTERVAL_MINUTES,
+    DAILY_REPORT_TIME,
+    EMAIL_COMMAND_POLL_MINUTES,
     EVENING_CHECKIN_TIME,
     EVENT_PLANNING_MIN_GAP_MINUTES,
     GARY_BACKUP_DIR,
@@ -62,12 +64,13 @@ from app.calendar_actions import external_action_handlers
 from app.gmail import (
     GmailUnreadSummaries,
     check_new_emails,
+    fetch_command_emails,
     email_watcher,
     gary_email_watcher,
     in_quiet_hours,
     single_line,
 )
-from app.google_auth import credentials_for_active_user, gary_mailbox_configured
+from app.google_auth import credentials_for_active_user, gary_mailbox_configured, store
 from app.google_calendar import GoogleBusyCalendar
 from app.instructions import build_instructions as build_prompt
 from app.local_time import spoken_clock
@@ -99,10 +102,12 @@ from gary.integrations.github import (
     GitHubError,
     configured as github_configured,
 )
+from gary.models.action import ProposeActionRequest
 from gary.planner import OpenAIPlanner
 from gary.policy import SYSTEM_ACTOR
 from gary.services.accountability import Accountability
 from gary.services.conversation_service import SpokenDelivery
+from gary.services.daily_report import DailyReport
 from gary.services.engineering_actions import engineering_action_handlers
 from gary.services.engineering_service import EngineeringTicketService
 # dismiss_employee and GARY_TOOL_SCHEMAS are read from app.main by
@@ -122,6 +127,7 @@ from gary.services.planning_cycle import (
     PlanningCycleError,
     due_planning_types,
 )
+from gary.services.operating import OperatingState
 from gary.services.production import ProductionService, episode_label
 from gary.services.reorg_actions import reorg_action_handler
 from gary.services.team_actions import team_action_handlers
@@ -162,17 +168,25 @@ async def lifespan(app: FastAPI):
     production_loop = (
         asyncio.create_task(run_production_schedule()) if production else None
     )
-    # Gary as Alex's manager: the morning assignment and evening check-in.
+    # Gary as Alex's manager: the morning assignment, the evening check-in
+    # and the daily report.
     managing = (
         asyncio.create_task(run_accountability())
-        if MORNING_ASSIGNMENT_TIME or EVENING_CHECKIN_TIME
+        if MORNING_ASSIGNMENT_TIME or EVENING_CHECKIN_TIME or DAILY_REPORT_TIME
+        else None
+    )
+    # Alex pausing or resuming the company by email, from anywhere.
+    commands = (
+        asyncio.create_task(run_email_commands())
+        if EMAIL_COMMAND_POLL_MINUTES > 0 and gary_mailbox_configured()
         else None
     )
     try:
         yield
     finally:
         for task in (
-            scheduler, engineering_sync, management, speaking, production_loop, managing
+            scheduler, engineering_sync, management, speaking, production_loop,
+            managing, commands,
         ):
             if task is not None:
                 task.cancel()
@@ -748,6 +762,8 @@ async def run_management_loop() -> None:
             now_local = dt.datetime.now(timezone)
             if now_local.weekday() not in MANAGEMENT_WEEKDAYS:
                 continue
+            if await asyncio.to_thread(operating.is_paused):
+                continue
             if await spend_stop("the management loop"):
                 continue
             since_minutes = await planning_cycle.minutes_since_last_cycle()
@@ -834,6 +850,9 @@ async def run_production_schedule() -> None:
     done_day, attempts = None, {}
     while True:
         today = dt.datetime.now(timezone).date()
+        if await asyncio.to_thread(operating.is_paused):
+            await asyncio.sleep(15 * 60)
+            continue
         if today != done_day:
             tries = attempts[today] = attempts.get(today, 0) + 1
             attempts = {today: tries}
@@ -874,6 +893,72 @@ async def run_production_schedule() -> None:
         await asyncio.sleep(15 * 60)
 
 
+operating = OperatingState(gary_ops.db, gary_ops.planning.clock)
+daily_report = DailyReport(
+    gary_ops.db,
+    ZoneInfo(LOCAL_TIMEZONE),
+    usage_ledger,
+    operating,
+    gary_ops.planning.clock,
+)
+
+
+async def email_alex(subject: str, body: str) -> dict:
+    """Gary writing to Alex, through the ordinary action pipeline."""
+    return await gary_ops.actions.propose(
+        ProposeActionRequest(action_type="email_principal", payload={"subject": subject, "body": body}),
+        actor=SYSTEM_ACTOR,
+    )
+
+
+async def run_email_commands() -> None:
+    """Read Gary's own inbox for Alex's pause and resume emails.
+
+    The only thing email may do is stop the company or start it again; every
+    other decision stays on the approvals page. What makes it safe is in
+    gary/services/operating.py: Alex's exact address, Gmail's own
+    authentication result, the word alone on the subject or first line, and a
+    cursor so a message is acted on once.
+    """
+    interval = EMAIL_COMMAND_POLL_MINUTES * 60
+    # Only mail sent after this feature was switched on is ever a command.
+    if await asyncio.to_thread(
+        operating.start_from_now, int(gary_ops.planning.clock().timestamp() * 1000)
+    ):
+        logger.info("Email commands: reading Alex's mail from now on")
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            principal = await store.active_email(USER_MAILBOX)
+            if not principal:
+                continue
+            messages = await fetch_command_emails(principal, operating.cursor_ms())
+            for message in messages:
+                outcome = await asyncio.to_thread(operating.apply_command, message, principal)
+                if not outcome["applied"]:
+                    if outcome["refused"] not in (None, "not a command", "already read"):
+                        logger.warning("Email command refused: %s", outcome["refused"])
+                    continue
+
+                paused = outcome["applied"] == "pause"
+                logger.warning("Alex emailed %s", outcome["applied"])
+                said = (
+                    "I have paused everything unattended. Nothing will run until you "
+                    "tell me to resume. You can still talk to me."
+                    if paused
+                    else "I have resumed. The company is running again."
+                )
+                await speak_to_user(said, source="operations")
+                await email_alex(
+                    "Paused" if paused else "Resumed",
+                    said + "\n\nGary",
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Reading Alex's command email failed")
+
+
 accountability = Accountability(
     gary_ops.db,
     gary_ops.actions,
@@ -882,10 +967,12 @@ accountability = Accountability(
     gary_ops.planning.clock,
     principal=PRINCIPAL_NAME,
 )
-# The morning assignment is only given this long after its time, so a
-# backend that was down all morning does not hand it out at 4 pm.
-ASSIGNMENT_LATEST = dt.time(12, 0)
-CHECKIN_LATEST = dt.time(22, 0)
+# The assignment is given at the first tick after its time, up until the
+# evening check-in: the machine is not always on at 8 am, and a day that
+# starts at noon still deserves its assignment. After that the check-in
+# covers the day instead.
+ASSIGNMENT_LATEST = EVENING_CHECKIN_TIME or dt.time(16, 0)
+CHECKIN_LATEST = dt.time(23, 59)
 
 
 async def run_accountability() -> None:
@@ -896,6 +983,13 @@ async def run_accountability() -> None:
     while True:
         try:
             now = dt.datetime.now(timezone).time()
+            if await asyncio.to_thread(operating.is_paused):
+                await asyncio.sleep(5 * 60)
+                continue
+            if DAILY_REPORT_TIME and DAILY_REPORT_TIME <= now and not await asyncio.to_thread(
+                daily_report.sent_today
+            ):
+                await send_daily_report()
             if MORNING_ASSIGNMENT_TIME and MORNING_ASSIGNMENT_TIME <= now < ASSIGNMENT_LATEST:
                 given = await accountability.morning()
                 if given:
@@ -916,6 +1010,19 @@ async def run_accountability() -> None:
         except Exception:
             logger.exception("The morning assignment or evening check-in failed")
         await asyncio.sleep(5 * 60)
+
+
+async def send_daily_report() -> None:
+    """What the company did today, emailed and said. No model call, so it
+    still goes out on a day the spend ceiling stopped everything else."""
+    data = await asyncio.to_thread(daily_report.collect)
+    email = daily_report.render_email(data)
+    outcome = await email_alex(email["subject"], email["body"])
+    await asyncio.to_thread(daily_report.record_sent, outcome.get("status", "unknown"))
+    if outcome.get("status") != "succeeded":
+        logger.warning("Daily report email: %s", outcome.get("error"))
+    if not in_quiet_hours(dt.datetime.now(ZoneInfo(LOCAL_TIMEZONE))):
+        await speak_to_user(daily_report.spoken_summary(data), source="briefing")
 
 
 weekly_review = WeeklyReview(
@@ -975,6 +1082,9 @@ async def run_planning_scheduler() -> None:
             started = await asyncio.to_thread(
                 gary_ops.planning.run_types_started_on, now_local.date(), timezone
             )
+            if await asyncio.to_thread(operating.is_paused):
+                await asyncio.sleep(60)
+                continue
             if await spend_stop("scheduled planning"):
                 await asyncio.sleep(60)
                 continue
