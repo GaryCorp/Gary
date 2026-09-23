@@ -20,6 +20,7 @@ from app.config import (
     EASE_API_KEY,
     EASE_API_URL,
     EMAIL_CHECK_INTERVAL_MINUTES,
+    EVENING_CHECKIN_TIME,
     EVENT_PLANNING_MIN_GAP_MINUTES,
     GARY_BACKUP_DIR,
     GARY_BACKUP_KEEP,
@@ -33,6 +34,7 @@ from app.config import (
     MANAGEMENT_WEEKDAYS,
     MAX_DAILY_AI_SPEND_USD,
     MAX_MANAGEMENT_CYCLES_PER_DAY,
+    MORNING_ASSIGNMENT_TIME,
     OPENAI_API_KEY,
     OPENAI_REALTIME_MODEL,
     OPS_CHECK_INTERVAL_MINUTES,
@@ -99,6 +101,7 @@ from gary.integrations.github import (
 )
 from gary.planner import OpenAIPlanner
 from gary.policy import SYSTEM_ACTOR
+from gary.services.accountability import Accountability
 from gary.services.conversation_service import SpokenDelivery
 from gary.services.engineering_actions import engineering_action_handlers
 from gary.services.engineering_service import EngineeringTicketService
@@ -159,10 +162,18 @@ async def lifespan(app: FastAPI):
     production_loop = (
         asyncio.create_task(run_production_schedule()) if production else None
     )
+    # Gary as Alex's manager: the morning assignment and evening check-in.
+    managing = (
+        asyncio.create_task(run_accountability())
+        if MORNING_ASSIGNMENT_TIME or EVENING_CHECKIN_TIME
+        else None
+    )
     try:
         yield
     finally:
-        for task in (scheduler, engineering_sync, management, speaking, production_loop):
+        for task in (
+            scheduler, engineering_sync, management, speaking, production_loop, managing
+        ):
             if task is not None:
                 task.cancel()
                 try:
@@ -781,6 +792,7 @@ production = (
         PRODUCTION_SCHEDULE,
         ZoneInfo(LOCAL_TIMEZONE),
         gary_ops.planning.clock,
+        engineering=lambda: globals().get("engineering_service"),
     )
     if PRODUCTION_SCHEDULE
     else None
@@ -841,11 +853,77 @@ async def run_production_schedule() -> None:
                 raise
             except Exception:
                 logger.exception("Planning the video schedule failed")
+        # This week's stages as GitHub issues, and issues closed for stages
+        # finished in Gary. Every tick, so the board follows within minutes.
+        try:
+            tickets = await production.sync_tickets()
+            if any(tickets.values()):
+                logger.warning("Production tickets: %s", tickets)
+            if tickets["opened"]:
+                count = len(tickets["opened"])
+                await speak_to_user(
+                    f"I have put {count} new issue{'s' if count != 1 else ''} on your "
+                    "GitHub board: "
+                    + ", ".join(single_line(t)[:60] for t in tickets["opened"][:4]) + ".",
+                    source="operations",
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Syncing the video schedule's GitHub issues failed")
         await asyncio.sleep(15 * 60)
 
 
+accountability = Accountability(
+    gary_ops.db,
+    gary_ops.actions,
+    ZoneInfo(LOCAL_TIMEZONE),
+    WORK_WEEK,
+    gary_ops.planning.clock,
+    principal=PRINCIPAL_NAME,
+)
+# The morning assignment is only given this long after its time, so a
+# backend that was down all morning does not hand it out at 4 pm.
+ASSIGNMENT_LATEST = dt.time(12, 0)
+CHECKIN_LATEST = dt.time(22, 0)
+
+
+async def run_accountability() -> None:
+    """Gary managing Alex's day, with no model call: the assignment each
+    morning (spoken and emailed), the check-in each evening. Each happens
+    at most once a day; the audit log is what remembers that."""
+    timezone = ZoneInfo(LOCAL_TIMEZONE)
+    while True:
+        try:
+            now = dt.datetime.now(timezone).time()
+            if MORNING_ASSIGNMENT_TIME and MORNING_ASSIGNMENT_TIME <= now < ASSIGNMENT_LATEST:
+                given = await accountability.morning()
+                if given:
+                    if given["email_status"] != "succeeded":
+                        logger.warning("Morning assignment email: %s", given["email_error"])
+                    await speak_to_user(given["spoken"], source="briefing")
+            if EVENING_CHECKIN_TIME and EVENING_CHECKIN_TIME <= now < CHECKIN_LATEST:
+                checkin = await asyncio.to_thread(accountability.evening)
+                if checkin:
+                    await speak_to_user(
+                        checkin["spoken"],
+                        kind="question" if checkin["question"] else "notice",
+                        source="operations",
+                        expects_reply=checkin["question"],
+                    )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("The morning assignment or evening check-in failed")
+        await asyncio.sleep(5 * 60)
+
+
 weekly_review = WeeklyReview(
-    gary_ops.db, ZoneInfo(LOCAL_TIMEZONE), usage_ledger, gary_ops.planning.clock
+    gary_ops.db,
+    ZoneInfo(LOCAL_TIMEZONE),
+    usage_ledger,
+    gary_ops.planning.clock,
+    accountability=accountability,
 )
 
 

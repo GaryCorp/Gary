@@ -10,17 +10,25 @@ from zoneinfo import ZoneInfo
 
 from googleapiclient.errors import HttpError
 
-from app.config import GMAIL_SEND_SCOPE, LOCAL_TIMEZONE, WAKE_WORD_DISPLAY, WORK_WEEK
+from app.config import (
+    GMAIL_SEND_SCOPE,
+    LOCAL_TIMEZONE,
+    USER_MAILBOX,
+    WAKE_WORD_DISPLAY,
+    WORK_WEEK,
+)
 from app.gmail import gmail_service, require_gmail_scope, send_plain_email
 from app.google_auth import (
     credentials_for_active_user,
     credentials_for_mailbox,
     default_send_mailbox,
+    store,
 )
 from app.google_calendar import calendar_service, create_calendar_event
 from app.local_time import local_iso, spoken_time
 from gary.db.repositories import Repositories
 from gary.models.action import (
+    EmailPrincipalPayload,
     MoveCalendarEventPayload,
     ScheduleTaskPayload,
     SendExternalEmailPayload,
@@ -153,6 +161,19 @@ async def execute_send_email(payload: SendExternalEmailPayload, context: dict) -
     return {"sent_message_id": sent.get("id"), "to": payload.to, "from_mailbox": mailbox}
 
 
+async def execute_email_principal(payload: EmailPrincipalPayload, context: dict) -> dict:
+    """From Gary's own mailbox when there is one, always to Alex's own
+    signed-in address."""
+    to = await store.active_email(USER_MAILBOX)
+    if not to:
+        raise ValueError("No Google account is signed in, so there is nobody to email")
+    mailbox = default_send_mailbox()
+    credentials = await credentials_for_mailbox(mailbox)
+    require_gmail_scope(credentials, GMAIL_SEND_SCOPE)
+    sent = await send_plain_email(gmail_service(credentials), to, payload.subject, payload.body)
+    return {"sent_message_id": sent.get("id"), "from_mailbox": mailbox}
+
+
 def external_action_handlers() -> dict[str, ActionHandler]:
     return {
         "schedule_task": ActionHandler(
@@ -184,6 +205,12 @@ def external_action_handlers() -> dict[str, ActionHandler]:
             payload_model=SendExternalEmailPayload,
             summarize=lambda p, c: f'Email {p.to} with the subject "{p.subject}"',
             execute=execute_send_email,
+            audit_event="email_sent",
+        ),
+        "email_principal": ActionHandler(
+            payload_model=EmailPrincipalPayload,
+            summarize=lambda p, c: f'Email you "{p.subject}"',
+            execute=execute_email_principal,
             audit_event="email_sent",
         ),
     }

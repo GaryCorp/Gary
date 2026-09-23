@@ -893,3 +893,16 @@ def test_a_board_that_will_not_take_the_priority_changes_nothing(gary):
 
     assert ticket_rows(gary)[0]["priority"] == "P1"
     assert "engineering_priority_changed" not in audit_for(gary, ticket.id)
+
+
+def test_a_stuck_ticket_is_audited_once_not_on_every_sync(gary):
+    """One ticket closed while Ready used to write an audit entry every
+    five-minute sync (105 of them on the live system)."""
+    service, github = build_service(gary)
+    task = make_task(gary, title="Research integration")
+    ticket = create(service, task)
+    github.issues[1]["state"] = "closed"
+
+    for _ in range(3):
+        assert run(service.sync_ticket(ticket.id))["needs_reconciliation"] is True
+    assert audit_for(gary, ticket.id).count("github_sync_failed") == 1

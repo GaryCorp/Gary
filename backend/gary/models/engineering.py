@@ -104,7 +104,9 @@ class CreateEngineeringTicketRequest(RequestModel):
     requirements: list[str] = Field(min_length=1, max_length=LIST_LIMIT)
     acceptance_criteria: list[str] = Field(min_length=1, max_length=LIST_LIMIT)
     priority: Priority = "P2"
-    kind: Literal["feature", "bug"] = "feature"
+    # "production" is a stage of the video schedule, not code: see
+    # 013_ticket_kind.sql for how its workflow differs.
+    kind: Literal["feature", "bug", "production"] = "feature"
     dependencies: list[str] = Field(default_factory=list, max_length=LIST_LIMIT)
     security_requirements: str | None = Field(default=None, max_length=2000)
     estimated_minutes: Minutes | None = None

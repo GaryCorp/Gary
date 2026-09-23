@@ -35,8 +35,11 @@ class WeeklyReview:
         timezone,
         usage=None,
         clock: Clock = default_clock,
+        accountability=None,
     ):
         self.db = db
+        # How Alex did against what Gary assigned him, when Gary manages him.
+        self.accountability = accountability
         self.timezone = timezone
         # The usage ledger, when the deployment has one: money is reported as
         # unmeasured rather than zero when it does not.
@@ -89,6 +92,7 @@ class WeeklyReview:
             "purchases": purchases,
             "spend": self._spend(days),
             "health": health,
+            "you": self.accountability.week_summary(days) if self.accountability else None,
         }
 
     def _spend(self, days: int) -> dict:
@@ -118,6 +122,20 @@ class WeeklyReview:
             lines.append(f"## {name}")
             lines.extend(items[:LIST_LIMIT] or [empty])
             lines.append("")
+
+        you = data.get("you")
+        if you and you["days_checked_in"]:
+            section(
+                "Your week",
+                [
+                    f"- {you['done_same_day']} of {you['assigned']} assigned tasks done the "
+                    f"day they were assigned, over {you['days_checked_in']} "
+                    f"day{'s' if you['days_checked_in'] != 1 else ''}",
+                    f"- {you['overdue_now']} task{'s' if you['overdue_now'] != 1 else ''} "
+                    "overdue now",
+                ],
+                "",
+            )
 
         section(
             "Work completed",
@@ -209,6 +227,13 @@ class WeeklyReview:
             f"{reports} department report{'s' if reports != 1 else ''} back, "
             f"{tickets} engineering ticket{'s' if tickets != 1 else ''} touched."
         ]
+        you = data.get("you")
+        if you and you["days_checked_in"]:
+            parts.append(
+                f"You finished {you['done_same_day']} of the {you['assigned']} things I "
+                f"gave you on the day I gave them, and {you['overdue_now']} "
+                f"{'is' if you['overdue_now'] == 1 else 'are'} overdue now."
+            )
         spend = data["spend"]
         if spend.get("measured"):
             parts.append(f"The company spent {spend['cost_usd']:.2f} dollars on AI.")

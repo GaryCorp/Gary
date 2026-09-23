@@ -10,6 +10,21 @@ task in SQLite, a private GitHub issue assigned to Alex, and a card on the
 private **GaryCorp Engineering** Project. Alex works the issue with Claude
 Code; the Project's Status is how progress comes back to Gary.
 
+## Production tickets
+
+The weekly video schedule (USAGE.md) puts each stage on the same private
+board as a ticket of kind `production`, labelled `production`, opened a week
+before the stage's work can start. They differ from engineering tickets in
+one way: there is nothing to review, so
+
+- closing the issue completes the stage, whatever the card's Status, and the
+  card is moved to Done; and
+- completing the stage in Gary closes the issue and moves the card to Done.
+
+Engineering tickets are unchanged: they complete only through Review (and
+Security Review when required), and an engineering issue closed early is
+flagged for reconciliation, recorded once rather than on every sync.
+
 ## Architecture
 
 ```text

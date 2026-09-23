@@ -48,6 +48,7 @@ class EngineeringTicketRepository:
         priority: str,
         status: str = "backlog",
         security_review_required: bool = False,
+        kind: str = "engineering",
         now: str | None = None,
     ) -> dict:
         now = now or now_utc()
@@ -64,6 +65,7 @@ class EngineeringTicketRepository:
                 "priority": priority,
                 "status": status,
                 "security_review_required": int(security_review_required),
+                "kind": kind,
                 "sync_state": "pending",
                 "created_at": now,
                 "updated_at": now,

@@ -53,6 +53,43 @@ class ProductionEpisodeRepository:
             )
         )
 
+    def list_tasks_needing_ticket(self, starts_before: str) -> list[dict]:
+        """Open schedule tasks whose work starts before the cutoff and that
+        have no finished GitHub issue yet. The shoot lives in the first
+        episode's project, so it is included like any other stage."""
+        return rows_to_dicts(
+            self.conn.execute(
+                """
+                SELECT t.*, p.name AS project_name
+                FROM tasks t
+                JOIN projects p ON p.id = t.project_id
+                JOIN production_episodes e ON e.project_id = t.project_id
+                LEFT JOIN engineering_tickets k ON k.task_id = t.id
+                WHERE t.status NOT IN ('completed', 'cancelled')
+                  AND t.earliest_start <= ?
+                  AND (k.id IS NULL OR k.sync_state != 'synced')
+                ORDER BY t.earliest_start, t.deadline
+                """,
+                (starts_before,),
+            )
+        )
+
+    def list_open_tickets_for_finished_tasks(self) -> list[dict]:
+        """Production issues still open on GitHub for stages Alex already
+        finished in Gary."""
+        return rows_to_dicts(
+            self.conn.execute(
+                """
+                SELECT k.* FROM engineering_tickets k
+                JOIN tasks t ON t.id = k.task_id
+                WHERE k.kind = 'production'
+                  AND k.status != 'done'
+                  AND k.github_issue_number IS NOT NULL
+                  AND t.status = 'completed'
+                """
+            )
+        )
+
     def list_unscheduled_fixed_tasks(self, now: str) -> list[dict]:
         """Filming and publishing tasks still to come that are not on the
         calendar yet. Filming is shared by a batch, so it appears once."""

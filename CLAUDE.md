@@ -194,7 +194,16 @@ ordinary projects and tasks with deadlines worked back from the publish time
 (`production_episodes.episode_number` is the idempotency key), and schedules
 the fixed-time shoot and publish slots through `schedule_task`. The planner
 fits the flexible work around them. Tasks in a `planned` project are never
-ready (`readiness.py`), which is how work is parked without deleting it.
+ready (`readiness.py`), which is how work is parked without deleting it. Each
+stage is also a private GitHub issue of kind `production`
+(`engineering_tickets.kind`): closing the issue completes the stage and
+completing the stage closes the issue, with no Review step.
+
+Gary also manages Alex directly (`services/accountability.py`, no model
+call): a morning assignment spoken and emailed through `email_principal` (a
+green action with no recipient field), an evening check-in on what is not
+done, and Alex's totals in the weekly review. Both are recorded in the audit
+log keyed by date, which is what keeps each to once a day.
 
 ### Cost accounting
 

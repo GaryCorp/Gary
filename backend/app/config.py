@@ -3,6 +3,7 @@
 Read once at import; everything else imports names from here.
 """
 
+import datetime as dt
 import logging
 import os
 import re
@@ -219,6 +220,22 @@ PRODUCTION_SCHEDULE = schedule_from_settings(
     publish_time=os.getenv("PRODUCTION_PUBLISH_TIME", "17:00"),
     shoot_time=os.getenv("PRODUCTION_SHOOT_TIME", "10:00"),
 )
+
+
+# Gary as Alex's manager: the morning assignment (spoken and emailed) and
+# the evening check-in on it, local times. Empty turns either off.
+def optional_time(name: str, default: str):
+    value = os.getenv(name, default).strip()
+    if not value:
+        return None
+    try:
+        return dt.time.fromisoformat(value)
+    except ValueError:
+        raise ValueError(f"{name} must look like 08:15, or be empty") from None
+
+
+MORNING_ASSIGNMENT_TIME = optional_time("MORNING_ASSIGNMENT_TIME", "08:15")
+EVENING_CHECKIN_TIME = optional_time("EVENING_CHECKIN_TIME", "17:45")
 
 
 # Which weekday the weekly review is written on (0 = Monday).

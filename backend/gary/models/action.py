@@ -77,6 +77,15 @@ class MoveCalendarEventPayload(TimeRangeMixin):
         return self.new_start, self.new_end
 
 
+class EmailPrincipalPayload(RequestModel):
+    """Email to Alex himself. Deliberately no ``to``: the address is Alex's
+    signed-in Google account, looked up by the handler, never taken from the
+    payload, so nothing a model writes can redirect it."""
+
+    subject: str = Field(min_length=1, max_length=200)
+    body: str = Field(min_length=1, max_length=20000)
+
+
 class SendExternalEmailPayload(RequestModel):
     to: str = Field(min_length=3, max_length=254)
     subject: str = Field(min_length=1, max_length=200)

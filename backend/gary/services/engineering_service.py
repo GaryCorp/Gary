@@ -182,6 +182,7 @@ class EngineeringTicketService:
                 assigned_to=self.config.engineer_username,
                 priority=request.priority,
                 security_review_required=request.security_review_required,
+                kind="production" if request.kind == "production" else "engineering",
                 now=now,
             )
             project = repos.projects.get(task["project_id"]) if task["project_id"] else None
@@ -239,6 +240,7 @@ class EngineeringTicketService:
             dependencies=request.dependencies,
             estimated_minutes=request.estimated_minutes or task.get("estimated_minutes"),
             due_at_local=to_local(request.due_at or task.get("deadline"), self.gary.timezone),
+            **({"assigned_to": "Alex — Creator"} if row["kind"] == "production" else {}),
         )
         issue = await self.client.create_issue(
             title=render_title(request.title),
@@ -576,6 +578,45 @@ class EngineeringTicketService:
         )
         return row
 
+    async def _move_card_to_done(self, row) -> None:
+        """Best effort: the stage is finished either way, so a board that
+        cannot be updated is logged, not treated as the stage failing."""
+        if not row["github_project_item_id"]:
+            return
+        try:
+            _, project = await self.gate.verify()
+            await self.board.set_status(
+                project.id, row["github_project_item_id"], EngineeringStatus.DONE
+            )
+        except GitHubError as exc:
+            logger.warning("Could not move #%s to Done: %s", row["github_issue_number"], exc)
+
+    async def close_production_ticket(self, row: dict, actor: str = GARY_ACTOR) -> dict:
+        """The stage was finished in Gary ("I finished the script"), so its
+        issue is closed and its card moved to Done. Production tickets only:
+        engineering work finishes through Review, never by being closed."""
+        if row["kind"] != "production":
+            raise EngineeringError("Only a production ticket is closed from its task")
+        if row["status"] == EngineeringStatus.DONE.value:
+            return row
+        await self.gate.verify()
+        await self.client.update_issue(
+            row["github_issue_number"], state="closed", state_reason="completed"
+        )
+        await self._move_card_to_done(row)
+        row = self._save(
+            row["id"], status=EngineeringStatus.DONE.value, sync_state="synced",
+            sync_error=None, last_synced_at=self._now(),
+        )
+        self._audit(
+            actor,
+            "production_ticket_closed",
+            f"Closed issue #{row['github_issue_number']}: the stage is finished",
+            row["id"],
+            {"task_id": row["task_id"]},
+        )
+        return row
+
     async def _label(self, row, add: str | None = None, remove: str | None = None) -> None:
         try:
             if add:
@@ -676,6 +717,7 @@ class EngineeringTicketService:
         changes: dict = {"last_synced_at": self._now()}
         notes: list[str] = []
         before = EngineeringStatus(row["status"])
+        before_sync_state = row["sync_state"]
 
         if item_lost:
             changes["github_project_item_id"] = None
@@ -716,6 +758,13 @@ class EngineeringTicketService:
             reviewed_at = changes["security_reviewed_at"] = self._now()
 
         reconcile = False
+        production_done = row["kind"] == "production" and issue.state == "closed"
+        if production_done and status is not EngineeringStatus.DONE:
+            # A video stage has nothing to review: closing the issue is the
+            # stage being finished, whatever the card says.
+            status = EngineeringStatus.DONE
+            changes["status"] = status.value
+            notes.append("production issue closed")
         if issue.state == "closed":
             satisfied = status is EngineeringStatus.DONE and (not needs_review or bool(reviewed_at))
             if satisfied:
@@ -747,6 +796,8 @@ class EngineeringTicketService:
                 {"from": before.value, "to": status.value, "source": "github"},
             )
             await self._mirror_task(row, status, None, actor)
+            if production_done and board_status is not EngineeringStatus.DONE:
+                await self._move_card_to_done(row)
 
         if issue.state == "closed" and not reconcile and row["status"] == EngineeringStatus.DONE.value:
             with self.gary.db.read() as conn:
@@ -763,7 +814,9 @@ class EngineeringTicketService:
                     row["id"],
                     {"task_id": row["task_id"]},
                 )
-        if reconcile:
+        # Recorded when a ticket first needs reconciling, not on every sync
+        # while it waits: one stuck ticket used to write an entry every run.
+        if reconcile and before_sync_state != "needs_reconciliation":
             self._audit(
                 actor,
                 "github_sync_failed",

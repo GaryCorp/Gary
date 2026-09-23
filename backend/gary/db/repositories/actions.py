@@ -98,6 +98,22 @@ class ActionRepository:
             )
         )
 
+    def failed_since(self, action_type: str, task_id: str, since: str) -> bool:
+        """Whether this kind of action already failed for this task recently,
+        so a job retrying on a timer backs off instead of failing every run."""
+        return (
+            self.conn.execute(
+                """
+                SELECT 1 FROM actions
+                WHERE action_type = ? AND task_id = ? AND status = 'failed'
+                  AND created_at >= ?
+                LIMIT 1
+                """,
+                (action_type, task_id, since),
+            ).fetchone()
+            is not None
+        )
+
     def list_recent(self, since: str, limit: int = 10) -> list[dict]:
         return rows_to_dicts(
             self.conn.execute(

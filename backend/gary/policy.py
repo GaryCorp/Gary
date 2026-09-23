@@ -36,6 +36,10 @@ ACTION_POLICIES = {
     # CRITICAL_TASK_PRIORITY) is escalated to yellow by its handler.
     "move_calendar_event": GREEN,
     "send_external_email": YELLOW,
+    # Gary emailing Alex himself: the morning assignment. Green because the
+    # payload has no recipient -- the handler sends only to Alex's own
+    # signed-in address -- so it cannot reach anyone else.
+    "email_principal": GREEN,
     "change_external_commitment": YELLOW,
     "cancel_external_meeting": YELLOW,
     "download_file": YELLOW,

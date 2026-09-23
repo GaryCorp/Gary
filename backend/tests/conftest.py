@@ -14,6 +14,7 @@ if Path("/voice").exists():
 
 from gary import build_gary  # noqa: E402
 from gary.models.action import (  # noqa: E402
+    EmailPrincipalPayload,
     MoveCalendarEventPayload,
     ScheduleTaskPayload,
     SendExternalEmailPayload,
@@ -44,6 +45,7 @@ class FakeExternal:
 
     def __init__(self):
         self.sent_emails = []
+        self.principal_emails = []
         self.events = {}
         self.fail_next = None
 
@@ -53,6 +55,13 @@ class FakeExternal:
             raise RuntimeError(error)
         self.sent_emails.append(payload.to)
         return {"sent_message_id": f"msg-{len(self.sent_emails)}"}
+
+    async def email_principal(self, payload: EmailPrincipalPayload, context: dict) -> dict:
+        if self.fail_next:
+            error, self.fail_next = self.fail_next, None
+            raise RuntimeError(error)
+        self.principal_emails.append((payload.subject, payload.body))
+        return {"sent_message_id": f"self-{len(self.principal_emails)}"}
 
     async def move_event(self, payload: MoveCalendarEventPayload, context: dict) -> dict:
         event_id = context["task"]["calendar_event_id"]
@@ -125,6 +134,12 @@ def fake_handlers(external: FakeExternal) -> dict[str, ActionHandler]:
             payload_model=SendExternalEmailPayload,
             summarize=lambda p, c: f"Email {p.to}: {p.subject}",
             execute=external.send_email,
+            audit_event="email_sent",
+        ),
+        "email_principal": ActionHandler(
+            payload_model=EmailPrincipalPayload,
+            summarize=lambda p, c: f"Email you: {p.subject}",
+            execute=external.email_principal,
             audit_event="email_sent",
         ),
         "schedule_task": ActionHandler(

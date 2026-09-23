@@ -446,6 +446,30 @@ MANAGEMENT_WEEKDAYS=mon,tue,wed,thu,fri,sat,sun
 Scheduled planning cycles still follow `PLANNING_WEEKDAYS`, so this makes the
 management loop continuous without putting weekend work on your calendar.
 
+## Gary as your manager
+
+### `MORNING_ASSIGNMENT_TIME`
+
+Default: `08:15`. Empty turns it off.
+
+When Gary gives you the day's assignment: what is on your calendar today, the
+three ready tasks with the highest planning score, anything due within 48
+hours that has not started, and anything overdue. He says it and emails it to
+your own signed-in address, from his mailbox when it is connected (the
+`email_principal` action, which has no recipient field, so it cannot be sent
+to anyone else). It is given once a day, only on days with something in it,
+and not after noon. On days outside `PLANNING_WEEKDAYS` only what is already
+booked, such as a Saturday shoot, is included.
+
+### `EVENING_CHECKIN_TIME`
+
+Default: `17:45`. Empty turns it off.
+
+When Gary asks about whatever from the morning's assignment is not done. Your
+answer is how the task list catches up: tell him what you finished and he
+marks it complete, which also closes its GitHub issue. The week's totals go
+into the weekly review.
+
 ## Weekly video schedule
 
 Gary plans one video a week, filmed in batches, and puts the shoot and the
@@ -484,6 +508,9 @@ a week apart.
 Default: `10:00`. When a shoot starts; it lasts 2 hours per episode. The shoot
 is put on the calendar at this time even though it is outside working hours,
 because it is a fixed appointment.
+
+Each stage also becomes a private GitHub issue assigned to you, a week before
+its work can start (see ENGINEERING.md, "Production tickets").
 
 Stage lengths (script 2 h, edit 4 h, thumbnail 1 h, publish 30 min) and the
 two-week planning horizon are set in `backend/gary/services/production.py`.

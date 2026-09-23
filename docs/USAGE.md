@@ -404,9 +404,25 @@ projects works here: "what should I work on", the morning briefing, overdue
 alerts, and replanning after a missed block. A batch is planned two weeks
 before its shoot, and Gary tells you when he has planned one.
 
-Mark work done as you finish it ("Gary, I finished the Video 1 script"), so
-the next step becomes ready and the planner can schedule it. See the whole
-schedule at `http://localhost:8000/production/status`.
+Each stage is also a private GitHub issue assigned to you, opened a week
+before its work can start, so your board shows the coming week. Finish a
+stage either way: close its issue, or tell Gary ("Gary, I finished the Video 1
+script") and he closes the issue for you. Either one lets the next step
+become ready. See the whole schedule at
+`http://localhost:8000/production/status`.
+
+## Gary as your manager
+
+- **08:15, the assignment.** What is on your calendar today, your three
+  priorities, and anything due within two days that has not started. Spoken,
+  and emailed to you, so it reaches you away from the desk.
+- **17:45, the check-in.** Gary asks about whatever from the morning is not
+  done. Tell him what you finished; he marks it done and replans the rest.
+- **The weekly review** includes your week: how much of what he assigned you
+  finished the same day, and what is overdue.
+
+He manages your time and priorities. He still cannot spend money, email
+anyone but you, or change the company without your approval.
 
 To park other projects without losing their tasks, set them to `planned`:
 their tasks are then not offered for scheduling until the project is

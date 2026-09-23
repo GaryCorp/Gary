@@ -20,6 +20,7 @@ they are checked, recorded and audited like anything else Gary schedules.
 
 import datetime as dt
 from dataclasses import dataclass
+from typing import Callable
 from zoneinfo import ZoneInfo
 
 from gary.db import Database
@@ -32,6 +33,73 @@ from gary.services.task_service import add_dependency_in, create_task_in
 from gary.timeutil import format_utc, to_datetime
 
 DAY_END = dt.time(17, 0)
+# A stage's GitHub issue opens this long before its work can start, so the
+# board shows the coming week and not the whole schedule.
+TICKET_LOOKAHEAD = dt.timedelta(days=7)
+# After a failed attempt to open an issue, wait this long before trying again.
+TICKET_RETRY_AFTER = dt.timedelta(hours=6)
+
+# Task titles are "<episode>: <stage>", and the shoot is "Film <episodes>".
+STAGE_TITLES = {
+    "script": "Script",
+    "edit": "Edit",
+    "thumbnail": "Thumbnail and title",
+    "publish": "Publish",
+}
+FILM_PREFIX = "Film "
+
+# What each stage's issue asks for. Plain and fixed: a stage is the same
+# work every week, so nothing here needs a model to write it.
+STAGE_TICKETS = {
+    "script": {
+        "priority": "P2",
+        "objective": "Write the script for {episode} so it is ready to film by {deadline}.",
+        "requirements": ["Outline the main points", "Write the full script"],
+        "acceptance_criteria": ["The script is finished and ready to film"],
+    },
+    "film": {
+        "priority": "P1",
+        "objective": "Film {episode} in one session, starting {start}.",
+        "requirements": [
+            "Set up camera, sound and lighting",
+            "Film each episode from its script",
+        ],
+        "acceptance_criteria": ["Footage for every episode is recorded and backed up"],
+    },
+    "edit": {
+        "priority": "P1",
+        "objective": "Edit {episode} so it is ready to publish, by {deadline}.",
+        "requirements": ["Cut the footage to the script", "Add audio, captions and graphics"],
+        "acceptance_criteria": ["A final export is ready to upload"],
+    },
+    "thumbnail": {
+        "priority": "P2",
+        "objective": "Make the thumbnail and write the title for {episode} by {deadline}.",
+        "requirements": ["Design the thumbnail", "Write the title and description"],
+        "acceptance_criteria": ["Thumbnail, title and description are ready to upload"],
+    },
+    "publish": {
+        "priority": "P1",
+        "objective": "Upload and publish {episode} at {deadline}.",
+        "requirements": [
+            "Upload the final export",
+            "Add the title, description and thumbnail",
+            "Publish",
+        ],
+        "acceptance_criteria": ["The video is live"],
+    },
+}
+
+
+def stage_of(title: str) -> tuple[str, str] | None:
+    """(stage, episode) for a schedule task title, or None."""
+    if title.startswith(FILM_PREFIX):
+        return "film", title[len(FILM_PREFIX):]
+    episode, _, stage = title.rpartition(": ")
+    for key, name in STAGE_TITLES.items():
+        if stage == name and episode:
+            return key, episode
+    return None
 
 
 @dataclass(frozen=True)
@@ -143,7 +211,7 @@ def batch_plan(schedule: ProductionSchedule, batch: int, zone: ZoneInfo) -> dict
     labels = [episode_label(schedule, n) for n in episodes]
     film = {
         "key": "film",
-        "title": "Film " + " and ".join(labels),
+        "title": FILM_PREFIX + " and ".join(labels),
         "priority": 8,
         "estimated_minutes": schedule.film_minutes_per_episode * len(episodes),
         "earliest_start": format_utc(shoot_start),
@@ -162,7 +230,7 @@ def batch_plan(schedule: ProductionSchedule, batch: int, zone: ZoneInfo) -> dict
         tasks = [
             {
                 "key": "script",
-                "title": f"{label}: Script",
+                "title": f"{label}: {STAGE_TITLES['script']}",
                 "priority": 6,
                 "estimated_minutes": schedule.script_minutes,
                 "earliest_start": _at(_monday(shoot_day), dt.time(0, 0), zone),
@@ -170,7 +238,7 @@ def batch_plan(schedule: ProductionSchedule, batch: int, zone: ZoneInfo) -> dict
             },
             {
                 "key": "edit",
-                "title": f"{label}: Edit",
+                "title": f"{label}: {STAGE_TITLES['edit']}",
                 "priority": 7,
                 "estimated_minutes": schedule.edit_minutes,
                 "earliest_start": format_utc(post_start),
@@ -178,7 +246,7 @@ def batch_plan(schedule: ProductionSchedule, batch: int, zone: ZoneInfo) -> dict
             },
             {
                 "key": "thumbnail",
-                "title": f"{label}: Thumbnail and title",
+                "title": f"{label}: {STAGE_TITLES['thumbnail']}",
                 "priority": 6,
                 "estimated_minutes": schedule.thumbnail_minutes,
                 "earliest_start": format_utc(post_start),
@@ -186,7 +254,7 @@ def batch_plan(schedule: ProductionSchedule, batch: int, zone: ZoneInfo) -> dict
             },
             {
                 "key": "publish",
-                "title": f"{label}: Publish",
+                "title": f"{label}: {STAGE_TITLES['publish']}",
                 "priority": 8,
                 "estimated_minutes": schedule.publish_minutes,
                 "earliest_start": format_utc(
@@ -212,6 +280,33 @@ def batch_plan(schedule: ProductionSchedule, batch: int, zone: ZoneInfo) -> dict
     }
 
 
+def ticket_payload(task: dict, zone: ZoneInfo) -> dict | None:
+    """The create_engineering_ticket payload for one schedule task, or None
+    when the task is not a schedule stage."""
+    found = stage_of(task["title"])
+    if found is None:
+        return None
+    stage, episode = found
+    spec = STAGE_TICKETS[stage]
+
+    def when(value: str) -> str:
+        return to_datetime(value).astimezone(zone).strftime("%A %B %-d at %-I:%M %p")
+
+    return {
+        "task_id": task["id"],
+        "title": task["title"],
+        "objective": spec["objective"].format(
+            episode=episode, deadline=when(task["deadline"]), start=when(task["earliest_start"])
+        ),
+        "requirements": spec["requirements"],
+        "acceptance_criteria": spec["acceptance_criteria"],
+        "priority": spec["priority"],
+        "kind": "production",
+        "estimated_minutes": task["estimated_minutes"],
+        "due_at": task["deadline"],
+    }
+
+
 class ProductionService:
     def __init__(
         self,
@@ -220,12 +315,16 @@ class ProductionService:
         schedule: ProductionSchedule,
         timezone: ZoneInfo,
         clock: Clock = default_clock,
+        engineering: Callable[[], object | None] = lambda: None,
     ):
         self.db = db
         self.actions = actions
         self.schedule = schedule
         self.timezone = timezone
         self.clock = clock
+        # The GitHub ticket service, or None when GitHub is not configured;
+        # the schedule works without it, it just has no issues.
+        self.engineering = engineering
 
     async def run(self) -> dict:
         """Plan every batch now within the horizon, then put the fixed-time
@@ -375,6 +474,56 @@ class ProductionService:
             else:
                 failed.append({"task": task["title"], "error": result.get("error")})
         return scheduled, failed
+
+    async def sync_tickets(self) -> dict:
+        """Give Alex this week's stages as GitHub issues, and close the ones
+        he has finished in Gary. Each issue is opened through the ordinary
+        create_engineering_ticket action; one task has at most one issue."""
+        result = {"opened": [], "closed": [], "failed": []}
+        service = self.engineering()
+        if service is None:
+            return result
+
+        now = clock_now(self.clock)
+        cutoff = format_utc(to_datetime(now) + TICKET_LOOKAHEAD)
+        retry_since = format_utc(to_datetime(now) - TICKET_RETRY_AFTER)
+        with self.db.read() as conn:
+            repos = Repositories.bind(conn)
+            wanted = [
+                task for task in repos.production.list_tasks_needing_ticket(cutoff)
+                if not repos.actions.failed_since(
+                    "create_engineering_ticket", task["id"], retry_since
+                )
+            ]
+            finished = repos.production.list_open_tickets_for_finished_tasks()
+
+        for task in wanted:
+            payload = ticket_payload(task, self.timezone)
+            if payload is None:
+                continue
+            outcome = await self.actions.propose(
+                ProposeActionRequest(
+                    action_type="create_engineering_ticket",
+                    payload=payload,
+                    reason="This week's work in the video schedule",
+                    task_id=task["id"],
+                ),
+                actor=SYSTEM_ACTOR,
+            )
+            if outcome.get("status") == "succeeded":
+                result["opened"].append(task["title"])
+            else:
+                result["failed"].append({"task": task["title"], "error": outcome.get("error")})
+
+        for row in finished:
+            try:
+                await service.close_production_ticket(row, actor=SYSTEM_ACTOR)
+                result["closed"].append(row["github_issue_number"])
+            except Exception as exc:  # GitHub down: the next tick tries again
+                result["failed"].append(
+                    {"issue": row["github_issue_number"], "error": str(exc)[:300]}
+                )
+        return result
 
     def status(self) -> list[dict]:
         """Every episode with where its work stands, for the status page."""

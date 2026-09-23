@@ -77,6 +77,17 @@ class AuditRepository:
         ).fetchone()
         return row["latest"]
 
+    def list_since(self, event_type: str, since: str) -> list[dict]:
+        return rows_to_dicts(
+            self.conn.execute(
+                """
+                SELECT * FROM audit_log WHERE event_type = ? AND timestamp >= ?
+                ORDER BY id
+                """,
+                (event_type, since),
+            )
+        )
+
     def has_event(self, event_type: str, entity_id: str) -> bool:
         return (
             self.conn.execute(

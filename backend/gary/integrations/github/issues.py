@@ -121,7 +121,9 @@ def render_title(title: str) -> str:
 def ticket_labels(
     priority: str, kind: str = "feature", security_review_required: bool = False
 ) -> list[str]:
-    labels = [*BASE_LABELS, kind, priority]
+    # A video stage is not engineering work, so it does not say it is.
+    base = [label for label in BASE_LABELS if not (kind == "production" and label == "engineering")]
+    labels = [*base, kind, priority]
     if security_review_required:
         labels.append("security-review")
     # Stable order, no duplicates.
