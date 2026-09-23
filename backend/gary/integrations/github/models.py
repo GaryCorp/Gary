@@ -139,6 +139,7 @@ class Issue(BaseModel):
     state: Literal["open", "closed"]
     state_reason: str | None = None
     html_url: str = ""
+    body: str = ""
     assignees: list[str] = []
     labels: list[str] = []
 

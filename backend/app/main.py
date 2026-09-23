@@ -116,6 +116,7 @@ from gary.services.hiring_actions import (
     dismiss as dismiss_employee,
     hire_action_handler,
 )
+from gary.services.hiring_followup import follow_up_on_hires
 from gary.services.management_loop import (
     DailyBudget,
     MIN_GAP_MINUTES,
@@ -1023,6 +1024,18 @@ async def send_daily_report() -> None:
         logger.warning("Daily report email: %s", outcome.get("error"))
     if not in_quiet_hours(dt.datetime.now(ZoneInfo(LOCAL_TIMEZONE))):
         await speak_to_user(daily_report.spoken_summary(data), source="briefing")
+
+    # Once a colleague Gary argued for exists and has done some work, his
+    # hire issue gets their record. Once per hire; a GitHub failure retries
+    # with tomorrow's report.
+    try:
+        commented = await follow_up_on_hires(
+            gary_ops, engineering_service, agent_registry, gary_ops.planning.clock
+        )
+        if commented:
+            logger.warning("Hire follow-up: %s", commented)
+    except Exception:
+        logger.exception("Commenting on a hire issue failed")
 
 
 weekly_review = WeeklyReview(

@@ -135,6 +135,12 @@ Breaking one is almost always a bug.
   `FORBIDDEN_TOOLS` cannot be granted at all.
 - **Specialists are advisory.** A report changes nothing by itself. Only Gary
   delegates; employees cannot.
+- **Hiring is an argument, not an act.** Gary may propose a colleague in
+  conversation or in a cycle (capped like a reorg: one per cycle, none while
+  one is pending, 14 quiet days). Approval files a ticket whose objective
+  cites counted evidence; `engineering_extend_spec` may append to that issue
+  later; and once the colleague exists `hiring_followup.py` comments their
+  record back onto it, once, with no model call.
 - **The company's shape is a code change.** `sync_roster` mirrors `roster.py`
   into the database on every start. Hiring and reorganisation are yellow
   actions: approving one files a private engineering ticket for Alex to edit

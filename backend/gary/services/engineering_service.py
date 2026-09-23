@@ -27,8 +27,10 @@ from gary.integrations.github.exceptions import (
     GitHubPrivacyError,
 )
 from gary.integrations.github.issues import (
+    BODY_LIMIT,
     ensure_labels,
     render_issue_body,
+    render_spec_addition,
     render_title,
     scrub,
     ticket_labels,
@@ -577,6 +579,64 @@ class EngineeringTicketService:
             {"task_id": row["task_id"], "security_review_required": bool(row["security_review_required"])},
         )
         return row
+
+    async def extend_spec(
+        self,
+        row: dict,
+        requirements: list[str] | None = None,
+        acceptance_criteria: list[str] | None = None,
+        note: str | None = None,
+        actor: str = GARY_ACTOR,
+    ) -> dict:
+        """Add to an issue Gary already filed, as a new section at the end.
+
+        The specification Alex agreed to is never rewritten or removed: this
+        appends, so the issue reads as what was asked for and then what was
+        learned. A closed ticket is refused -- reopening is Alex's decision.
+        """
+        if not row["github_issue_number"]:
+            raise EngineeringError("That ticket has no GitHub issue yet")
+        if row["status"] == EngineeringStatus.DONE.value:
+            raise EngineeringError(
+                f"Issue #{row['github_issue_number']} is done; open a new ticket instead"
+            )
+
+        await self.gate.verify()
+        issue = await self.client.get_issue(row["github_issue_number"])
+        if issue.state == "closed":
+            raise EngineeringError(f"Issue #{issue.number} is closed")
+
+        addition = render_spec_addition(
+            requirements=requirements,
+            acceptance_criteria=acceptance_criteria,
+            note=note,
+            added_at_local=(to_local(self._now(), self.gary.timezone) or "")[:16].replace("T", " "),
+        )
+        body = f"{(issue.body or '').rstrip()}\n\n{addition}"
+        if len(body) > BODY_LIMIT:
+            raise EngineeringError("That issue is full; open a new ticket instead")
+
+        await self.client.update_issue(issue.number, body=body)
+        self._audit(
+            actor,
+            "engineering_spec_extended",
+            f"Added to issue #{issue.number}: "
+            f"{len(requirements or [])} requirement(s), "
+            f"{len(acceptance_criteria or [])} acceptance criterion(s)",
+            row["id"],
+            {
+                "task_id": row["task_id"],
+                "requirements": list(requirements or []),
+                "acceptance_criteria": list(acceptance_criteria or []),
+                "note": (note or "")[:500],
+            },
+        )
+        return {
+            "issue_number": issue.number,
+            "url": row["github_url"],
+            "added_requirements": len(requirements or []),
+            "added_acceptance_criteria": len(acceptance_criteria or []),
+        }
 
     async def _move_card_to_done(self, row) -> None:
         """Best effort: the stage is finished either way, so a board that

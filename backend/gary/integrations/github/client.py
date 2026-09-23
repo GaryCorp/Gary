@@ -285,6 +285,7 @@ class GitHubClient:
             state=data.get("state", "open"),
             state_reason=data.get("state_reason"),
             html_url=data.get("html_url", ""),
+            body=data.get("body") or "",
             assignees=[a.get("login", "") for a in data.get("assignees") or []],
             labels=[
                 label.get("name", "") if isinstance(label, dict) else str(label)

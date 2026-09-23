@@ -219,6 +219,38 @@ REORGANISE_SCHEMA = {
     },
 }
 
+HIRE_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "action_type", "agent_id", "name", "title", "department", "notebook",
+        "specialty", "personality", "capability_gap", "tools", "reason",
+    ],
+    "properties": {
+        "action_type": {"type": "string", "enum": ["hire_employee"]},
+        "agent_id": {"type": "string", "description": "Lowercase, e.g. nina."},
+        "name": {"type": "string", "description": "Their first name."},
+        "title": {"type": "string"},
+        "department": {"type": "string"},
+        "notebook": {"type": "string", "description": "Their own top-level Joplin notebook."},
+        "specialty": {"type": "string", "description": "What they are for, in a sentence or two."},
+        "personality": {
+            "type": ["string", "null"],
+            "description": "How they work, or null.",
+        },
+        "capability_gap": {
+            "type": "string",
+            "description": "What the company could not do without them, from its own record.",
+        },
+        "tools": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "The smallest set of read-only tools that does the job.",
+        },
+        "reason": _REASON,
+    },
+}
+
 PLAN_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
@@ -240,6 +272,7 @@ PLAN_SCHEMA = {
                     ENGINEERING_TICKET_SCHEMA,
                     SET_PRIORITY_SCHEMA,
                     REORGANISE_SCHEMA,
+                    HIRE_SCHEMA,
                 ]
             },
         },
@@ -345,6 +378,15 @@ Return:
   is permitted to do, and you cannot reorganise yourself. It waits for
   {principal} and then becomes engineering work; nothing moves until he does
   it. At most one, and not at all if the company was reorganised recently.
+  hire_employee proposes a colleague the company does not have. Propose one
+  only when the record shows work nobody can do: assignments that failed for
+  want of a skill, questions nobody could answer, the same gap twice. Ask for
+  the smallest set of read-only tools that does the job; a hire can never
+  delegate, spend, or hold anything of {principal}'s. It waits for
+  {principal}, and approving it files an engineering ticket -- the colleague
+  exists only once he has written them into the roster and deployed. At most
+  one, never while another hire is waiting on him, and not at all if one was
+  proposed recently.
   ask_user speaks to {principal} directly, outside any conversation, and is
   only for something that genuinely needs him now: a decision only he can
   make, a commitment about to be missed, an approval about to expire. It is

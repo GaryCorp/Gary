@@ -8,7 +8,7 @@ workflow. GitHub field and option node ids never appear here.
 import datetime as dt
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from gary.integrations.github.models import EngineeringStatus, Priority
 from gary.models.common import EntityId, Minutes, RequestModel, Timestamp
@@ -137,6 +137,24 @@ class SetEngineeringPriorityPayload(RequestModel):
     ticket_id: EntityId
     priority: Priority
     reason: str | None = Field(default=None, max_length=1000)
+
+
+class ExtendSpecRequest(RequestModel):
+    """Adding to a ticket already on GitHub. At least one of the three, or
+    there is nothing to add."""
+
+    ticket_id: EntityId | None = None
+    task_id: EntityId | None = None
+    issue_number: int | None = Field(default=None, strict=True, ge=1)
+    requirements: list[str] = Field(default_factory=list, max_length=LIST_LIMIT)
+    acceptance_criteria: list[str] = Field(default_factory=list, max_length=LIST_LIMIT)
+    note: str | None = Field(default=None, max_length=REQUIREMENT_LIMIT)
+
+    @model_validator(mode="after")
+    def something_to_add(self):
+        if not (self.requirements or self.acceptance_criteria or self.note):
+            raise ValueError("give a requirement, an acceptance criterion, or a note")
+        return self
 
 
 class TicketLookupRequest(RequestModel):

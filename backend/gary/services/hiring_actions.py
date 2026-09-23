@@ -20,6 +20,7 @@ again at execution, so a name, id or notebook that was free when Gary asked
 but taken by the time Alex approves is refused rather than colliding.
 """
 
+import datetime as dt
 import json
 import logging
 
@@ -38,6 +39,8 @@ from gary.db.repositories import Repositories
 from gary.models.hiring import HireEmployeePayload
 from gary.policy import GARY_ACTOR, USER_ACTOR
 from gary.services.action_service import ActionHandler
+from gary.services.common import Clock, default_clock
+from gary.timeutil import format_utc
 
 logger = logging.getLogger("gary.hiring")
 
@@ -56,7 +59,45 @@ ACCEPTANCE = (
 )
 
 
-def hire_spec(payload: HireEmployeePayload, tools: list[str]) -> dict:
+EVIDENCE_DAYS = 30
+
+
+def hiring_evidence(repos: Repositories, since: str) -> list[str]:
+    """What the company's own record says about the gap, in numbers.
+
+    Gary writes the argument for a colleague; this is the part nobody has to
+    take his word for. Counted here rather than asked of the model, so the
+    ticket cites facts Alex can check against the same database.
+    """
+    assignments = [
+        a for a in repos.assignments.list_recent(None, None, 200)
+        if (a["created_at"] or "") >= since
+    ]
+    per_agent: dict[str, int] = {}
+    for assignment in assignments:
+        per_agent[assignment["assigned_to"]] = per_agent.get(assignment["assigned_to"], 0) + 1
+    failed = [a for a in assignments if a["status"] == "failed"]
+    unanswered = [m for m in repos.spoken.list_open() if m["expects_reply"]]
+
+    load = ", ".join(
+        f"{agent} {count}" for agent, count in sorted(per_agent.items(), key=lambda i: -i[1])
+    )
+    evidence = [
+        f"Assignments in the last {EVIDENCE_DAYS} days: {len(assignments)}"
+        + (f" ({load})" if load else ", none to anybody"),
+    ]
+    if failed:
+        evidence.append(f"Assignments that did not finish: {len(failed)}")
+    if unanswered:
+        evidence.append(
+            f"Questions Gary asked and nobody has answered: {len(unanswered)}"
+        )
+    return evidence
+
+
+def hire_spec(
+    payload: HireEmployeePayload, tools: list[str], evidence: list[str] | None = None
+) -> dict:
     """Gary's proposal, as an engineering specification.
 
     Everything Alex needs to write the roster entry, stated as requirements
@@ -78,20 +119,25 @@ def hire_spec(payload: HireEmployeePayload, tools: list[str]) -> dict:
         "tools Gary proposed, as the smallest set that does the job: "
         + ", ".join(tools)
     )
+    objective = (
+        f"GaryCorp needs a {payload.title} in {payload.department}. "
+        f"The gap: {scrub(payload.capability_gap, GAP_LIMIT)} "
+        "Gary proposed this colleague and Alex approved the proposal; this "
+        "ticket is to build them."
+    )
+    if evidence:
+        objective += " What the company's own record shows: " + "; ".join(evidence) + "."
     return {
         "title": f"Hire {payload.name} as {payload.title}",
-        "objective": (
-            f"GaryCorp needs a {payload.title} in {payload.department}. "
-            f"The gap: {scrub(payload.capability_gap, GAP_LIMIT)} "
-            "Gary proposed this colleague and Alex approved the proposal; this "
-            "ticket is to build them."
-        ),
+        "objective": objective,
         "requirements": requirements,
         "acceptance_criteria": list(ACCEPTANCE),
     }
 
 
-def hire_action_handler(registry, engineering=None) -> dict[str, ActionHandler]:
+def hire_action_handler(
+    registry, engineering=None, clock: Clock = default_clock
+) -> dict[str, ActionHandler]:
     """The ``hire_employee`` handler.
 
     ``engineering`` is a callable returning the engineering ticket service, or
@@ -127,7 +173,8 @@ def hire_action_handler(registry, engineering=None) -> dict[str, ActionHandler]:
         if repos.hires.get(payload.agent_id) is not None:
             raise HiringError(f"{payload.agent_id} has already been hired")
         # One ticket per colleague: a retry must not file a second issue.
-        spec = hire_spec(payload, tools)
+        since = format_utc(clock() - dt.timedelta(days=EVIDENCE_DAYS))
+        spec = hire_spec(payload, tools, hiring_evidence(repos, since))
         for ticket in repos.engineering.list_open(100):
             task = repos.tasks.get(ticket["task_id"])
             if task and task["title"] == spec["title"]:

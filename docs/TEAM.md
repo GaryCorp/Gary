@@ -243,7 +243,7 @@ GaryCorp can grow its own team. When work keeps arriving that nobody's
 specialty covers, Gary can propose a colleague; only you can hire one.
 
 ```text
-Gary notices a recurring capability gap
+Gary notices a recurring capability gap  (in conversation, or in a cycle)
    → hiring_context (who exists, which notebooks are taken, which tools are allowed)
    → propose_new_employee  → a yellow action
    → Gary tells you out loud that he has proposed her, and why
@@ -262,6 +262,33 @@ deployed. A hand-written roster entry is bound by `FORBIDDEN_TOOLS` and
 `TOOL_CATALOG` rather than by `HIREABLE_TOOLS`, so you can give a new
 colleague real capabilities; the approval gate and your own code review are
 what stand in for the ceiling.
+
+**A cycle may propose one too.** Gary no longer has to be talking to you to
+notice a gap: an unattended planning cycle can propose `hire_employee`, under
+caps that match the reorganisation ones — at most one per cycle, never while
+another hire is waiting for your decision, and not at all if one was proposed
+in the last 14 days. The proposal is still yellow and still approved only on
+the web page, and approving it still only files a ticket. A proposal missing
+the gap, the tools, or any part of the role is refused deterministically
+before it reaches you.
+
+**The issue cites the record.** The objective carries what the company's own
+database says: how many assignments ran in the last 30 days and to whom, how
+many did not finish, and how many questions nobody answered. Gary writes the
+argument; those numbers are counted in Python, so you can check them.
+
+**Gary can add to a spec he filed.** `engineering_extend_spec` appends a
+section to an existing issue — more requirements, more acceptance criteria,
+or a note — when he learns something the ticket should have said. It appends;
+what you already agreed to is never rewritten, a done or closed issue is
+refused, and anything token-shaped is scrubbed.
+
+**And he closes the loop.** Once a proposed colleague exists in the roster
+and has done some work, Gary comments on their hire issue with their record:
+assignments, completions, failures, the confidence they reported, confident
+failures, tool denials and what their model calls cost. Once per hire, with
+no model call, so nothing in it can flatter the decision. The audit events
+are `employee_requested` and `hire_followed_up`.
 
 Employees hired before this change keep working exactly as they were: the
 `hired_employees` table, the roster loading and `dismiss` are unchanged.

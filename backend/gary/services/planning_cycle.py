@@ -85,6 +85,10 @@ CYCLE_ACTION_TYPES = (
     "set_engineering_priority",
     # Gary arguing that the company is organised wrongly.
     "propose_reorganisation",
+    # Gary arguing the company is missing someone. Yellow, approved on the
+    # web page, and approving it only files a ticket: the colleague exists
+    # when Alex has written them into roster.py and deployed.
+    "hire_employee",
 )
 # Caps for unattended cycles. The company runs itself between conversations,
 # so the limits are what stops a cycle commissioning work all day: a cycle
@@ -105,6 +109,11 @@ MAX_CYCLE_PRIORITY_CHANGES = 2
 # that reshuffles itself weekly is malfunctioning, not managing.
 MAX_CYCLE_REORGS = 1
 REORG_QUIET_DAYS = 14
+# Hiring is the same kind of argument and gets the same restraint: one at a
+# time, and a fortnight between proposals. A company that proposes a new
+# colleague every day is not noticing gaps, it is generating them.
+MAX_CYCLE_HIRES = 1
+HIRE_QUIET_DAYS = 14
 MAX_DAILY_DELEGATIONS = 4
 MAX_DAILY_REVIEWS = 1
 # An objective close enough to recent work for the same specialist is a loop,
@@ -282,6 +291,7 @@ def validate_cycle_actions(
         "ask_user": 0,
         "create_engineering_ticket": 0,
         "set_engineering_priority": 0,
+        "hire_employee": 0,
         "propose_reorganisation": 0,
     }
     delegated_agents: set[str] = set()
@@ -313,10 +323,23 @@ def validate_cycle_actions(
         seen_tickets: set[str] = set()
         # When the company was last reshuffled, so it is not done again yet.
         reorg_since = format_utc(to_datetime(now) - dt.timedelta(days=REORG_QUIET_DAYS))
+        recent_actions = repos.actions.list_recent(reorg_since, 200)
         reorganised_recently = any(
             action["action_type"] == "propose_reorganisation"
             and action["status"] not in ("rejected", "failed")
-            for action in repos.actions.list_recent(reorg_since, 200)
+            for action in recent_actions
+        )
+        hire_since = format_utc(to_datetime(now) - dt.timedelta(days=HIRE_QUIET_DAYS))
+        hired_recently = any(
+            action["action_type"] == "hire_employee"
+            and action["status"] not in ("rejected", "failed")
+            and (action["created_at"] or "") >= hire_since
+            for action in recent_actions
+        )
+        # A hire Alex has not answered yet: proposing another is noise.
+        hire_awaiting_alex = any(
+            approval["action_type"] == "hire_employee"
+            for approval in repos.approvals.list_pending()
         )
         # What the team is already doing, so a cycle cannot re-commission it.
         since = format_utc(to_datetime(now) - dt.timedelta(days=REPEAT_ASSIGNMENT_DAYS))
@@ -527,6 +550,61 @@ def validate_cycle_actions(
                         "task_id": None,
                         "project_id": None,
                         "task_title": f"reorganise {len(changes)} role(s)",
+                    }
+                )
+                counts[action_type] += 1
+                continue
+
+            if action_type == "hire_employee":
+                if counts[action_type] >= MAX_CYCLE_HIRES:
+                    reject(f"at most {MAX_CYCLE_HIRES} hire proposal per cycle")
+                    continue
+                if hire_awaiting_alex:
+                    reject("a hire is already waiting for Alex to decide")
+                    continue
+                if hired_recently:
+                    reject(f"a colleague was proposed in the last {HIRE_QUIET_DAYS} days")
+                    continue
+                gap = " ".join(str(proposal.get("capability_gap") or "").split())[:2000]
+                if len(gap) < 20:
+                    reject("a hire needs the gap it fills, from the record")
+                    continue
+                tools = [
+                    str(tool).strip()[:64]
+                    for tool in (proposal.get("tools") or [])
+                    if str(tool).strip()
+                ]
+                if not tools:
+                    reject("a hire needs the tools it would hold")
+                    continue
+                fields = {
+                    key: " ".join(str(proposal.get(key) or "").split())
+                    for key in ("agent_id", "name", "title", "department", "notebook", "specialty")
+                }
+                missing = [key for key, value in fields.items() if not value]
+                if missing:
+                    reject(f"a hire needs {', '.join(missing)}")
+                    continue
+                # Everything else -- the id pattern, the tool ceiling, names
+                # already taken -- is re-checked by the hire handler when the
+                # action runs, and again when Alex approves it.
+                accepted.append(
+                    {
+                        "action_type": action_type,
+                        "payload": {
+                            **fields,
+                            "agent_id": fields["agent_id"].lower()[:32],
+                            "specialty": fields["specialty"][:2000],
+                            "personality": " ".join(
+                                str(proposal.get("personality") or "").split()
+                            )[:1000] or None,
+                            "capability_gap": gap,
+                            "tools": tools,
+                        },
+                        "reason": str(proposal.get("reason") or gap)[:1000] or None,
+                        "task_id": None,
+                        "project_id": None,
+                        "task_title": f"hire {fields['name']} as {fields['title']}",
                     }
                 )
                 counts[action_type] += 1

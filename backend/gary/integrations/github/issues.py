@@ -114,6 +114,26 @@ Gary Task ID: `{task_id}`
     return scrub(body)[:BODY_LIMIT]
 
 
+def render_spec_addition(
+    *,
+    requirements: list[str] | None = None,
+    acceptance_criteria: list[str] | None = None,
+    note: str | None = None,
+    added_at_local: str = "",
+) -> str:
+    """What Gary learned after the issue was filed, as a section appended to
+    the body. The original specification is never rewritten: what was asked
+    for first stays readable underneath what was added."""
+    lines = [f"## Added by Gary{f' — {added_at_local}' if added_at_local else ''}"]
+    if note:
+        lines += ["", scrub(" ".join(str(note).split())[:ITEM_LIMIT])]
+    if requirements:
+        lines += ["", "**Also required**", scrub(_lines(requirements))]
+    if acceptance_criteria:
+        lines += ["", "**Also done when**", scrub(_lines(acceptance_criteria))]
+    return "\n".join(lines)
+
+
 def render_title(title: str) -> str:
     return scrub(" ".join(title.split()))[:TITLE_LIMIT]
 

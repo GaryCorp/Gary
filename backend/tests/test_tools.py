@@ -49,6 +49,7 @@ EXPECTED_TOOLS = {
     "engineering_mark_done",
     "engineering_mark_blocked",
     "engineering_add_comment",
+    "engineering_extend_spec",
     "engineering_sync",
     "engineering_status",
     "engineering_set_priority",

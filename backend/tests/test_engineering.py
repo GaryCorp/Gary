@@ -679,7 +679,8 @@ def test_gary_has_no_raw_github_or_admin_tools():
         "engineering_create_ticket", "engineering_get_ticket", "engineering_list_tickets",
         "engineering_mark_ready", "engineering_mark_in_progress", "engineering_mark_review",
         "engineering_mark_security_review", "engineering_mark_done", "engineering_mark_blocked",
-        "engineering_add_comment", "engineering_sync", "engineering_status",
+        "engineering_add_comment", "engineering_extend_spec", "engineering_sync",
+        "engineering_status",
         "engineering_set_priority",
     }
 

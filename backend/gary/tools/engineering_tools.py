@@ -11,6 +11,7 @@ from gary.integrations.github.models import EngineeringStatus
 from gary.models.common import validate_request
 from gary.models.engineering import (
     CommentRequest,
+    ExtendSpecRequest,
     CreateEngineeringTicketRequest,
     ListTicketsRequest,
     SetPriorityRequest,
@@ -114,6 +115,18 @@ async def engineering_add_comment(args: dict, ctx: ToolContext) -> dict:
     service = _service(ctx)
     row = await _resolve(ctx, request)
     return await service.add_comment(row, request.comment)
+
+
+async def engineering_extend_spec(args: dict, ctx: ToolContext) -> dict:
+    request = validate_request(ExtendSpecRequest, args)
+    service = _service(ctx)
+    row = await _resolve(ctx, request)
+    return await service.extend_spec(
+        row,
+        requirements=request.requirements,
+        acceptance_criteria=request.acceptance_criteria,
+        note=request.note,
+    )
 
 
 async def engineering_sync(args: dict, ctx: ToolContext) -> dict:
@@ -280,6 +293,31 @@ TOOLS = [
         obj({**LOOKUP_PROPERTIES, "comment": string("The update, in one or two sentences.")},
             ("comment",)),
         engineering_add_comment,
+    ),
+    Tool(
+        "engineering_extend_spec",
+        "Add to a ticket's specification on GitHub: more requirements, more acceptance "
+        "criteria, or a note. Use when you learn something the ticket should have said, "
+        "such as a new role needing a tool you did not ask for. It appends a section; what "
+        "Alex already agreed to stays, and nothing is rewritten. A comment is for an "
+        "update; this is for work the ticket now has to include.",
+        obj(
+            {
+                **LOOKUP_PROPERTIES,
+                "requirements": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "What else the work has to include. One per item.",
+                },
+                "acceptance_criteria": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "What else has to be true before it is done.",
+                },
+                "note": string("Why this is being added, in one or two sentences."),
+            },
+        ),
+        engineering_extend_spec,
     ),
     Tool(
         "engineering_sync",
