@@ -366,6 +366,43 @@ and audit history stay. Audit events are `employee_hired` and
 Their Joplin notebook must exist, like everyone else's, or `write_note` is
 refused rather than writing elsewhere.
 
+## Performance reviews
+
+Every 28 days Gary reviews each employee with a record, reviews you, and his
+own people review him. He can also write one on request ("Gary, review
+Susan").
+
+**A review is two things kept apart.** The scorecard is arithmetic over what
+the company already recorded, so every figure is checkable:
+
+| Subject | What is counted |
+|---|---|
+| An employee | assignments, completed, failed, attempts, tool calls, minutes to deliver, cost, cost per completed report, stated confidence, **confident failures**, tool calls the gateway refused, reports that failed validation |
+| You | tasks completed and overdue, scheduled blocks missed, approvals answered or left to expire, questions answered or ignored, engineering opened/done/blocked, and how much of each day's assignment you finished that day |
+| Gary | planning cycles, delegations, reports received, actions taken and failed, things raised with you and how many you answered, AI spend and spend per cycle |
+
+The judgment is one model call over those numbers. The model is given the
+scorecard and told never to invent a figure; what it writes is validated in
+Python (a summary, and evidence quoting the figures relied on, or it is not
+stored) and kept in its own columns, labelled as judgment.
+
+**Upward reviews.** An employee's review of Gary is written on the employees'
+model, speaking as them, and asks what it is like to work for him: was the
+work clear and worth doing, were their reports used, how often did he go to
+you. Gary has to answer it — `performance_acknowledge` stores his response
+beside the criticism, and until then it shows as unanswered.
+
+**Nobody reviews themselves.** Gary cannot review Gary, and an employee
+cannot review a colleague. The four `performance_*` tools are in
+`FORBIDDEN_TOOLS`, so no specialist and no future hire can hold them.
+
+**A review changes nothing.** No permission, no assignment, no roster entry.
+It is a record; what is done about it is your decision. Reviews are priced
+like any other model call, under source `performance_review`.
+
+Settings: `REVIEW_PERIOD_DAYS` (28), `REVIEW_INTERVAL_DAYS` (28, `0` turns
+the scheduled round off) and `MAX_REVIEWS_PER_ROUND` (8).
+
 ## Management reviews
 
 `run_management_review` asks several employees (all five by default, or a

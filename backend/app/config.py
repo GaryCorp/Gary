@@ -244,6 +244,14 @@ EMAIL_COMMAND_POLL_MINUTES = float(os.getenv("EMAIL_COMMAND_POLL_MINUTES", "5"))
 EVENING_CHECKIN_TIME = optional_time("EVENING_CHECKIN_TIME", "17:45")
 
 
+# Performance reviews: how long a review covers, how long before the same
+# subject is due again, and how many may be written in one round. 0 days
+# turns the scheduled round off; Gary can still write one when asked.
+REVIEW_PERIOD_DAYS = env_int("REVIEW_PERIOD_DAYS", 28, 1, 365)
+REVIEW_INTERVAL_DAYS = env_int("REVIEW_INTERVAL_DAYS", 28, 0, 365)
+MAX_REVIEWS_PER_ROUND = env_int("MAX_REVIEWS_PER_ROUND", 8, 1, 30)
+
+
 # Which weekday the weekly review is written on (0 = Monday).
 WEEKLY_REVIEW_DAY = env_int("WEEKLY_REVIEW_DAY", 4, 0, 6)
 

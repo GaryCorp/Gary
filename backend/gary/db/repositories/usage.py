@@ -10,6 +10,8 @@ SOURCES = (
     # Turning what Alex said into words. Billed by the minute, not by token,
     # so it is kept apart from the conversation it belongs to.
     "voice_transcription",
+    # Judging how someone is doing. One call per review.
+    "performance_review",
     "other",
 )
 

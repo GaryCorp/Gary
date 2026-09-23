@@ -44,9 +44,12 @@ from app.config import (
     PLANNING_MODEL,
     PLANNING_SCHEDULE,
     PLANNING_WEEKDAYS,
+    MAX_REVIEWS_PER_ROUND,
     PRINCIPAL_NAME,
     PRODUCTION_SCHEDULE,
     REQUIRE_PRICED_MODELS,
+    REVIEW_INTERVAL_DAYS,
+    REVIEW_PERIOD_DAYS,
     SESSION_SECRET,
     SPENDING_LIMITS,
     SPOKEN_DELIVERY_SECONDS,
@@ -104,6 +107,7 @@ from gary.integrations.github import (
 )
 from gary.models.action import ProposeActionRequest
 from gary.planner import OpenAIPlanner
+from gary.reviewer import OpenAIReviewer
 from gary.policy import SYSTEM_ACTOR
 from gary.services.accountability import Accountability
 from gary.services.conversation_service import SpokenDelivery
@@ -130,6 +134,7 @@ from gary.services.planning_cycle import (
 )
 from gary.services.operating import OperatingState
 from gary.services.production import ProductionService, episode_label
+from gary.services.review_service import PerformanceReviews
 from gary.services.reorg_actions import reorg_action_handler
 from gary.services.team_actions import team_action_handlers
 from gary.services.weekly_review import WeeklyReview
@@ -534,11 +539,27 @@ app.state.gary_ops = gary_ops
 app.state.agent_service = agent_service
 app.state.card_vault = card_vault
 
+# Performance reviews: the facts come from SQLite, the judgment from one
+# model call. Upward reviews of Gary are written on the employees' model.
+performance_reviews = PerformanceReviews(
+    gary_ops.db,
+    registry=agent_registry,
+    reviewer=OpenAIReviewer(
+        OPENAI_API_KEY,
+        PLANNING_MODEL,
+        employee_model=GARY_EMPLOYEE_MODEL,
+        principal=PRINCIPAL_NAME,
+    ),
+    clock=gary_ops.planning.clock,
+    usage=usage_ledger,
+)
+
 GARY_INTEGRATIONS = {
     "calendar": planning_calendar,
     "notebook": planning_notebook,
     "planning_cycle": planning_cycle,
     "agents": agent_service,
+    "reviews": performance_reviews,
     # Absent when GitHub is not configured: the tools then say so.
     **({"engineering": engineering_service} if engineering_service else {}),
 }
@@ -990,6 +1011,7 @@ async def run_accountability() -> None:
             if DAILY_REPORT_TIME and DAILY_REPORT_TIME <= now and not await asyncio.to_thread(
                 daily_report.sent_today
             ):
+                await run_review_round()
                 await send_daily_report()
             if MORNING_ASSIGNMENT_TIME and MORNING_ASSIGNMENT_TIME <= now < ASSIGNMENT_LATEST:
                 given = await accountability.morning()
@@ -1011,6 +1033,44 @@ async def run_accountability() -> None:
         except Exception:
             logger.exception("The morning assignment or evening check-in failed")
         await asyncio.sleep(5 * 60)
+
+
+async def run_review_round() -> None:
+    """Gary reviews his people and Alex; his people review him.
+
+    Run daily, but ``due`` is what decides anything happens: a subject with
+    too thin a record, or one reviewed inside REVIEW_INTERVAL_DAYS, is not
+    reviewed again. Each review is one model call, so the round is capped and
+    stops at the spend ceiling like any other thinking.
+    """
+    if not REVIEW_INTERVAL_DAYS:
+        return
+    if await spend_stop("performance reviews"):
+        return
+
+    result = await performance_reviews.run_all_due(
+        days=REVIEW_PERIOD_DAYS,
+        interval_days=REVIEW_INTERVAL_DAYS,
+        limit=MAX_REVIEWS_PER_ROUND,
+    )
+    if result["failed"]:
+        logger.warning("Performance reviews that failed: %s", result["failed"])
+    if not result["written"]:
+        return
+
+    logger.warning("Performance reviews written: %s", result["written"])
+    owed = await asyncio.to_thread(performance_reviews.unacknowledged_of_manager)
+    said = (
+        f"{len(result['written'])} performance review"
+        f"{'s are' if len(result['written']) != 1 else ' is'} written."
+    )
+    if owed:
+        said += (
+            f" {len(owed)} of them {'are' if len(owed) != 1 else 'is'} about me, from the "
+            "people who work for me, and I have not answered "
+            f"{'them' if len(owed) != 1 else 'it'} yet."
+        )
+    await speak_to_user(said, source="briefing")
 
 
 async def send_daily_report() -> None:

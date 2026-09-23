@@ -70,6 +70,9 @@ def employee_scorecard(repos: Repositories, agent_id: str, since: str, now: str)
                 confident_failures += 1
 
     denials = repos.audit.count_events_for("agent_tool_denied", agent_id, since)
+    # A report the runner refused to store: the work came back, but not in a
+    # shape the company could use.
+    rejected = repos.audit.count_events_for("agent_output_rejected", agent_id, since)
 
     return {
         "subject": agent_id,
@@ -92,6 +95,7 @@ def employee_scorecard(repos: Repositories, agent_id: str, since: str, now: str)
         # Confident and wrong is worth more than either number alone.
         "confident_failures": confident_failures,
         "tool_denials": denials,
+        "reports_rejected": rejected,
         "enough_to_review": len(assignments) >= MIN_ASSIGNMENTS,
     }
 
@@ -110,6 +114,15 @@ def principal_scorecard(repos: Repositories, since: str, now: str) -> dict:
     ]
     answered_approvals = [a for a in resolved if a["status"] in ("approved", "rejected")]
     expired_approvals = [a for a in resolved if a["status"] == "expired"]
+
+    # What Gary assigned him each morning, and how much of it was done that
+    # day: the check-in records both, so following through is measurable.
+    assigned = done_same_day = days_checked = 0
+    for event in repos.audit.list_since("daily_checkin_asked", since):
+        details = json.loads(event["details_json"] or "{}")
+        assigned += details.get("assigned", 0)
+        done_same_day += details.get("done", 0)
+        days_checked += 1
 
     messages = [m for m in repos.spoken.list_recent(since, 100) if m["expects_reply"]]
     answered_questions = [m for m in messages if m["status"] == "answered"]
@@ -131,6 +144,9 @@ def principal_scorecard(repos: Repositories, since: str, now: str) -> dict:
         "approvals_expired_unanswered": len(expired_approvals),
         "questions_answered": len(answered_questions),
         "questions_left_unanswered": len(ignored_questions),
+        "days_checked_in": days_checked,
+        "tasks_assigned": assigned,
+        "tasks_done_same_day": done_same_day,
         "engineering_opened": len(opened),
         "engineering_done": len(done),
         "engineering_blocked": len(blocked),

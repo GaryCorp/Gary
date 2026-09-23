@@ -112,6 +112,7 @@ patch a name in the module that defines it (e.g. `pages.make_flow`).
 | `tools/` | the *only* interface the voice model has to SQLite |
 | `agents/` | the GaryCorp specialists (CrewAI), their roster, gateway, runner, hiring (`HIREABLE_TOOLS`, prompt frame), EASE client |
 | `finance/` | card vault, purchase policy, model prices, usage ledger |
+| `reviewer.py` + `services/review_service.py` | performance reviews: `performance.py` counts the facts, one model call judges them, Python validates and stores the two apart |
 | `integrations/github/` | private-only engineering tickets (REST + Projects v2) |
 
 ### The rules that hold the system together

@@ -865,6 +865,13 @@ FORBIDDEN_TOOLS = frozenset(
         "spoken_recent",
         "spoken_repeat",
         "question_answer",
+        # Reviewing people is the manager's job. An employee's view of Gary
+        # is written for them by the review round, from their own record;
+        # nobody grades a colleague, and nobody grades themselves.
+        "performance_scorecard",
+        "performance_write_review",
+        "performance_list_reviews",
+        "performance_acknowledge",
     }
 )
 

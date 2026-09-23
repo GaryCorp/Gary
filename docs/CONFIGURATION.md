@@ -526,6 +526,16 @@ changing the company are **not** available by email and stay on the
 
 The paused state is in SQLite (`operating_state`), so it survives a restart.
 
+### `REVIEW_PERIOD_DAYS`, `REVIEW_INTERVAL_DAYS`, `MAX_REVIEWS_PER_ROUND`
+
+Defaults: `28`, `28`, `8`.
+
+The performance review round (TEAM.md): how far back a review looks, how long
+before the same subject is due again, and how many reviews one round may
+write. Each review is one model call, so the round is capped and stops at the
+spend ceiling like any other thinking. `REVIEW_INTERVAL_DAYS=0` turns the
+scheduled round off; Gary can still write a review when you ask him to.
+
 ## Weekly video schedule
 
 Gary plans one video a week, filmed in batches, and puts the shoot and the
