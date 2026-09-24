@@ -29,10 +29,16 @@ logger = logging.getLogger("gary.agents.runner")
 
 REPORT_GUIDANCE = {
     "research": (
-        "Return a ResearchReport: summary; findings (verified facts, each with its "
-        "source where possible); options; recommendation (or null if the evidence "
-        "does not support one); assumptions; uncertainties; risks_or_tradeoffs; "
-        "sources (URLs you actually relied on); confidence from 0 to 1."
+        "Return a ResearchReport: summary (the answer to the question, not a "
+        "description of what you did); findings (verified facts, each with its "
+        "source and, when it is time-sensitive, its date); options (the real "
+        "alternatives, with what distinguishes them); recommendation (or null if "
+        "the evidence does not support one); assumptions (what your answer rests "
+        "on, especially anything a single source supports); uncertainties (what "
+        "you could not establish, and what would settle it); risks_or_tradeoffs; "
+        "sources (URLs you actually opened or were given by a search; never an "
+        "invented or remembered one); confidence from 0 to 1, reflecting the "
+        "evidence you actually have rather than how plausible the answer feels."
     ),
     "security": (
         "Return a SecurityReport: risk_level (low, medium, high, critical); summary; "
@@ -56,6 +62,25 @@ REPORT_GUIDANCE = {
         "savings_opportunities; risks; decisions_needed; recommendation; confidence "
         "from 0 to 1. Mention any purchase you requested in the summary."
     ),
+    "product": (
+        "Return a ProductReport: summary (what you now believe the company should "
+        "build, and why); ideas, each with name, customer (who exactly, not "
+        "\"businesses\"), problem (what they do about it today), wedge (the smallest "
+        "version worth paying for), why_now, evidence (what is actually known, each "
+        "with its source), sources, competitors (who already does this), risks, "
+        "what_would_kill_it (the fact that would end this idea), next_validation_step "
+        "(the cheapest test that would settle it), and four scores from 0 to 10: "
+        "market_score (how many people have this problem and how badly), "
+        "feasibility_score (how far a very small team with AI could get in a few "
+        "months), evidence_score (how much of this is established rather than "
+        "assumed), differentiation_score (why this beats what already exists). Score "
+        "honestly: the ranking is computed from these numbers, not from your prose, "
+        "so a flattering score is how a bad idea wins. Also return dropped (ideas you "
+        "considered and rejected, each with the reason), open_questions (what you "
+        "would find out next, most decisive first, empty if nothing is left), "
+        "ready_to_recommend, recommended_idea (one of your ideas, by name, or null) "
+        "and confidence from 0 to 1."
+    ),
     "advisory": (
         "Return an AdvisoryReport: summary; findings; recommendation; risks; "
         "assumptions; uncertainties; decisions_needed (what Alex must decide); "
@@ -72,6 +97,15 @@ REPORT_GUIDANCE = {
         "not); value_judgments_for_alex (tradeoffs only Alex can decide); "
         "uncertainties; confidence from 0 to 1."
     ),
+}
+
+
+# Which AgentServices integration made the model calls a tool reported, so the
+# ledger can name the model that was actually billed. The keys are ledger
+# sources (gary/db/repositories/usage.py).
+TOOL_USAGE_PROVIDERS = {
+    "web_search": "web",
+    "perplexity_search": "research",
 }
 
 
@@ -93,6 +127,9 @@ def _summary_line(kind: str, report: dict) -> str:
         summary = f"[{report['budget_assessment']}, {len(report['purchase_request_ids'])} purchase requests] {summary}"
     elif kind == "ethics":
         summary = f"[{report['ethical_assessment']}] {summary}"
+    elif kind == "product":
+        top = report.get("recommended_idea") or (report["ideas"][0]["name"] if report["ideas"] else "no idea")
+        summary = f"[{len(report['ideas'])} ideas, leading: {top}] {summary}"
     return summary[:500]
 
 
@@ -171,9 +208,9 @@ class GaryCorpAgentRunner:
             return repos.assignments.get(assignment_id), agent, run
 
     def _finish(self, assignment: dict, agent: GaryCorpAgentDefinition, run: dict,
-                state: RunState, attempts: int, report: dict, usage: dict, model: str | None) -> dict:
+                state: RunState, attempts: int, report: dict, usage: dict, model: str | None,
+                kind: str) -> dict:
         now = _now()
-        kind = agent.report_kind
         with self.gary.db.transaction() as conn:
             repos = Repositories.bind(conn)
             if not repos.assignments.transition(
@@ -202,6 +239,12 @@ class GaryCorpAgentRunner:
                 details.update(ethical_assessment=report["ethical_assessment"],
                                ease_analyses=report["ease_analyses"])
                 summary = f"{agent.name} returned an ethics review ({report['ethical_assessment']})"
+            elif kind == "product":
+                details.update(ideas=len(report["ideas"]),
+                               recommended_idea=report["recommended_idea"],
+                               ready_to_recommend=report["ready_to_recommend"],
+                               open_questions=len(report["open_questions"]))
+                summary = f"{agent.name} returned {len(report['ideas'])} product ideas"
             else:
                 details.update(confidence=report["confidence"], sources=len(report["sources"]))
                 summary = f"{agent.name} completed research"
@@ -263,7 +306,8 @@ class GaryCorpAgentRunner:
             bound.append(BoundTool(spec.name, spec.description, spec.args_model, invoke))
         return bound
 
-    def _task_description(self, agent: GaryCorpAgentDefinition, context: dict, feedback: str | None) -> str:
+    def _task_description(self, agent: GaryCorpAgentDefinition, context: dict, feedback: str | None,
+                          kind: str) -> str:
         parts = [
             f"Assignment from Gary, Chief of Staff, for {agent.name} ({agent.title}).",
             "",
@@ -283,13 +327,22 @@ class GaryCorpAgentRunner:
             "read_own_note: check it when the objective refers to your notes or earlier "
             "work, or when an earlier note on the same decision would help."
             if "read_own_note" in agent.allowed_tools and agent.notebook else "",
-            REPORT_GUIDANCE[agent.report_kind],
+            REPORT_GUIDANCE[kind],
         ]
         if feedback:
             parts += ["", f"Your previous answer was rejected by validation: {feedback}. Return a corrected report."]
         return "\n".join(parts)
 
-    def _validate(self, agent: GaryCorpAgentDefinition, state: RunState, output) -> dict:
+    @staticmethod
+    def _report_kind(agent: GaryCorpAgentDefinition, assignment: dict) -> str:
+        """The shape this assignment must come back in: the one it asked for,
+        if the roster lets this agent write it, otherwise their usual one."""
+        asked = assignment["report_kind"]
+        if asked and asked in agent.also_reports:
+            return asked
+        return agent.report_kind
+
+    def _validate(self, agent: GaryCorpAgentDefinition, state: RunState, output, kind: str) -> dict:
         if hasattr(output, "model_dump"):
             data = output.model_dump()
         elif isinstance(output, str):
@@ -302,15 +355,16 @@ class GaryCorpAgentRunner:
             raise ValueError("output is not an object")
         # The application sets these; the model's values are ignored.
         data["assignment_id"] = state.assignment_id
-        if agent.report_kind == "finance":
+        if kind == "finance":
             data["purchase_request_ids"] = list(state.purchase_request_ids)
-        if agent.report_kind == "ethics":
+        if kind == "ethics":
             data["ease_analyses"] = state.ease_analyses
-        return REPORT_MODELS[agent.report_kind].model_validate(data).model_dump(mode="json")
+        return REPORT_MODELS[kind].model_validate(data).model_dump(mode="json")
 
     def _record_usage(self, agent, state: RunState, usage: dict, model: str | None) -> None:
-        """The specialist's own model call and, separately, its web searches:
-        they run on different models and are priced differently."""
+        """The specialist's own model call and, separately, each searching tool
+        it used: they run on different models, at different providers, and are
+        priced apart."""
         if self.usage is None:
             return
         from gary.finance.pricing import usage_from_tokens
@@ -326,17 +380,19 @@ class GaryCorpAgentRunner:
             detail=agent.agent_id,
             agent_id=agent.agent_id,
         )
-        if state.tool_usage.get("total_tokens"):
+        for source, tokens in state.tool_usage.items():
+            provider = TOOL_USAGE_PROVIDERS.get(source)
+            if provider is None or not tokens.get("total_tokens"):
+                # A tool whose spending the ledger has no source for is not
+                # silently folded into another one.
+                continue
             self.usage.record(
-                "web_search",
-                getattr(self.services.web, "model", None) or "unknown",
-                usage_from_tokens(
-                    state.tool_usage.get("input_tokens", 0),
-                    state.tool_usage.get("output_tokens", 0),
-                ),
+                source,
+                getattr(getattr(self.services, provider, None), "model", None) or "unknown",
+                usage_from_tokens(tokens.get("input_tokens", 0), tokens.get("output_tokens", 0)),
                 entity_type="agent_assignment",
                 entity_id=state.assignment_id,
-                detail=f"{agent.agent_id} web search",
+                detail=f"{agent.agent_id} {source.replace('_', ' ')}",
                 agent_id=agent.agent_id,
             )
 
@@ -352,6 +408,7 @@ class GaryCorpAgentRunner:
 
     async def _run(self, assignment_id: str, shared_reports: list[dict] | None) -> dict:
         assignment, agent, run = await asyncio.to_thread(self._start, assignment_id)
+        kind = self._report_kind(agent, assignment)
         state = RunState(assignment_id, agent.agent_id)
         gateway = ToolGateway(self.services, agent, state, self.limits)
         loop = asyncio.get_running_loop()
@@ -366,9 +423,9 @@ class GaryCorpAgentRunner:
                 attempts += 1
                 request = ExecutionRequest(
                     agent=agent,
-                    task_description=self._task_description(agent, context, feedback),
-                    expected_output=REPORT_GUIDANCE[agent.report_kind],
-                    output_model=FINDINGS_MODELS[agent.report_kind],
+                    task_description=self._task_description(agent, context, feedback, kind),
+                    expected_output=REPORT_GUIDANCE[kind],
+                    output_model=FINDINGS_MODELS[kind],
                     tools=tools,
                     model=self.model,
                     max_iterations=agent.max_iterations,
@@ -382,7 +439,7 @@ class GaryCorpAgentRunner:
                     if isinstance(value, (int, float)):
                         usage[key] = usage.get(key, 0) + value
                 try:
-                    report = self._validate(agent, state, result.output)
+                    report = self._validate(agent, state, result.output, kind)
                     break
                 except (ValidationError, ValueError, json.JSONDecodeError) as exc:
                     feedback = validation_message(exc) if isinstance(exc, ValidationError) else str(exc)
@@ -392,11 +449,13 @@ class GaryCorpAgentRunner:
                         raise _InvalidOutput(feedback) from exc
 
             self._record_usage(agent, state, usage, result.model)
-            usage["prompt_tokens"] = usage.get("prompt_tokens", 0) + state.tool_usage.get("input_tokens", 0)
-            usage["completion_tokens"] = usage.get("completion_tokens", 0) + state.tool_usage.get("output_tokens", 0)
-            usage["total_tokens"] = usage.get("total_tokens", 0) + state.tool_usage.get("total_tokens", 0)
+            for tokens in state.tool_usage.values():
+                usage["prompt_tokens"] = usage.get("prompt_tokens", 0) + tokens.get("input_tokens", 0)
+                usage["completion_tokens"] = usage.get("completion_tokens", 0) + tokens.get("output_tokens", 0)
+                usage["total_tokens"] = usage.get("total_tokens", 0) + tokens.get("total_tokens", 0)
             finished = await asyncio.to_thread(
-                self._finish, assignment, agent, run, state, attempts, report, usage, result.model
+                self._finish, assignment, agent, run, state, attempts, report, usage,
+                result.model, kind,
             )
         except asyncio.TimeoutError:
             state.cancelled = True

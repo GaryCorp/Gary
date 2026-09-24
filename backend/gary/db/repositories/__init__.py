@@ -21,6 +21,7 @@ from gary.db.repositories.hiring import HiredEmployeeRepository
 from gary.db.repositories.followups import FollowupRepository
 from gary.db.repositories.operating import OperatingStateRepository
 from gary.db.repositories.planning_runs import PlanningRunRepository
+from gary.db.repositories.product_search import ProductSearchRepository
 from gary.db.repositories.production import ProductionEpisodeRepository
 from gary.db.repositories.projects import ProjectRepository
 from gary.db.repositories.reviews import PerformanceReviewRepository
@@ -56,6 +57,7 @@ class Repositories:
     performance: PerformanceReviewRepository
     project_fields: GitHubProjectFieldRepository
     production: ProductionEpisodeRepository
+    product_search: ProductSearchRepository
     operating: OperatingStateRepository
 
     @classmethod
@@ -82,6 +84,7 @@ class Repositories:
             performance=PerformanceReviewRepository(conn),
             project_fields=GitHubProjectFieldRepository(conn),
             production=ProductionEpisodeRepository(conn),
+            product_search=ProductSearchRepository(conn),
             operating=OperatingStateRepository(conn),
         )
 
@@ -104,6 +107,7 @@ __all__ = [
     "ModelUsageRepository",
     "PlanningRunRepository",
     "OperatingStateRepository",
+    "ProductSearchRepository",
     "ProductionEpisodeRepository",
     "PerformanceReviewRepository",
     "ProjectRepository",

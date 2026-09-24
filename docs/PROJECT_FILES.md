@@ -83,8 +83,9 @@ Chief of Staff operations package:
 - `models/` has the Pydantic request models;
 - `services/` has business logic: tasks, projects, follow-ups, commitments,
   planning and scoring, actions, approvals, briefs (`briefing.py`), working
-  time and free blocks (`calendar_blocks.py`), and the planning cycle
-  (`planning_cycle.py`);
+  time and free blocks (`calendar_blocks.py`), the planning cycle
+  (`planning_cycle.py`), and the search for a product to build
+  (`product_search.py`: the rounds, the ranking and the stopping rule);
 - `tools/` has the function tools exposed to Gary.
 
 ### `backend/gary/agents/`
@@ -94,7 +95,7 @@ GaryCorp specialist team (see [Team](TEAM.md)):
 - `roster.py` defines Gary, Susan, Dave, Linda, Catherine, and Lauren: identity,
   prompts, tools, limits (the permission authority);
 - `models.py` has agent definitions and the Research, Security, Operations,
-  Finance, and Ethics report models;
+  Finance, Ethics and Product report models;
 - `gateway.py` is the tool catalog and permission-checking gateway;
 - `context.py` builds least-privilege context packages;
 - `executor.py` is the boundary to the agent framework, and `crew.py` the
@@ -102,6 +103,8 @@ GaryCorp specialist team (see [Team](TEAM.md)):
 - `runner.py` runs assignments; `service.py` handles delegation, management
   reviews, and reading reports;
 - `web.py` is the read-only web research service;
+- `perplexity.py` is Susan's deeper search: one question to Perplexity's search
+  API, answered with its sources, their titles and their dates;
 - `ease.py` is the client for the EASE service, which condenses its analysis for Lauren.
 
 ### `backend/gary/integrations/github/`

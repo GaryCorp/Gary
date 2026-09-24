@@ -6,6 +6,8 @@ SOURCES = (
     "planning_cycle",
     "specialist",
     "web_search",
+    # Susan's deeper search, billed by Perplexity rather than OpenAI.
+    "perplexity_search",
     "voice",
     # Turning what Alex said into words. Billed by the minute, not by token,
     # so it is kept apart from the conversation it belongs to.

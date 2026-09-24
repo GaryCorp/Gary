@@ -18,6 +18,7 @@ from gary.tools import (
     followup_tools,
     hiring_tools,
     planning_tools,
+    product_tools,
     project_tools,
     reorg_tools,
     review_tools,
@@ -41,6 +42,7 @@ REGISTRY: dict[str, Tool] = {
         hiring_tools,
         reorg_tools,
         review_tools,
+        product_tools,
     )
     for tool in module.TOOLS
 }

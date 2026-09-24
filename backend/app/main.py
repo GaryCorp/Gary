@@ -40,6 +40,10 @@ from app.config import (
     OPENAI_API_KEY,
     OPENAI_REALTIME_MODEL,
     OPS_CHECK_INTERVAL_MINUTES,
+    PERPLEXITY_API_KEY,
+    PERPLEXITY_MODEL,
+    PRODUCT_SEARCH_MAX_ROUNDS,
+    PRODUCT_SEARCH_TICK_MINUTES,
     PLANNING_MAX_ACTIONS,
     PLANNING_MODEL,
     PLANNING_SCHEDULE,
@@ -90,6 +94,7 @@ from gary.agents.ease import EaseFramework
 from gary.agents.gateway import AgentServices, validate_roster_tools
 from gary.agents.roster import AgentRegistry
 from gary.agents.runner import GaryCorpAgentRunner
+from gary.agents.perplexity import PerplexityResearch
 from gary.agents.service import AgentService
 from gary.agents.web import OpenAIWebResearch
 from gary.backup import backup_daily
@@ -134,6 +139,7 @@ from gary.services.planning_cycle import (
     due_planning_types,
 )
 from gary.services.operating import OperatingState
+from gary.services.product_search import ProductSearchService
 from gary.services.production import ProductionService, episode_label
 from gary.services.review_service import PerformanceReviews
 from gary.services.reorg_actions import reorg_action_handler
@@ -182,6 +188,12 @@ async def lifespan(app: FastAPI):
         if MORNING_ASSIGNMENT_TIME or EVENING_CHECKIN_TIME or DAILY_REPORT_TIME
         else None
     )
+    # The product search picks its own rounds back up after a restart.
+    product_searching = (
+        asyncio.create_task(run_product_search_loop())
+        if product_search is not None and PRODUCT_SEARCH_TICK_MINUTES > 0
+        else None
+    )
     # Alex pausing or resuming the company by email, from anywhere.
     commands = (
         asyncio.create_task(run_email_commands())
@@ -193,7 +205,7 @@ async def lifespan(app: FastAPI):
     finally:
         for task in (
             scheduler, engineering_sync, management, speaking, production_loop,
-            managing, commands,
+            managing, commands, product_searching,
         ):
             if task is not None:
                 task.cancel()
@@ -313,6 +325,9 @@ MODEL_ROLES = {
     "planning": PLANNING_MODEL,
     "specialists": GARY_EMPLOYEE_MODEL,
     "web search": AGENT_WEB_SEARCH_MODEL,
+    # Only when Perplexity is configured: an unused provider is not a model
+    # this deployment can be asked to price.
+    **({"deep research": PERPLEXITY_MODEL} if PERPLEXITY_API_KEY else {}),
 }
 # Asked before anything calls a model. See SpendGate: with an unpriced model
 # it reports that it cannot be enforced rather than implying safety.
@@ -453,6 +468,9 @@ agent_services = AgentServices(
     gary=gary_ops,
     registry=agent_registry,
     web=OpenAIWebResearch(OPENAI_API_KEY, AGENT_WEB_SEARCH_MODEL),
+    research=(
+        PerplexityResearch(PERPLEXITY_API_KEY, PERPLEXITY_MODEL) if PERPLEXITY_API_KEY else None
+    ),
     notes=planning_notebook,
     calendar=planning_calendar,
     notebooks=JoplinAgentNotebooks(),
@@ -494,6 +512,48 @@ def build_agent_executor():
     return CrewAIExecutor(OPENAI_API_KEY)
 
 
+def product_search_round_for(assignment_id: str) -> dict | None:
+    with gary_ops.db.read() as conn:
+        return Repositories.bind(conn).product_search.round_for_assignment(assignment_id)
+
+
+async def announce_finished_product_searches() -> None:
+    """Advance every running search and say which of them ended."""
+    if product_search is None:
+        return
+    for finished in await product_search.advance_all():
+        idea = finished["best_idea"]
+        if not idea:
+            await announce_to_voice(
+                f"The product search ended without an idea: {single_line(finished['stop_reason'] or '')}."
+            )
+            continue
+        await announce_to_voice(
+            f"Susan has finished the product search after "
+            f"{finished['rounds_completed']} rounds. The best idea is {single_line(idea)}, "
+            f"scoring {finished['best_score']} out of ten. "
+            f"Say {WAKE_WORD_DISPLAY}, what should I build, for the rest."
+        )
+
+
+async def run_product_search_loop() -> None:
+    """The safety net for the product search.
+
+    Rounds normally follow each other: a finished assignment advances the
+    search. This picks up the ones nothing will wake, after a restart, a
+    pause, or a day that hit the spend ceiling. It is one indexed query when
+    there is nothing to do.
+    """
+    while True:
+        try:
+            await announce_finished_product_searches()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log_loop_failure(logger, exc, "Advancing the product search")
+        await asyncio.sleep(max(60.0, PRODUCT_SEARCH_TICK_MINUTES * 60))
+
+
 async def announce_assignment_finished(assignment: dict) -> None:
     if in_quiet_hours(dt.datetime.now(ZoneInfo(LOCAL_TIMEZONE))):
         return
@@ -506,6 +566,13 @@ async def announce_assignment_finished(assignment: dict) -> None:
                 f"Say {WAKE_WORD_DISPLAY}, show me the management review."
             )
         return
+    if product_search is not None:
+        # A round of the product search is not news by itself: the search
+        # itself decides whether to go again, and only its end is announced.
+        round_row = await asyncio.to_thread(product_search_round_for, assignment["id"])
+        if round_row is not None:
+            await announce_finished_product_searches()
+            return
     # Gary reads the report on the next management tick, which is now.
     wake_management_loop()
     agent = agent_registry.get(assignment["assigned_to"])
@@ -555,12 +622,32 @@ performance_reviews = PerformanceReviews(
     usage=usage_ledger,
 )
 
+# GaryCorp's search for a product to build: rounds of Susan's research, with
+# Python ranking the ideas and deciding when another round would add nothing.
+# Absent when the ceiling is 0 rounds, and the tools then say so.
+product_search = (
+    ProductSearchService(
+        gary_ops.db,
+        agent_service,
+        timezone=ZoneInfo(LOCAL_TIMEZONE),
+        clock=gary_ops.planning.clock,
+        default_max_rounds=PRODUCT_SEARCH_MAX_ROUNDS,
+        # Unattended spending: it stops when Alex pauses the company and when
+        # the daily ceiling is reached, and picks up again when they lift.
+        paused=lambda: operating.is_paused(),
+        spending_allowed=lambda: spend_gate.allowed(),
+    )
+    if PRODUCT_SEARCH_MAX_ROUNDS > 0
+    else None
+)
+
 GARY_INTEGRATIONS = {
     "calendar": planning_calendar,
     "notebook": planning_notebook,
     "planning_cycle": planning_cycle,
     "agents": agent_service,
     "reviews": performance_reviews,
+    **({"product_search": product_search} if product_search else {}),
     # Absent when GitHub is not configured: the tools then say so.
     **({"engineering": engineering_service} if engineering_service else {}),
 }

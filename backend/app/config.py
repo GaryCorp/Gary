@@ -161,6 +161,15 @@ VOICE_TEXT_MODEL = os.getenv("VOICE_TEXT_MODEL", "").strip() or PLANNING_MODEL
 AGENT_WEB_SEARCH_MODEL = os.getenv("AGENT_WEB_SEARCH_MODEL", "gpt-6-luna").strip()
 
 
+# Susan's deeper search, through Perplexity's search API. Empty key = the
+# tool reports itself unavailable and she falls back to web_search; nothing
+# else changes. The key is read here and never stored, logged, or prompted.
+PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "").strip()
+
+
+PERPLEXITY_MODEL = os.getenv("PERPLEXITY_MODEL", "sonar-pro").strip()
+
+
 # The continuous management loop: how often Gary checks whether anything
 # changed. 0 turns it off and leaves only the three scheduled cycles.
 MANAGEMENT_TICK_MINUTES = float(os.getenv("MANAGEMENT_TICK_MINUTES", "15"))
@@ -264,8 +273,20 @@ REQUIRE_PRICED_MODELS = os.getenv("REQUIRE_PRICED_MODELS", "true").strip().lower
 )
 
 
+# GaryCorp's hunt for a product to build: how many rounds of Susan's research
+# one search may spend, and how often the loop looks for a search that is
+# waiting for its next round (a paused company or a reached spend ceiling
+# leaves one waiting). 0 rounds turns the feature off entirely.
+PRODUCT_SEARCH_MAX_ROUNDS = env_int("PRODUCT_SEARCH_MAX_ROUNDS", 5, 0, 10)
+
+
+PRODUCT_SEARCH_TICK_MINUTES = float(os.getenv("PRODUCT_SEARCH_TICK_MINUTES", "10"))
+
+
 AGENT_LIMITS = AgentLimits(
-    max_iterations=env_int("MAX_AGENT_ITERATIONS", 8, 1, 25),
+    # The ceiling on a specialist's own iteration count. Susan asks for 10
+    # because research is mostly tool calls; everyone else keeps their 8.
+    max_iterations=env_int("MAX_AGENT_ITERATIONS", 10, 1, 25),
     max_execution_seconds=env_int("MAX_AGENT_EXECUTION_SECONDS", 300, 30, 1800),
     max_concurrent_runs=env_int("MAX_CONCURRENT_AGENT_RUNS", 2, 1, 6),
     max_assignments_per_plan=env_int("MAX_ASSIGNMENTS_PER_GARY_PLAN", 6, 1, 10),

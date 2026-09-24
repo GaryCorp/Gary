@@ -571,6 +571,43 @@ a report or review is ready. When several review the same question, they work
 independently and Gary tells you where they disagree before recommending. See
 [Team](TEAM.md) for details, limits, and the manual CLI.
 
+Susan has two searches and chooses between them: a quick web search, and
+`perplexity_search`, a deeper question answered from the live web with the
+sources it read, their titles and their dates. She checks her own earlier
+reports first, spends her few searches on the questions the answer turns on,
+and corroborates anything load-bearing before she relies on it. Her deeper
+search needs `PERPLEXITY_API_KEY`; without it she falls back to the web search
+and says so in the report.
+
+### Looking for a product to build
+
+Gary can put Susan on the question of what to build and leave her on it:
+
+```text
+Gary, find me a startup product to build. Something one person could ship,
+under five hundred dollars to start.
+Gary, how is the product search going?
+Gary, what should I build?
+Gary, tell me more about the second idea.
+Gary, stop the product search.
+```
+
+She works it in rounds. Each round she comes back with a slate of ideas, each
+scored on how big the market is, how feasible it is for a very small team, how
+much is actually evidenced rather than assumed, and how different it is from
+what exists; GaryCorp ranks them by those scores, and the next round goes
+after the questions she could not answer, kills what the evidence rules out,
+and re-scores what survives. The search ends itself when another round would
+not change the ranking, or at its round limit (five by default), and Gary
+tells you which it was.
+
+What you get is a ranked shortlist, with the exact customer for each idea, the
+smallest version worth paying for, what would kill it, and the cheapest test
+that would settle it. It is researched evidence, not a decision: nothing is
+built, bought or committed to, and which one you build is yours to choose. One
+search runs at a time, it pauses with the rest of the company, and it stops for
+the day if the AI spend ceiling is reached.
+
 Catherine never sees the card number and cannot charge the card. A purchase
 she requests appears at `http://localhost:8000/approvals` with the merchant,
 amount, and reason, within the spending limits. Only you can approve it, on

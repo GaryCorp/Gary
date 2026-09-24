@@ -694,11 +694,66 @@ model.
 Default: `gpt-6-luna`. The model for Susan's and Catherine's read-only web search (OpenAI's
 hosted `web_search` tool). Each search is roughly 15,000 tokens.
 
+### `PERPLEXITY_API_KEY`
+
+Default: empty. A Perplexity API key enables Susan's `perplexity_search` tool:
+a deeper, read-only research question answered from the live web, with the
+sources it read, their titles and their publication dates (see
+[Team](TEAM.md#susans-two-searches)). At most 3 questions per assignment.
+
+Leave it empty and nothing breaks: the tool reports itself unavailable, and
+Susan falls back to `web_search` and says so in her report. Nobody else on the
+team has the tool, and it cannot be granted to an employee GaryCorp hires for
+itself.
+
+The key is read from the environment only. It is never written to SQLite,
+Joplin, a prompt, an issue, or a log. Only the question Susan asks leaves the
+machine: no company data, no project names unless she puts them in the
+question herself.
+
+### `PERPLEXITY_MODEL`
+
+Default: `sonar-pro`. The Perplexity model `perplexity_search` asks. Set a
+price for it, or the calls are reported as unpriced:
+
+```bash
+docker compose exec backend python -m app.costs set-price sonar-pro --input X --output Y
+```
+
+With `REQUIRE_PRICED_MODELS` on (the default), an unpriced *configured* model
+stops unattended work, so set the price in the same change as the key, from
+Perplexity's current published rates. Note that Perplexity also charges per
+search request, which a per-token price table cannot capture: the ledger's
+figure for this source is a floor, not the invoice. Each question is asked
+with Perplexity's largest search context (`search_context_size: high`), which
+is the most thorough and the most expensive tier; it is set in
+`backend/gary/agents/perplexity.py`.
+
+### `PRODUCT_SEARCH_MAX_ROUNDS`
+
+Default: `5`, range 0–10. How many rounds of Susan's research one search for a
+product to build may spend (see [Team](TEAM.md#the-product-search-thinking-until-the-idea-stops-changing)).
+Each round is one ordinary assignment, so this is the ceiling on what a search
+can cost. `0` turns the feature off: the tools then report themselves
+unavailable and nothing is started.
+
+A search usually stops before the limit, when another round would not change
+the ranking. The limit is what bounds the ones that would otherwise keep going.
+
+### `PRODUCT_SEARCH_TICK_MINUTES`
+
+Default: `10`. How often the backend looks for a search waiting for its next
+round. Rounds normally follow each other as soon as a report lands; this picks
+up the ones nothing will wake — after a restart, after a pause, or after a day
+that hit the spend ceiling. It is one indexed query when there is nothing to
+do. `0` turns the loop off and leaves searches to be advanced by finished
+assignments alone.
+
 ### Execution limits
 
 | Setting | Default | Range | Meaning |
 |---|---|---|---|
-| `MAX_AGENT_ITERATIONS` | 8 | 1–25 | CrewAI iterations per run |
+| `MAX_AGENT_ITERATIONS` | 10 | 1–25 | Ceiling on CrewAI iterations per run. Susan asks for 10 because research is mostly tool calls; everyone else keeps 8 |
 | `MAX_AGENT_EXECUTION_SECONDS` | 300 | 30–1800 | Hard time limit per run |
 | `MAX_CONCURRENT_AGENT_RUNS` | 2 | 1–6 | Runs at once |
 | `MAX_ASSIGNMENTS_PER_GARY_PLAN` | 6 | 1–10 | Assignments per conversation or review |

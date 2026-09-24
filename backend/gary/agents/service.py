@@ -48,6 +48,10 @@ class DelegateRequest(RequestModel):
     task_id: EntityId | None = None
     context: dict[str, str] | None = None
     priority: int = Field(default=5, strict=True, ge=1, le=10)
+    # Which report shape to come back in. None is the agent's usual one; any
+    # other value must be listed in their roster entry's also_reports, which
+    # is checked here and again when the assignment is created.
+    report_kind: str | None = Field(default=None, max_length=32)
 
     @field_validator("context")
     @classmethod
@@ -159,21 +163,30 @@ class AgentService:
 
     def _create_assignment(self, repos: Repositories, agent_id: str, objective: str, *,
                            assigned_by: str, project_id=None, task_id=None, context=None,
-                           priority=5, review_id=None, review_round=1, now: str) -> dict:
+                           priority=5, review_id=None, review_round=1, report_kind=None,
+                           now: str) -> dict:
         agent = self.registry.employee(agent_id)
+        report_kind = report_kind or None
+        if report_kind and report_kind not in agent.also_reports:
+            raise ValueError(
+                f"{agent.name} does not write {report_kind} reports"
+                + (f"; they write {', '.join((agent.report_kind, *agent.also_reports))}"
+                   if agent.report_kind else "")
+            )
         require_project(repos, project_id)
         require_task(repos, task_id)
         assignment = repos.assignments.create(
             assigned_by=assigned_by, assigned_to=agent.agent_id, objective=objective,
             context=context, priority=priority, project_id=project_id, task_id=task_id,
-            review_id=review_id, review_round=review_round, now=now,
+            review_id=review_id, review_round=review_round, report_kind=report_kind, now=now,
         )
         repos.audit.write(
             assigned_by, "agent_assignment_delegated",
             f"{assigned_by.capitalize()} delegated to {agent.name}: {objective[:120]}",
             "agent_assignment", assignment["id"],
             {"assigned_to": agent.agent_id, "priority": priority, "project_id": project_id,
-             "task_id": task_id, "review_id": review_id, "review_round": review_round},
+             "task_id": task_id, "review_id": review_id, "review_round": review_round,
+             "report_kind": report_kind},
             now=now,
         )
         return assignment
@@ -192,9 +205,22 @@ class AgentService:
             assignment = self._create_assignment(
                 repos, request.agent_id, request.objective, assigned_by=assigned_by,
                 project_id=request.project_id, task_id=request.task_id, context=request.context,
-                priority=request.priority, now=now,
+                priority=request.priority, report_kind=request.report_kind, now=now,
             )
         return assignment
+
+    def restart_queued(self, assignment_id: str) -> bool:
+        """Start an assignment that is queued and not already running here.
+        The runner leaves an assignment queued when the daily spend ceiling is
+        reached, so something has to pick it up once the ceiling resets."""
+        if assignment_id in self._pending:
+            return False
+        with self.gary.db.read() as conn:
+            assignment = Repositories.bind(conn).assignments.get(assignment_id)
+        if assignment is None or assignment["status"] != "queued":
+            return False
+        self._start(assignment_id)
+        return True
 
     async def start_review(self, request: ReviewRequest, requested_by: str = MANAGER_ID) -> dict:
         result = await asyncio.to_thread(self._start_review_db, request, requested_by)
@@ -306,6 +332,7 @@ class AgentService:
             "project_id": assignment["project_id"],
             "review_id": assignment["review_id"],
             "review_round": assignment["review_round"],
+            "report_kind": assignment["report_kind"] or agent.report_kind,
             "created_at": to_local(assignment["created_at"], tz),
             "completed_at": to_local(assignment["completed_at"], tz) if assignment["completed_at"] else None,
             "report": json.loads(assignment["result_json"]) if assignment["result_json"] else None,

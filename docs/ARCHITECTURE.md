@@ -38,6 +38,8 @@ Responsibilities:
 - Scheduled planning cycle (morning, midday, evening).
 - The specialist team (Susan, Dave, Linda, Catherine, Lauren) through CrewAI, and its `/team` page.
 - Lauren's EASE client, which calls the `ease-api` service.
+- Susan's research searches: OpenAI's hosted web search, and Perplexity's
+  search API when `PERPLEXITY_API_KEY` is set.
 - Catherine's encrypted debit card vault and the `/finance` page.
 - Engineering tickets in the private GitHub repository and Project, and the
   read-only `/engineering/status` page.
@@ -394,7 +396,8 @@ Gary tool (delegate_to_agent, run_management_review, ...)
        context package  (per department, least privilege)
        ToolGateway      (granted tools: read-only, plus notes in the agent's own
                          Joplin notebook (read and write), Catherine's
-                         purchase requests, and
+                         purchase requests, Susan's searches (OpenAI web
+                         search, Perplexity deep research), and
                          Lauren's EASE analyses via ease-api;
                          every call checked and audited)
        CrewAIExecutor   (separate single-agent crew per assignment)
@@ -404,7 +407,26 @@ Gary tool (delegate_to_agent, run_management_review, ...)
 
 Gary's team tools: `team_list`, `delegate_to_agent`, `run_management_review`,
 `management_review_follow_up`, `agent_assignment_get`,
-`agent_assignments_list`, `management_review_get`.
+`agent_assignments_list`, `management_review_get`, and the product search:
+`product_search_start`, `product_search_status`, `product_search_get`,
+`product_search_stop`.
+
+`backend/gary/services/product_search.py` is the one piece of work that spans
+several assignments. A search asks Susan the same question repeatedly, each
+round an ordinary assignment carrying the ranked slate and open questions from
+the round before:
+
+```text
+product_search_start
+  -> round N: assignment to Susan (report_kind product, all the usual caps)
+  -> ProductReport: ideas scored 0-10 on four axes, plus open questions
+  -> Python ranks (weighted score) and decides: go again, or stop and why
+  -> product_searches / product_search_rounds in SQLite; a restart continues
+```
+
+Only Susan may return that report shape (`also_reports` in `roster.py`), the
+ranking and the stopping rule are Python, and no round starts while the
+company is paused or the daily spend ceiling is reached.
 
 `backend/gary/finance/` holds Catherine's card: `cards.py` validates a card,
 encrypts it into `data/card_vault.enc`, and keeps brand, last four, expiry, and

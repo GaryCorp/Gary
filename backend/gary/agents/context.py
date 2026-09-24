@@ -31,6 +31,10 @@ from gary.timeutil import format_utc, to_local
 
 logger = logging.getLogger("gary.agents.context")
 
+# How much of an earlier research summary travels in the context package;
+# the whole report is one read_previous_research call away.
+RESEARCH_SUMMARY_LIMIT = 600
+
 SECURITY_AUDIT_EVENTS = (
     "action_rejected_by_policy",
     "action_failed",
@@ -79,6 +83,24 @@ def _project_and_tasks(repos: Repositories, project_id: str | None, services: Ag
         },
         "tasks": tasks,
     }
+
+
+def _recent_research(repos: Repositories, agent_id: str, services: AgentServices) -> list[dict]:
+    """The agent's own last few reports, so a question that was already
+    answered is built on rather than researched again. Opening lines only:
+    the full report is a read_previous_research call away."""
+    recent = []
+    for row in repos.assignments.search_completed(agent_id, [], limit=5):
+        report = json.loads(row["result_json"] or "{}")
+        summary = report.get("summary")
+        recent.append(
+            {
+                "objective": row["objective"],
+                "completed_at": _local(row["completed_at"], services),
+                "summary": summary[:RESEARCH_SUMMARY_LIMIT] if isinstance(summary, str) else summary,
+            }
+        )
+    return recent
 
 
 async def _notes(services: AgentServices, project_name: str | None) -> list[dict] | str:
@@ -130,6 +152,8 @@ async def build_context(
                     {"title": f["title"], "due_at": _local(f["due_at"], services)}
                     for f in repos.followups.list_pending()
                 ]
+            if agent.context_profile == "research":
+                data["your_recent_research"] = _recent_research(repos, agent.agent_id, services)
             if agent.context_profile == "security":
                 marks = ", ".join("?" for _ in SECURITY_AUDIT_EVENTS)
                 data["recent_security_relevant_events"] = [

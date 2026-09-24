@@ -108,9 +108,9 @@ patch a name in the module that defines it (e.g. `pages.make_flow`).
 | `container.py` | `build_gary()` assembles services over one SQLite database |
 | `db/` | numbered SQL migrations + one repository per table; SQL lives here and nowhere else |
 | `models/` | pydantic request models; `extra="forbid"`, validated at the boundary |
-| `services/` | task/project/action/approval/planning/briefing, follow-ups and commitments, the planning cycle, the management loop, engineering tickets, spoken messages (`conversation_service`), hiring and reorg proposals, performance facts, the weekly review |
+| `services/` | task/project/action/approval/planning/briefing, follow-ups and commitments, the planning cycle, the management loop, engineering tickets, spoken messages (`conversation_service`), hiring and reorg proposals, performance facts, the weekly review, the product search (`product_search.py`) |
 | `tools/` | the *only* interface the voice model has to SQLite |
-| `agents/` | the GaryCorp specialists (CrewAI), their roster, gateway, runner, hiring (`HIREABLE_TOOLS`, prompt frame), EASE client |
+| `agents/` | the GaryCorp specialists (CrewAI), their roster, gateway, runner, hiring (`HIREABLE_TOOLS`, prompt frame), EASE client, Susan's web and Perplexity search |
 | `finance/` | card vault, purchase policy, model prices, usage ledger |
 | `reviewer.py` + `services/review_service.py` | performance reviews: `performance.py` counts the facts, one model call judges them, Python validates and stores the two apart |
 | `integrations/github/` | private-only engineering tickets (REST + Projects v2) |
@@ -149,6 +149,16 @@ Breaking one is almost always a bug.
   itself. Gary cannot be the subject of a reorg. Employees hired under the
   older data-driven flow (`hired_employees`) still load, but only if they
   validate against `HIREABLE_TOOLS`.
+- **A search is a loop Python drives.** The product search
+  (`services/product_search.py`) asks Susan the same question over several
+  rounds: each round is an ordinary assignment (`report_kind` `product`, which
+  only Susan may write, per `also_reports` in `roster.py`) carrying the ranked
+  slate and open questions from the round before. Python weights the four
+  scores into the ranking and decides whether to go again; the model never
+  decides to spend another round. One search at a time, capped by
+  `PRODUCT_SEARCH_MAX_ROUNDS`, no round while paused or over the spend ceiling,
+  and `UNIQUE (search_id, round_number)` makes a round idempotent across
+  restarts.
 - **Speaking first is an action.** Deciding to say something writes a
   `spoken_messages` row (validated, capped, never a duplicate open question);
   delivery is separate and retried, and a row is marked spoken only once a voice
@@ -188,8 +198,11 @@ review, under caps in `planning_cycle.py` (2 delegations per cycle, 4 per day,
 twice. Finished assignments wake the loop immediately. The management loop also
 has a daily run ceiling.
 
-Other background loops started in `lifespan`: spoken-message delivery, the
-GitHub ticket sync, the missed-block replan, new-email announcements, the daily
+Other background loops started in `lifespan`: the product-search tick
+(`PRODUCT_SEARCH_TICK_MINUTES`, one indexed query when idle: rounds normally
+follow each other as assignments finish, and this picks up a search left
+waiting by a restart, a pause or the spend ceiling), spoken-message delivery,
+the GitHub ticket sync, the missed-block replan, new-email announcements, the daily
 SQLite backup (`gary/backup.py`, to `data/backups/`, 14 kept), and the weekly
 review (`WEEKLY_REVIEW_DAY`), written to Joplin from SQLite with **no model
 call** so it still works when spending is stopped.
@@ -225,7 +238,7 @@ log keyed by date, which is what keeps each to once a day.
 ### Cost accounting
 
 Every model call is recorded in `model_usage` (planning, specialist, web search,
-voice) and priced from `data/model_prices.json`. **An unpriced model is reported
+Susan's Perplexity search, voice) and priced from `data/model_prices.json`. **An unpriced model is reported
 as unpriced, never as free**; EASE runs in its own container and is reported as
 unmeasured. With `OPENAI_ADMIN_KEY` (scope `api.usage.read`) Gary also reads the
 provider's billed figure.

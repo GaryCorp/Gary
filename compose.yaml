@@ -85,11 +85,19 @@ services:
       # GaryCorp specialists (Susan, Dave, Linda, Catherine, Lauren). Empty model = PLANNING_MODEL.
       GARY_EMPLOYEE_MODEL: "${GARY_EMPLOYEE_MODEL:-}"
       AGENT_WEB_SEARCH_MODEL: "${AGENT_WEB_SEARCH_MODEL:-gpt-6-luna}"
-      MAX_AGENT_ITERATIONS: "${MAX_AGENT_ITERATIONS:-8}"
+      # Susan's deeper search. No key = the tool reports itself unavailable.
+      PERPLEXITY_API_KEY: "${PERPLEXITY_API_KEY:-}"
+      PERPLEXITY_MODEL: "${PERPLEXITY_MODEL:-sonar-pro}"
+      # The ceiling on a specialist's iterations: Susan asks for 10, the rest keep 8.
+      MAX_AGENT_ITERATIONS: "${MAX_AGENT_ITERATIONS:-10}"
       MAX_AGENT_EXECUTION_SECONDS: "${MAX_AGENT_EXECUTION_SECONDS:-300}"
       MAX_CONCURRENT_AGENT_RUNS: "${MAX_CONCURRENT_AGENT_RUNS:-2}"
       MAX_ASSIGNMENTS_PER_GARY_PLAN: "${MAX_ASSIGNMENTS_PER_GARY_PLAN:-6}"
       MAX_ACTIVE_AGENT_ASSIGNMENTS: "${MAX_ACTIVE_AGENT_ASSIGNMENTS:-6}"
+      # The hunt for a product to build: rounds of Susan's research per search,
+      # and how often a waiting search is picked back up. 0 rounds turns it off.
+      PRODUCT_SEARCH_MAX_ROUNDS: "${PRODUCT_SEARCH_MAX_ROUNDS:-5}"
+      PRODUCT_SEARCH_TICK_MINUTES: "${PRODUCT_SEARCH_TICK_MINUTES:-10}"
       CFO_PER_PURCHASE_LIMIT_USD: "${CFO_PER_PURCHASE_LIMIT_USD:-50}"
       CFO_MONTHLY_LIMIT_USD: "${CFO_MONTHLY_LIMIT_USD:-200}"
       # Engineering tickets in the PRIVATE GaryCorp repository and Project.

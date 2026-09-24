@@ -141,7 +141,11 @@ configuration, recent audit summaries, or Catherine's card brand, last four
 digits, expiry, spending totals, purchase requests, and team token usage. No
 email content, credentials, or card number are included. Susan's and
 Catherine's web searches send the search query to OpenAI's web search
-(`AGENT_WEB_SEARCH_MODEL`). Lauren's EASE analyses send the decision question
+(`AGENT_WEB_SEARCH_MODEL`). Susan's `perplexity_search` sends the research
+question she wrote, and nothing else, to Perplexity's search API
+(`PERPLEXITY_MODEL`); it is a third party with its own terms, so treat
+anything she puts in a question as leaving the machine, and leave
+`PERPLEXITY_API_KEY` empty if you would rather it did not exist. Lauren's EASE analyses send the decision question
 and context she writes to the local `ease-api` container, which sends them to
 its own model provider (`EASE_LLM_PROVIDER`, OpenAI by default); EASE stores
 nothing (it has no database) and its logs stay in Docker. Reports are stored locally in `data/gary.db`, and

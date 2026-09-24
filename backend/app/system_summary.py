@@ -11,6 +11,8 @@ from app.config import (
     GITHUB_SYNC_INTERVAL_MINUTES,
     JOPLIN_NOTEBOOK,
     OPENAI_REALTIME_MODEL,
+    PERPLEXITY_API_KEY,
+    PERPLEXITY_MODEL,
     PLANNING_MODEL,
     PLANNING_SCHEDULE,
     SCOPES,
@@ -48,6 +50,13 @@ def system_configuration_summary(
             "specialists": GARY_EMPLOYEE_MODEL,
             "web_search": AGENT_WEB_SEARCH_MODEL,
         },
+        "perplexity_usage": (
+            f"Susan's perplexity_search tool, model {PERPLEXITY_MODEL}: one HTTPS request "
+            "carrying only her research question; read-only, no company data, key in the "
+            "environment only"
+            if PERPLEXITY_API_KEY
+            else "not configured; perplexity_search reports itself unavailable"
+        ),
         "operations_database": "SQLite data/gary.db, owner-only, append-only audit log, daily backups",
         "approval_policy": "code-defined green/yellow/red; voice approval needs spoken confirmation",
         "planning_schedule": {name: time.strftime("%H:%M") for name, time in PLANNING_SCHEDULE.items()},

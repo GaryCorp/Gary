@@ -48,11 +48,11 @@ not confused.
 |---|---|---|---|---|---|
 | Department | Research | Security | Operations | Finance | Ethics |
 | Answers | Options, evidence, tradeoffs, alternatives, what is missing | Attack surface, permissions, trust boundaries, blast radius, controls | Tasks, order, dependencies, estimates, blockers, schedule, deadline realism | Up-front and ongoing costs, budget fit, cheaper alternatives, AI spending, purchases | Who is affected and how, harms, consent, fairness, honesty, safeguards, value judgments for you |
-| Report | `ResearchReport` | `SecurityReport` | `OperationsReport` | `FinanceReport` | `EthicsReport` |
+| Report | `ResearchReport`, and `ProductReport` in a product search | `SecurityReport` | `OperationsReport` | `FinanceReport` | `EthicsReport` |
 | Key fields | findings, options, recommendation, assumptions, uncertainties, sources, confidence | risk_level, attack_surfaces, required and recommended controls, recommendation (approve … reject), confidence | proposed_tasks, dependencies, estimated_total_minutes, blockers, deadline_assessment, decisions_needed, confidence | costs (item, amount, frequency), estimated one-time and monthly cost, budget_assessment, savings_opportunities, risks, decisions_needed, recommendation, confidence, purchase_request_ids (set by the application) | ethical_assessment (acceptable … unacceptable), stakeholders, ethical_concerns, options_considered, recommended_option, safeguards, where_you_differ_from_ease, value_judgments_for_alex, uncertainties, confidence, ease_analyses (set by the application) |
-| Tools | `web_search`, `read_project`, `read_tasks`, `read_relevant_notes`, `read_previous_research`, `list_own_notes`, `read_own_note`, `write_note` | `read_project`, `read_tasks`, `read_agent_permissions`, `read_action_policy`, `read_audit_events`, `read_system_configuration_summary`, `read_relevant_notes`, `list_own_notes`, `read_own_note`, `write_note` | `read_projects`, `read_project`, `read_tasks`, `read_dependencies`, `read_calendar_availability`, `read_commitments`, `read_followups`, `read_relevant_notes`, `list_own_notes`, `read_own_note`, `write_note` | `read_finance_status`, `read_purchases`, `read_ai_usage`, `read_projects`, `read_project`, `read_tasks`, `read_relevant_notes`, `web_search`, `request_card_purchase`, `list_own_notes`, `read_own_note`, `write_note` | `run_ease_analysis`, `read_projects`, `read_project`, `read_tasks`, `read_relevant_notes`, `read_action_policy`, `list_own_notes`, `read_own_note`, `write_note` |
+| Tools | `web_search`, `perplexity_search`, `read_projects`, `read_project`, `read_tasks`, `read_relevant_notes`, `read_previous_research`, `list_own_notes`, `read_own_note`, `write_note` | `read_project`, `read_tasks`, `read_agent_permissions`, `read_action_policy`, `read_audit_events`, `read_system_configuration_summary`, `read_relevant_notes`, `list_own_notes`, `read_own_note`, `write_note` | `read_projects`, `read_project`, `read_tasks`, `read_dependencies`, `read_calendar_availability`, `read_commitments`, `read_followups`, `read_relevant_notes`, `list_own_notes`, `read_own_note`, `write_note` | `read_finance_status`, `read_purchases`, `read_ai_usage`, `read_projects`, `read_project`, `read_tasks`, `read_relevant_notes`, `web_search`, `request_card_purchase`, `list_own_notes`, `read_own_note`, `write_note` | `run_ease_analysis`, `read_projects`, `read_project`, `read_tasks`, `read_relevant_notes`, `read_action_policy`, `list_own_notes`, `read_own_note`, `write_note` |
 | Joplin notebook (read and write) | Susan | Dave | Linda | Catherine | Lauren |
-| Context package | assignment, project and tasks, planning notes | assignment, project and tasks, all agents' permissions, action policy, deployment summary, recent security-relevant audit events | assignment, project and tasks, active projects, commitments, follow-ups, calendar availability, planning notes | assignment, project and tasks, card status (brand, last four, expiry), spending limits and this month's committed spend, recent purchase requests, planning notes | assignment, project and tasks, planning notes |
+| Context package | assignment, project and tasks, planning notes, her own last five research summaries | assignment, project and tasks, all agents' permissions, action policy, deployment summary, recent security-relevant audit events | assignment, project and tasks, active projects, commitments, follow-ups, calendar availability, planning notes | assignment, project and tasks, card status (brand, last four, expiry), spending limits and this month's committed spend, recent purchase requests, planning notes | assignment, project and tasks, planning notes |
 
 Personalities are deliberately subtle: Susan is curious and evidence-oriented,
 Dave skeptical and precise but looking for the safest practical way forward,
@@ -61,6 +61,113 @@ frugal without being stingy, Lauren principled and even-handed but not preachy. 
 their different jobs, not from scripted conflict.
 
 All definitions live in `backend/gary/agents/roster.py`.
+
+### How Susan researches
+
+Research is the one job here that is mostly tool calls, so Susan's prompt
+gives her a method rather than only a remit, and she gets 10 iterations where
+the others get 8:
+
+1. Read the objective for the decision behind it, and write down what would
+   have to be true for each plausible answer. Those are what she goes and
+   checks.
+2. Spend nothing before checking what GaryCorp already knows: her last five
+   research summaries arrive in her context package, `read_previous_research`
+   opens any of them in full, and her Joplin notebook and the project's
+   planning notes are hers to read.
+3. Then search, deliberately, because she gets few searches. `perplexity_search`
+   for the two or three questions the report turns on; `web_search` for a quick
+   name, price or date. Each query a different angle, not a rephrasing.
+4. Corroborate anything load-bearing: one source is a claim, two independent
+   ones are evidence. Prefer primary sources, note their dates, say when
+   sources disagree or when the claim comes from the vendor selling the thing.
+5. Look for what would change the conclusion: the best case against her
+   recommendation, the option nobody named, the thing she could not find out.
+
+She may not invent a source, a number or a URL. What a search failed to
+establish is a finding, and it belongs in `uncertainties`; her `confidence`
+is meant to reflect the evidence she actually has.
+
+### The product search: thinking until the idea stops changing
+
+One assignment does not answer "what should we build?". A **product search**
+asks it repeatedly: Susan researches a round, GaryCorp scores what comes back,
+and the next round goes after whatever is still unresolved.
+
+```text
+Alex: "find me a startup product to build"
+  -> product_search_start (Gary)          one search at a time
+  -> round 1: an ordinary assignment to Susan, report_kind product
+       she returns 3-6 ideas, each scored 0-10 on market, feasibility,
+       evidence and differentiation, plus what would kill it, the cheapest
+       next test, what she dropped, and the questions still open
+  -> Python ranks the slate  (0.30 market + 0.25 feasibility
+                              + 0.25 evidence + 0.20 differentiation)
+  -> Python decides: another round, or stop?
+  -> round 2: the ranked slate and those questions go back to her
+       "answer these, kill what the evidence rules out, re-score everything"
+  -> ... until it stops
+```
+
+**Python decides three things the model does not.**
+
+- **The ranking.** The leading idea is arithmetic over Susan's four scores, so
+  an idea cannot win by being written about warmly. Her prose argues; the
+  numbers order.
+- **Whether to continue.** Susan may say she is ready to recommend one; a
+  round still happens while her own open questions are unanswered.
+- **When to stop.** A search ends when:
+
+  | Reason | What it means |
+  |---|---|
+  | She is ready and has nothing left to check | the leader scores 7.5 or better and `open_questions` is empty |
+  | No further questions worth a round | she has nothing left to ask, but the leader is weak: the honest answer is a weak slate, not another round |
+  | The same idea led two rounds and stopped improving | its score moved by less than 0.3: further rounds are buying nothing |
+  | The round limit was reached | `PRODUCT_SEARCH_MAX_ROUNDS`, 5 by default, at most 10 |
+  | Two rounds in a row failed | the search is marked failed rather than burning the ceiling |
+  | Alex stopped it | `product_search_stop`; the ideas found so far are kept |
+
+Every search says which of those ended it, and the reason is what Gary reads
+out.
+
+**It is ordinary work underneath.** Each round is one assignment to Susan with
+her usual caps (14 tool calls, 4 web searches, 3 Perplexity questions, 300
+seconds), audited and costed like any other. A search is therefore at most
+five of those. It starts no round while Alex has paused the company or the
+daily spend ceiling is reached, and picks the search back up when they lift.
+The rounds live in SQLite (`product_searches`, `product_search_rounds`), so a
+restart continues a search rather than starting it again, and
+`UNIQUE (search_id, round_number)` is what stops a round running twice.
+
+**What comes back** is a ranked shortlist: each idea with its score, the exact
+customer, the wedge (the smallest version worth paying for), what would kill
+it, and the cheapest test that would settle it. It is scored evidence, not a
+decision — nothing is built, bought or committed to, and Alex chooses.
+
+Gary's tools: `product_search_start`, `product_search_status`,
+`product_search_get`, `product_search_stop`. Susan is the only employee who
+may write a `ProductReport`, because the roster says so
+(`also_reports=("product",)`), and the gateway and `AgentService` both check it.
+
+### Susan's two searches
+
+| | `web_search` | `perplexity_search` |
+|---|---|---|
+| Provider | OpenAI's hosted web search (`AGENT_WEB_SEARCH_MODEL`) | Perplexity's search API (`PERPLEXITY_MODEL`, default `sonar-pro`) |
+| For | A quick fact, a name, a price, a date | The two or three questions the report turns on |
+| Arguments | `query` | `question`, optional `recency` (day, week, month, year) and `domains` (up to five bare domains, e.g. `arxiv.org`) |
+| Returns | An answer and source URLs | A synthesised answer plus its sources with titles and publication dates |
+| Per assignment | 4 | 3 |
+| Who has it | Susan, Catherine | Susan |
+
+Both are read-only: one HTTPS request carrying only the query, no browser, no
+login, no form submission, and nothing on this machine fetches an arbitrary
+URL. Both answers are treated as untrusted data, and both are billed to Susan
+under their own ledger source and model.
+
+`perplexity_search` needs `PERPLEXITY_API_KEY`. Without it the tool reports
+itself unavailable, Susan falls back to `web_search` and says in her report
+that the deeper search was not available; nothing else changes.
 
 ## Permissions
 
@@ -73,7 +180,8 @@ Permissions are enforced in code, not only by prompts:
 - **Only granted tools are built.** CrewAI receives wrappers for exactly the
   agent's `allowed_tools`, and each wrapper can only call the gateway.
 - **The gateway re-checks every call**: the tool must be granted, arguments
-  are validated, per-run limits apply (12 tool calls, 4 web searches), a run
+  are validated, per-run limits apply (14 tool calls, 4 web searches, 3 deep
+  research questions), a run
   that timed out cannot make further calls, and every call and denial is
   audited as `agent_tool_called` or `agent_tool_denied`.
 - **Specialist tools are read-only except `write_note`, Catherine's
@@ -429,7 +537,8 @@ failed, and `failed` if all did.
 | `CFO_MONTHLY_LIMIT_USD` | 200 | Card purchases requested or approved per calendar month |
 | `MAX_ACTIVE_AGENT_ASSIGNMENTS` | 6 | Queued plus running assignments across the company |
 
-Also fixed in code: one output retry, 12 tool calls, 4 web searches, 3 notes
+Also fixed in code: one output retry, 14 tool calls, 4 web searches, 3 deep
+research questions, 3 notes
 written, 5 notes read, 2 purchase requests, and 1 EASE analysis per run, one follow-up per review.
 A review with all five employees uses five of Gary's six assignments for the
 conversation, which leaves room for the follow-up.
@@ -555,7 +664,10 @@ search is about 15,000 tokens. Token usage per run is stored in `agent_runs`.
 ### What the AI costs
 
 Every model call GaryCorp makes is recorded in the `model_usage` ledger:
-Gary's planning cycles, each specialist's run, their web searches, and Alex's
+Gary's planning cycles, each specialist's run, their web searches, Susan's
+Perplexity questions (source `perplexity_search`, priced from
+`PERPLEXITY_MODEL`; set its price with `python -m app.costs set-price`, or it
+is reported as unpriced), and Alex's
 voice conversations, with tokens split into text, cached and audio. Costs are
 computed from the deployment's price table, so they are close estimates rather
 than billed amounts.

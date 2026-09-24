@@ -13,8 +13,8 @@ from conftest import START, make_project, make_task
 
 def test_migrations_apply_once_and_record_version(db_path):
     db = Database(db_path)
-    assert apply_migrations(db) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
-    assert get_schema_version(db) == 16
+    assert apply_migrations(db) == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+    assert get_schema_version(db) == 18
     assert apply_migrations(db) == []
 
     conn = db.connect()
@@ -25,8 +25,56 @@ def test_migrations_apply_once_and_record_version(db_path):
         "approvals", "actions", "audit_log", "planning_runs", "schema_migrations",
         "agents", "agent_assignments", "agent_runs", "management_reviews", "payment_cards",
         "engineering_tickets", "github_project_fields", "model_usage", "hired_employees",
-        "spoken_messages", "performance_reviews",
+        "spoken_messages", "performance_reviews", "product_searches", "product_search_rounds",
     } <= tables
+
+
+def test_rebuilding_the_usage_ledger_keeps_what_it_recorded(db_path, tmp_path):
+    """017 rebuilds model_usage to widen a CHECK constraint. A rebuild that
+    drops rows would quietly erase what the company has already spent."""
+    import shutil
+
+    from gary.db.migrations import MIGRATIONS_DIR, available_migrations
+
+    partial = tmp_path / "migrations"
+    partial.mkdir()
+    for version, path in available_migrations(MIGRATIONS_DIR):
+        if version < 17:
+            shutil.copy(path, partial / path.name)
+
+    db = Database(db_path)
+    apply_migrations(db, partial)
+    with db.transaction() as conn:
+        conn.execute(
+            """
+            INSERT INTO model_usage (id, occurred_at, source, model, input_tokens, output_tokens,
+                                     total_tokens, cost_usd, detail, agent_id, created_at)
+            VALUES ('u1', '2026-09-01T10:00:00+00:00', 'web_search', 'gpt-6-luna', 10, 5, 15, 0.5,
+                    'susan web search', 'susan', '2026-09-01T10:00:00+00:00')
+            """
+        )
+
+    assert apply_migrations(db) == [17, 18]
+    conn = db.connect()
+    row = dict(conn.execute("SELECT * FROM model_usage").fetchone())
+    # The new source is accepted, and nothing else about the ledger moved.
+    conn.execute(
+        """
+        INSERT INTO model_usage (id, occurred_at, source, model, total_tokens, created_at)
+        VALUES ('u2', '2026-09-02T10:00:00+00:00', 'perplexity_search', 'sonar-pro', 100,
+                '2026-09-02T10:00:00+00:00')
+        """
+    )
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            """
+            INSERT INTO model_usage (id, occurred_at, source, model, total_tokens, created_at)
+            VALUES ('u3', '2026-09-02T10:00:00+00:00', 'telepathy', 'sonar-pro', 100,
+                    '2026-09-02T10:00:00+00:00')
+            """
+        )
+    conn.close()
+    assert row["cost_usd"] == 0.5 and row["agent_id"] == "susan" and row["total_tokens"] == 15
 
 
 def test_failed_migration_rolls_back_completely(db_path, tmp_path):

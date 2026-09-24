@@ -87,6 +87,7 @@ class AssignmentRepository:
         task_id: str | None = None,
         review_id: str | None = None,
         review_round: int = 1,
+        report_kind: str | None = None,
         now: str | None = None,
     ) -> dict:
         assignment_id = new_id()
@@ -101,6 +102,7 @@ class AssignmentRepository:
                 "task_id": task_id,
                 "review_id": review_id,
                 "review_round": review_round,
+                "report_kind": report_kind,
                 "objective": objective,
                 "context_json": to_json(context),
                 "priority": priority,

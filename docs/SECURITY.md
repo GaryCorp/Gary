@@ -435,8 +435,8 @@ at runtime. The guarantees that make it safe:
   code review is what bounds a new colleague's power;
 - what a hire may do is capped by `HIREABLE_TOOLS` in code — read-only company
   data, web search and their own notebook. Money, security introspection,
-  EASE, delegation and every forbidden tool are out of reach whatever the
-  proposal asks for;
+  EASE, Susan's Perplexity search, delegation and every forbidden tool are out
+  of reach whatever the proposal asks for;
 - the ceiling is enforced three times: at proposal, when the row is written,
   and on every roster load, so a hand-edited `hired_employees` row cannot
   widen permissions. An invalid row is dropped and the previous roster stands;

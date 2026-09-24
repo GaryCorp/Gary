@@ -11,7 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-ReportKind = Literal["research", "security", "operations", "finance", "ethics", "advisory"]
+ReportKind = Literal["research", "security", "operations", "finance", "ethics", "advisory", "product"]
 
 LIST_LIMIT = 20
 TEXT_LIMIT = 4000
@@ -49,6 +49,11 @@ class GaryCorpAgentDefinition(BaseModel):
 
     context_profile: ReportKind | None = None
     report_kind: ReportKind | None = None
+
+    # Other report shapes this employee may be asked for. An assignment can
+    # choose one of these instead of report_kind; it can never invent a shape,
+    # because the roster is still the authority for what each agent produces.
+    also_reports: tuple[ReportKind, ...] = ()
 
     # True for an employee GaryCorp hired for itself, rather than one Alex
     # wrote into the roster. Their capabilities are capped by HIREABLE_TOOLS.
@@ -97,6 +102,92 @@ class ResearchReport(ResearchFindings):
     @classmethod
     def bounded(cls, value):
         return _bounded_items(value)
+
+
+# ------------------------------------------------------------------- product
+
+# A startup idea is judged on four axes. The model scores each one and says
+# why; Python multiplies them by fixed weights and does the ranking, so what
+# comes out on top is arithmetic and not a sentence the model wrote about
+# itself (see gary/services/product_search.py).
+IDEA_LIMIT = 8
+
+
+class ProductIdea(ReportModel):
+    name: str
+    customer: str
+    problem: str
+    wedge: str
+    why_now: str
+    evidence: list[str]
+    sources: list[str]
+    competitors: list[str]
+    risks: list[str]
+    what_would_kill_it: str
+    next_validation_step: str
+    # 0 to 10, each with its reasoning in the fields above.
+    market_score: float
+    feasibility_score: float
+    evidence_score: float
+    differentiation_score: float
+
+
+class ProductFindings(ReportModel):
+    summary: str
+    ideas: list[ProductIdea]
+    dropped: list[str]
+    open_questions: list[str]
+    ready_to_recommend: bool
+    recommended_idea: str | None
+    confidence: float
+
+
+class ValidProductIdea(ProductIdea):
+    name: str = Field(min_length=2, max_length=120)
+    customer: str = Field(min_length=3, max_length=ITEM_LIMIT)
+    problem: str = Field(min_length=3, max_length=ITEM_LIMIT)
+    wedge: str = Field(min_length=3, max_length=ITEM_LIMIT)
+    why_now: str = Field(min_length=3, max_length=ITEM_LIMIT)
+    what_would_kill_it: str = Field(min_length=3, max_length=ITEM_LIMIT)
+    next_validation_step: str = Field(min_length=3, max_length=ITEM_LIMIT)
+    market_score: float = Field(ge=0, le=10)
+    feasibility_score: float = Field(ge=0, le=10)
+    evidence_score: float = Field(ge=0, le=10)
+    differentiation_score: float = Field(ge=0, le=10)
+
+    @field_validator("evidence", "sources", "competitors", "risks")
+    @classmethod
+    def bounded(cls, value):
+        return _bounded_items(value)
+
+
+class ProductReport(ProductFindings):
+    assignment_id: str
+    summary: str = Field(min_length=1, max_length=TEXT_LIMIT)
+    ideas: list[ValidProductIdea] = Field(min_length=1, max_length=IDEA_LIMIT)
+    confidence: float = Field(ge=0, le=1)
+
+    @field_validator("dropped", "open_questions")
+    @classmethod
+    def bounded(cls, value):
+        return _bounded_items(value)
+
+    @field_validator("ideas")
+    @classmethod
+    def ideas_are_distinct(cls, value):
+        names = [idea.name.strip().casefold() for idea in value]
+        if len(names) != len(set(names)):
+            raise ValueError("each idea must have its own name")
+        return value
+
+    @field_validator("recommended_idea")
+    @classmethod
+    def recommendation_is_one_of_the_ideas(cls, value, info):
+        ideas = info.data.get("ideas")
+        if value and ideas is not None:
+            if value.strip().casefold() not in {idea.name.strip().casefold() for idea in ideas}:
+                raise ValueError(f"recommended_idea {value!r} is not one of the ideas")
+        return value
 
 
 # ------------------------------------------------------------------ security
@@ -318,6 +409,7 @@ FINDINGS_MODELS: dict[str, type[ReportModel]] = {
     "finance": FinanceFindings,
     "ethics": EthicsFindings,
     "advisory": AdvisoryFindings,
+    "product": ProductFindings,
 }
 REPORT_MODELS: dict[str, type[ReportModel]] = {
     "research": ResearchReport,
@@ -326,6 +418,7 @@ REPORT_MODELS: dict[str, type[ReportModel]] = {
     "finance": FinanceReport,
     "ethics": EthicsReport,
     "advisory": AdvisoryReport,
+    "product": ProductReport,
 }
 
 

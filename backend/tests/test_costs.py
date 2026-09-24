@@ -191,6 +191,36 @@ def test_catherine_reads_the_costs(gary, ledger):
     assert any("EASE" in note for note in result["notes"])
 
 
+def test_each_search_provider_is_billed_under_its_own_model(gary, ledger):
+    """Susan's two searches run at two providers on two models. Folding them
+    together would price one at the other's rate."""
+    from test_agents import RESEARCH, FakeExecutor, build_team, delegate_and_wait, run
+
+    def uses_both_searches(request):
+        tools = {t.name: t for t in request.tools}
+        tools["web_search"].invoke({"query": "vector database vendors"})
+        tools["perplexity_search"].invoke(
+            {"question": "Which vector databases run well on a single machine?"}
+        )
+        return RESEARCH
+
+    service = build_team(gary, FakeExecutor({"susan": [uses_both_searches]}))
+    service.runner.usage = ledger
+    result = run(delegate_and_wait(service, agent_id="susan", objective="Compare vector databases."))
+    assert result["status"] == "completed"
+
+    with gary.db.read() as conn:
+        rows = [dict(r) for r in conn.execute(
+            "SELECT source, model, agent_id, total_tokens FROM model_usage ORDER BY source")]
+    assert rows == [
+        {"source": "perplexity_search", "model": "sonar-test", "agent_id": "susan", "total_tokens": 5_000},
+        {"source": "specialist", "model": "gpt-test", "agent_id": "susan", "total_tokens": 1_234},
+        {"source": "web_search", "model": "unknown", "agent_id": "susan", "total_tokens": 1_000},
+    ]
+    # Both searches still count towards what the assignment consumed.
+    assert result["run"]["total_tokens"] == 1_234 + 1_000 + 5_000
+
+
 def test_without_a_ledger_catherine_says_so(gary):
     from test_agents import build_team
     from gary.agents.gateway import RunState, ToolGateway
