@@ -26,7 +26,7 @@ dependencies are not installed locally):
 docker compose run --rm --no-deps -T -v ./backend:/src:ro -w /src \
   -e PYTHONDONTWRITEBYTECODE=1 backend \
   sh -c "pip install --quiet --user -r requirements-dev.txt && \
-         python -m pytest -p no:cacheprovider -q tests/test_agents.py::test_registry_loads_six_employees_and_gary"
+         python -m pytest -p no:cacheprovider -q tests/test_agents.py::test_registry_loads_five_employees_and_gary"
 ```
 
 **After changing backend code, rebuild the image** — `docker compose up -d
@@ -254,7 +254,7 @@ had missed).
 ## Documentation
 
 `docs/` is written for the operator and is kept current with the code:
-`ARCHITECTURE.md`, `TEAM.md` (the six specialists, permissions, EASE, costs),
+`ARCHITECTURE.md`, `TEAM.md` (the five specialists, permissions, EASE, costs),
 `ENGINEERING.md` (GitHub tickets), `SECURITY.md`, `PRIVACY.md`,
 `CONFIGURATION.md` (every `.env` setting), `GOOGLE_OAUTH.md` (both mailboxes),
 `SETUP.md`, `USAGE.md`, `TROUBLESHOOTING.md` (including restoring a backup),

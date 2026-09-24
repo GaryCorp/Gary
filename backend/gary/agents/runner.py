@@ -62,18 +62,6 @@ REPORT_GUIDANCE = {
         "out_of_scope (anything that belongs to another department); sources "
         "(URLs or records you relied on); confidence from 0 to 1."
     ),
-    "marketing": (
-        "Return a MarketingReport: summary; readiness (ready, ready_with_changes, "
-        "not_ready, unknown); audience (who this is for, and who it is not for); "
-        "positioning (what it is and what it beats, in one or two sentences); "
-        "channels; claims (what the company would say in public); "
-        "evidence_for_claims (what makes each claim true, in the same order); "
-        "claims_we_cannot_support (anything you would want to say and cannot "
-        "back); measures (how anyone would know it worked); risks; "
-        "decisions_needed (what Alex must decide); recommendation; "
-        "uncertainties; sources (URLs or records you relied on); confidence "
-        "from 0 to 1."
-    ),
     "ethics": (
         "Return an EthicsReport: summary; ethical_assessment (acceptable, "
         "acceptable_with_safeguards, needs_revision, unacceptable); stakeholders "
@@ -103,8 +91,6 @@ def _summary_line(kind: str, report: dict) -> str:
         summary = f"[deadline {report['deadline_assessment']}] {summary}"
     elif kind == "finance":
         summary = f"[{report['budget_assessment']}, {len(report['purchase_request_ids'])} purchase requests] {summary}"
-    elif kind == "marketing":
-        summary = f"[{report['readiness']}] {summary}"
     elif kind == "ethics":
         summary = f"[{report['ethical_assessment']}] {summary}"
     return summary[:500]
@@ -212,10 +198,6 @@ class GaryCorpAgentRunner:
                 details.update(budget_assessment=report["budget_assessment"],
                                purchase_request_ids=report["purchase_request_ids"])
                 summary = f"{agent.name} returned a financial assessment ({report['budget_assessment']})"
-            elif kind == "marketing":
-                details.update(readiness=report["readiness"],
-                               unsupported_claims=len(report["claims_we_cannot_support"]))
-                summary = f"{agent.name} returned a marketing assessment ({report['readiness']})"
             elif kind == "ethics":
                 details.update(ethical_assessment=report["ethical_assessment"],
                                ease_analyses=report["ease_analyses"])

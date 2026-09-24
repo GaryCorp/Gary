@@ -11,9 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-ReportKind = Literal[
-    "research", "security", "operations", "finance", "marketing", "ethics", "advisory"
-]
+ReportKind = Literal["research", "security", "operations", "finance", "ethics", "advisory"]
 
 LIST_LIMIT = 20
 TEXT_LIMIT = 4000
@@ -249,51 +247,6 @@ class FinanceReport(FinanceFindings):
 
 # -------------------------------------------------------------------- ethics
 
-# ----------------------------------------------------------------- marketing
-# Marketing is the one department whose output is words said to strangers, so
-# the report separates the claim from the evidence for it. `claims` are what
-# the company would assert in public and `evidence_for_claims` is what makes
-# each one true; a claim with nothing behind it is visible as such rather than
-# buried in prose. `measures` keeps a recommendation falsifiable.
-
-MarketingReadiness = Literal["ready", "ready_with_changes", "not_ready", "unknown"]
-
-
-class MarketingFindings(ReportModel):
-    summary: str
-    readiness: MarketingReadiness
-    audience: list[str]
-    positioning: str
-    channels: list[str]
-    claims: list[str]
-    evidence_for_claims: list[str]
-    claims_we_cannot_support: list[str]
-    measures: list[str]
-    risks: list[str]
-    decisions_needed: list[str]
-    recommendation: str
-    uncertainties: list[str]
-    sources: list[str]
-    confidence: float
-
-
-class MarketingReport(MarketingFindings):
-    assignment_id: str
-    summary: str = Field(min_length=1, max_length=TEXT_LIMIT)
-    positioning: str = Field(min_length=1, max_length=TEXT_LIMIT)
-    recommendation: str = Field(min_length=1, max_length=TEXT_LIMIT)
-    confidence: float = Field(ge=0, le=1)
-
-    @field_validator("audience", "channels", "claims", "evidence_for_claims",
-                     "claims_we_cannot_support", "measures", "risks",
-                     "decisions_needed", "uncertainties", "sources")
-    @classmethod
-    def bounded(cls, value):
-        return _bounded_items(value)
-
-
-# -------------------------------------------------------------------- ethics
-
 EthicalAssessment = Literal["acceptable", "acceptable_with_safeguards", "needs_revision", "unacceptable"]
 
 
@@ -363,7 +316,6 @@ FINDINGS_MODELS: dict[str, type[ReportModel]] = {
     "security": SecurityFindings,
     "operations": OperationsFindings,
     "finance": FinanceFindings,
-    "marketing": MarketingFindings,
     "ethics": EthicsFindings,
     "advisory": AdvisoryFindings,
 }
@@ -372,7 +324,6 @@ REPORT_MODELS: dict[str, type[ReportModel]] = {
     "security": SecurityReport,
     "operations": OperationsReport,
     "finance": FinanceReport,
-    "marketing": MarketingReport,
     "ethics": EthicsReport,
     "advisory": AdvisoryReport,
 }
@@ -386,7 +337,6 @@ class ManagementReview(BaseModel):
     security: SecurityReport | None = None
     operations: OperationsReport | None = None
     finance: FinanceReport | None = None
-    marketing: MarketingReport | None = None
     ethics: EthicsReport | None = None
     # Reports from hired employees, by agent id: the review model cannot have
     # a field per specialty Gary might invent.

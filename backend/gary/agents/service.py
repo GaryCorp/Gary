@@ -36,7 +36,6 @@ REVIEW_FRAMING = {
     "security": "Threat-model it and determine the minimum safe permission set and required controls.",
     "operations": "Assess its operational value, what implementing it would require, and whether the timing is realistic.",
     "finance": "Assess what it would cost up front and over time, whether it fits the budget, and cheaper alternatives. Do not request any purchase.",
-    "marketing": "Assess who it is for, how it should be positioned, what the company can honestly claim about it, and how anyone would know it worked.",
     "advisory": "Assess it within your specialty and say what the company should do about it.",
     "ethics": "Run the EASE framework on it and assess who it affects, its ethical risks, and the safeguards it needs.",
 }

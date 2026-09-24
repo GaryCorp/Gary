@@ -147,9 +147,7 @@ async def build_context(
     context.update(await asyncio.to_thread(read_state))
     project_name = context.get("project", {}).get("name")
 
-    if agent.context_profile in (
-        "research", "operations", "finance", "marketing", "ethics", "advisory"
-    ):
+    if agent.context_profile in ("research", "operations", "finance", "ethics", "advisory"):
         context["planning_notes"] = await _notes(services, project_name)
 
     if agent.context_profile == "security":

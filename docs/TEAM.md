@@ -1,6 +1,6 @@
 # GaryCorp Team
 
-Gary manages six specialist AI employees, and can propose hiring more (see
+Gary manages five specialist AI employees, and can propose hiring more (see
 [Hiring a new employee](#hiring-a-new-employee)). Each is a separate CrewAI agent
 with its own identity, prompt, tools, permissions, context, structured report,
 and audit history. Gary decides when their expertise is worth asking for,
@@ -12,7 +12,6 @@ Gary
 ├── Dave — Director of Security
 ├── Linda — Director of Operations
 ├── Catherine — Chief Financial Officer
-├── Marcus — Chief Marketing Officer
 └── Lauren — Director of Ethics
 ```
 
@@ -29,7 +28,7 @@ GaryCorpAgentRunner              context package, granted tools, time and output
   ↓
 CrewAIExecutor                   one single-agent crew per assignment
   ↓
-Susan / Dave / Linda / Catherine / Marcus / Lauren: tool calls go through the ToolGateway
+Susan / Dave / Linda / Catherine / Lauren: tool calls go through the ToolGateway
   ↓
 Structured report                validated, stored in agent_assignments, audited
   ↓
@@ -45,21 +44,20 @@ not confused.
 
 ## The employees
 
-| | Susan | Dave | Linda | Catherine | Marcus | Lauren |
-|---|---|---|---|---|---|---|
-| Department | Research | Security | Operations | Finance | Marketing | Ethics |
-| Answers | Options, evidence, tradeoffs, alternatives, what is missing | Attack surface, permissions, trust boundaries, blast radius, controls | Tasks, order, dependencies, estimates, blockers, schedule, deadline realism | Up-front and ongoing costs, budget fit, cheaper alternatives, AI spending, purchases | Who this is for and who it is not for, positioning, channels, what the company can honestly claim, how to measure it | Who is affected and how, harms, consent, fairness, honesty, safeguards, value judgments for you |
-| Report | `ResearchReport` | `SecurityReport` | `OperationsReport` | `FinanceReport` | `MarketingReport` | `EthicsReport` |
-| Key fields | findings, options, recommendation, assumptions, uncertainties, sources, confidence | risk_level, attack_surfaces, required and recommended controls, recommendation (approve … reject), confidence | proposed_tasks, dependencies, estimated_total_minutes, blockers, deadline_assessment, decisions_needed, confidence | costs (item, amount, frequency), estimated one-time and monthly cost, budget_assessment, savings_opportunities, risks, decisions_needed, recommendation, confidence, purchase_request_ids (set by the application) | readiness (ready … not_ready), audience, positioning, channels, claims, evidence_for_claims, claims_we_cannot_support, measures, risks, decisions_needed, recommendation, uncertainties, sources, confidence | ethical_assessment (acceptable … unacceptable), stakeholders, ethical_concerns, options_considered, recommended_option, safeguards, where_you_differ_from_ease, value_judgments_for_alex, uncertainties, confidence, ease_analyses (set by the application) |
-| Tools | `web_search`, `read_project`, `read_tasks`, `read_relevant_notes`, `read_previous_research`, `list_own_notes`, `read_own_note`, `write_note` | `read_project`, `read_tasks`, `read_agent_permissions`, `read_action_policy`, `read_audit_events`, `read_system_configuration_summary`, `read_relevant_notes`, `list_own_notes`, `read_own_note`, `write_note` | `read_projects`, `read_project`, `read_tasks`, `read_dependencies`, `read_calendar_availability`, `read_commitments`, `read_followups`, `read_relevant_notes`, `list_own_notes`, `read_own_note`, `write_note` | `read_finance_status`, `read_purchases`, `read_ai_usage`, `read_projects`, `read_project`, `read_tasks`, `read_relevant_notes`, `web_search`, `request_card_purchase`, `list_own_notes`, `read_own_note`, `write_note` | `web_search`, `read_projects`, `read_project`, `read_tasks`, `read_relevant_notes`, `read_previous_research`, `list_own_notes`, `read_own_note`, `write_note` | `run_ease_analysis`, `read_projects`, `read_project`, `read_tasks`, `read_relevant_notes`, `read_action_policy`, `list_own_notes`, `read_own_note`, `write_note` |
-| Joplin notebook (read and write) | Susan | Dave | Linda | Catherine | Marcus | Lauren |
-| Context package | assignment, project and tasks, planning notes | assignment, project and tasks, all agents' permissions, action policy, deployment summary, recent security-relevant audit events | assignment, project and tasks, active projects, commitments, follow-ups, calendar availability, planning notes | assignment, project and tasks, card status (brand, last four, expiry), spending limits and this month's committed spend, recent purchase requests, planning notes | assignment, project and tasks, active projects, planning notes | assignment, project and tasks, planning notes |
+| | Susan | Dave | Linda | Catherine | Lauren |
+|---|---|---|---|---|---|
+| Department | Research | Security | Operations | Finance | Ethics |
+| Answers | Options, evidence, tradeoffs, alternatives, what is missing | Attack surface, permissions, trust boundaries, blast radius, controls | Tasks, order, dependencies, estimates, blockers, schedule, deadline realism | Up-front and ongoing costs, budget fit, cheaper alternatives, AI spending, purchases | Who is affected and how, harms, consent, fairness, honesty, safeguards, value judgments for you |
+| Report | `ResearchReport` | `SecurityReport` | `OperationsReport` | `FinanceReport` | `EthicsReport` |
+| Key fields | findings, options, recommendation, assumptions, uncertainties, sources, confidence | risk_level, attack_surfaces, required and recommended controls, recommendation (approve … reject), confidence | proposed_tasks, dependencies, estimated_total_minutes, blockers, deadline_assessment, decisions_needed, confidence | costs (item, amount, frequency), estimated one-time and monthly cost, budget_assessment, savings_opportunities, risks, decisions_needed, recommendation, confidence, purchase_request_ids (set by the application) | ethical_assessment (acceptable … unacceptable), stakeholders, ethical_concerns, options_considered, recommended_option, safeguards, where_you_differ_from_ease, value_judgments_for_alex, uncertainties, confidence, ease_analyses (set by the application) |
+| Tools | `web_search`, `read_project`, `read_tasks`, `read_relevant_notes`, `read_previous_research`, `list_own_notes`, `read_own_note`, `write_note` | `read_project`, `read_tasks`, `read_agent_permissions`, `read_action_policy`, `read_audit_events`, `read_system_configuration_summary`, `read_relevant_notes`, `list_own_notes`, `read_own_note`, `write_note` | `read_projects`, `read_project`, `read_tasks`, `read_dependencies`, `read_calendar_availability`, `read_commitments`, `read_followups`, `read_relevant_notes`, `list_own_notes`, `read_own_note`, `write_note` | `read_finance_status`, `read_purchases`, `read_ai_usage`, `read_projects`, `read_project`, `read_tasks`, `read_relevant_notes`, `web_search`, `request_card_purchase`, `list_own_notes`, `read_own_note`, `write_note` | `run_ease_analysis`, `read_projects`, `read_project`, `read_tasks`, `read_relevant_notes`, `read_action_policy`, `list_own_notes`, `read_own_note`, `write_note` |
+| Joplin notebook (read and write) | Susan | Dave | Linda | Catherine | Lauren |
+| Context package | assignment, project and tasks, planning notes | assignment, project and tasks, all agents' permissions, action policy, deployment summary, recent security-relevant audit events | assignment, project and tasks, active projects, commitments, follow-ups, calendar availability, planning notes | assignment, project and tasks, card status (brand, last four, expiry), spending limits and this month's committed spend, recent purchase requests, planning notes | assignment, project and tasks, planning notes |
 
 Personalities are deliberately subtle: Susan is curious and evidence-oriented,
 Dave skeptical and precise but looking for the safest practical way forward,
 Linda practical and unimpressed by unrealistic plans, Catherine careful and
-frugal without being stingy, Marcus direct and allergic to hype, Lauren
-principled and even-handed but not preachy. Disagreement comes from
+frugal without being stingy, Lauren principled and even-handed but not preachy. Disagreement comes from
 their different jobs, not from scripted conflict.
 
 All definitions live in `backend/gary/agents/roster.py`.
@@ -195,7 +193,7 @@ reports that and Lauren applies the four steps herself and says so.
 ## Notes
 
 Each specialist keeps notes in their own Joplin notebook: **Susan**, **Dave**,
-**Linda**, **Catherine**, **Marcus**, and **Lauren** (top-level notebooks, next to **Gary**). They write a note when
+**Linda**, **Catherine**, and **Lauren** (top-level notebooks, next to **Gary**). They write a note when
 the assignment asks for one, or for a concise record worth keeping beyond the
 report; the structured report is still required. To ask for a write-up:
 
@@ -407,7 +405,7 @@ the scheduled round off) and `MAX_REVIEWS_PER_ROUND` (8).
 
 ## Management reviews
 
-`run_management_review` asks several employees (all six by default, or a
+`run_management_review` asks several employees (all five by default, or a
 subset) to review one topic **independently**: every first-round assignment
 gets the same starting context and none sees another's report. Gary compares
 the reports and does not force consensus.
