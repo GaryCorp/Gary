@@ -167,7 +167,11 @@ AGENT_WEB_SEARCH_MODEL = os.getenv("AGENT_WEB_SEARCH_MODEL", "gpt-6-luna").strip
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "").strip()
 
 
-PERPLEXITY_MODEL = os.getenv("PERPLEXITY_MODEL", "sonar-pro").strip()
+# How hard Perplexity works on one of Susan's questions: fast, low, medium,
+# high or xhigh. Perplexity chooses the model itself and bills per call, tool
+# fees included, and reports what it charged -- so this is priced by the
+# provider rather than by the deployment's price table.
+PERPLEXITY_PRESET = os.getenv("PERPLEXITY_PRESET", "medium").strip().lower()
 
 
 # The continuous management loop: how often Gary checks whether anything
@@ -284,10 +288,12 @@ PRODUCT_SEARCH_TICK_MINUTES = float(os.getenv("PRODUCT_SEARCH_TICK_MINUTES", "10
 
 
 AGENT_LIMITS = AgentLimits(
-    # The ceiling on a specialist's own iteration count. Susan asks for 10
-    # because research is mostly tool calls; everyone else keeps their 8.
-    max_iterations=env_int("MAX_AGENT_ITERATIONS", 10, 1, 25),
-    max_execution_seconds=env_int("MAX_AGENT_EXECUTION_SECONDS", 300, 30, 1800),
+    # Ceilings on what a specialist's own roster entry may ask for, not what
+    # each one gets. Susan asks for 24 iterations and half an hour because
+    # research is mostly tool calls; the others ask for 8 and five minutes.
+    # Lowering either here clamps every employee at once.
+    max_iterations=env_int("MAX_AGENT_ITERATIONS", 25, 1, 25),
+    max_execution_seconds=env_int("MAX_AGENT_EXECUTION_SECONDS", 1800, 30, 1800),
     max_concurrent_runs=env_int("MAX_CONCURRENT_AGENT_RUNS", 2, 1, 6),
     max_assignments_per_plan=env_int("MAX_ASSIGNMENTS_PER_GARY_PLAN", 6, 1, 10),
     max_active_assignments=env_int("MAX_ACTIVE_AGENT_ASSIGNMENTS", 6, 1, 20),

@@ -503,3 +503,78 @@ def test_without_the_service_the_tools_say_so(gary):
     result = run(call_tool("product_search_status", {}, ToolContext(gary, {})))
     assert result == {"success": False,
                       "error": "The product_search integration is not available right now"}
+
+
+# --------------------------------------------------------------------- CLI
+
+class FakeAppMain:
+    """Just the two things the CLI asks about when a search stops moving."""
+
+    def __init__(self, paused=False, reason=""):
+        self.operating = type("Operating", (), {"is_paused": staticmethod(lambda: paused)})()
+        self.spend_gate = type(
+            "Gate", (), {"state": staticmethod(lambda: {"allowed": not reason, "reason": reason})}
+        )()
+
+
+def test_the_cli_runs_a_search_to_the_end(gary):
+    """`product_cli start` drives the rounds in its own process, which is how
+    a search runs on a machine with no microphone."""
+    from app.product_cli import drive
+
+    first = report(idea("Caption cleaner", market=7))
+    second = report(idea("Caption cleaner", market=9, feasibility=9, evidence=8, differentiation=8),
+                    questions=(), ready=True, recommended="Caption cleaner")
+    service, team = build_search(gary, scripted(first, second))
+
+    async def scenario():
+        search = await service.start({"brief": "Something for video people."})
+        return await drive(FakeAppMain(), service, team, search["search_id"], timeout=20)
+
+    finished = run(scenario())
+    assert finished["status"] == "completed"
+    assert finished["rounds_completed"] == 2
+    assert finished["best_idea"] == "Caption cleaner"
+
+
+def test_the_cli_says_why_it_stopped_waiting(gary):
+    """Paused mid-search, the CLI gives up waiting and says which switch it
+    was, rather than sitting there."""
+    from app.product_cli import drive
+
+    paused = {"value": False}
+    service, team = build_search(gary, scripted(report(idea("Caption cleaner"))),
+                                 paused=lambda: paused["value"])
+
+    async def scenario():
+        search = await service.start({"brief": "Something for video people."})
+        await team.wait([a["id"] for a in _active_assignments(team)], timeout=20)
+        paused["value"] = True
+        return await drive(FakeAppMain(paused=True), service, team, search["search_id"], timeout=20)
+
+    stopped = run(scenario())
+    assert stopped["status"] == "running"      # not ended, just not advancing
+    assert stopped["rounds_completed"] == 1
+
+
+def test_alex_may_paste_a_longer_brief_than_gary_may_write(gary):
+    """The 2,000-character cap bounds what a model writes, not what Alex
+    pastes at the command line."""
+    from gary.agents.service import (
+        MANAGER_OBJECTIVE_LIMIT,
+        OPERATOR_OBJECTIVE_LIMIT,
+        ManagerDelegateRequest,
+    )
+
+    brief = "Find startup product opportunities. " * 300
+    assert MANAGER_OBJECTIVE_LIMIT < len(brief) <= OPERATOR_OBJECTIVE_LIMIT
+
+    team = build_team(gary)
+    assignment = team._delegate_db(
+        DelegateRequest(agent_id="susan", objective=brief, report_kind="product"), "alex"
+    )
+    assert assignment["objective"] == brief.strip()   # requests strip whitespace
+    assert assignment["report_kind"] == "product"
+
+    with pytest.raises(ValueError, match="at most 2000 characters"):
+        ManagerDelegateRequest(agent_id="susan", objective=brief)

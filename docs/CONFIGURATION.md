@@ -711,23 +711,24 @@ Joplin, a prompt, an issue, or a log. Only the question Susan asks leaves the
 machine: no company data, no project names unless she puts them in the
 question herself.
 
-### `PERPLEXITY_MODEL`
+### `PERPLEXITY_PRESET`
 
-Default: `sonar-pro`. The Perplexity model `perplexity_search` asks. Set a
-price for it, or the calls are reported as unpriced:
+Default: `medium`; one of `fast`, `low`, `medium`, `high`, `xhigh`. How hard
+Perplexity works on one of Susan's questions — each step is another round of
+searching and reading, and the cost rises with it.
 
-```bash
-docker compose exec backend python -m app.costs set-price sonar-pro --input X --output Y
-```
+**Perplexity prices itself.** It chooses the model per call and returns what
+the call actually charged, search fees included, so there is nothing to set
+with `costs set-price`: the ledger records the provider's own figure under
+`perplexity/<preset>` and it counts towards `MAX_DAILY_AI_SPEND_USD` like
+anything else. That is also why it is not in the configured-models list the
+spend gate checks — an unpriced *configured* model stops unattended work, and
+this one is never unpriced.
 
-With `REQUIRE_PRICED_MODELS` on (the default), an unpriced *configured* model
-stops unattended work, so set the price in the same change as the key, from
-Perplexity's current published rates. Note that Perplexity also charges per
-search request, which a per-token price table cannot capture: the ledger's
-figure for this source is a floor, not the invoice. Each question is asked
-with Perplexity's largest search context (`search_context_size: high`), which
-is the most thorough and the most expensive tier; it is set in
-`backend/gary/agents/perplexity.py`.
+Perplexity retired the older Sonar chat endpoint, which now answers HTTP 403
+with a migration notice; `backend/gary/agents/perplexity.py` speaks to the
+Agent API (`/v1/agent`). If a deployment sees that 403, the client is out of
+date, not the key.
 
 ### `PRODUCT_SEARCH_MAX_ROUNDS`
 
@@ -753,11 +754,17 @@ assignments alone.
 
 | Setting | Default | Range | Meaning |
 |---|---|---|---|
-| `MAX_AGENT_ITERATIONS` | 10 | 1–25 | Ceiling on CrewAI iterations per run. Susan asks for 10 because research is mostly tool calls; everyone else keeps 8 |
-| `MAX_AGENT_EXECUTION_SECONDS` | 300 | 30–1800 | Hard time limit per run |
+| `MAX_AGENT_ITERATIONS` | 25 | 1–25 | Ceiling on CrewAI iterations per run. Susan asks for 24 because research is mostly tool calls; everyone else keeps 8 |
+| `MAX_AGENT_EXECUTION_SECONDS` | 1800 | 30–1800 | Ceiling on wall-clock per run. Susan asks for the full 30 minutes; everyone else keeps 5 |
 | `MAX_CONCURRENT_AGENT_RUNS` | 2 | 1–6 | Runs at once |
 | `MAX_ASSIGNMENTS_PER_GARY_PLAN` | 6 | 1–10 | Assignments per conversation or review |
 | `MAX_ACTIVE_AGENT_ASSIGNMENTS` | 6 | 1–20 | Queued plus running assignments |
+
+These are ceilings on what a roster entry may ask for, not what each agent
+gets: lowering one clamps every employee at once, which is how a deployment is
+made cheaper or faster. The per-run tool budgets (14 tool calls, 4 web
+searches, 3 Perplexity questions by default; 45, 12 and 8 for Susan) are set
+per agent in `roster.py` against ceilings in the same file.
 
 Values outside the range stop the backend at startup.
 

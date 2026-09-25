@@ -213,12 +213,30 @@ def test_each_search_provider_is_billed_under_its_own_model(gary, ledger):
         rows = [dict(r) for r in conn.execute(
             "SELECT source, model, agent_id, total_tokens FROM model_usage ORDER BY source")]
     assert rows == [
-        {"source": "perplexity_search", "model": "sonar-test", "agent_id": "susan", "total_tokens": 5_000},
+        {"source": "perplexity_search", "model": "perplexity/medium", "agent_id": "susan",
+         "total_tokens": 5_000},
         {"source": "specialist", "model": "gpt-test", "agent_id": "susan", "total_tokens": 1_234},
         {"source": "web_search", "model": "unknown", "agent_id": "susan", "total_tokens": 1_000},
     ]
     # Both searches still count towards what the assignment consumed.
     assert result["run"]["total_tokens"] == 1_234 + 1_000 + 5_000
+
+    # Perplexity prices itself, so its row carries the provider's figure and
+    # is never counted as unpriced however the local price table is set.
+    with gary.db.read() as conn:
+        deep = conn.execute(
+            "SELECT cost_usd, reported_cost_usd FROM model_usage WHERE source = 'perplexity_search'"
+        ).fetchone()
+    assert deep["reported_cost_usd"] == 0.013
+    # Its cost reaches the daily total through COALESCE, so the row is never
+    # one of the unpriced calls that make the ceiling unenforceable.
+    with gary.db.read() as conn:
+        unpriced = conn.execute(
+            "SELECT COUNT(*) FROM model_usage WHERE source = 'perplexity_search' "
+            "AND cost_usd IS NULL AND reported_cost_usd IS NULL"
+        ).fetchone()[0]
+    assert unpriced == 0
+    assert ledger.spent_today()["cost_usd"] >= 0.013
 
 
 def test_without_a_ledger_catherine_says_so(gary):

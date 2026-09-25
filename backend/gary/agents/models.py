@@ -62,6 +62,13 @@ class GaryCorpAgentDefinition(BaseModel):
     max_iterations: int = Field(default=8, ge=1, le=25)
     max_execution_seconds: int | None = Field(default=300, ge=1, le=1800)
 
+    # A longer run needs a bigger budget to spend, so an agent whose work is
+    # mostly tool calls may ask for one. None takes the company default, and
+    # AgentLimits caps whatever is asked for (see AgentRegistry._apply_limits).
+    max_tool_calls: int | None = Field(default=None, ge=1, le=60)
+    max_web_searches: int | None = Field(default=None, ge=0, le=20)
+    max_deep_research: int | None = Field(default=None, ge=0, le=12)
+
     active: bool = True
 
 

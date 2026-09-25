@@ -6,7 +6,7 @@ Gary may create at most max_assignments_per_plan assignments.
 """
 
 from gary.agents.roster import MANAGER_ID
-from gary.agents.service import DelegateRequest, FollowUpRequest, ReviewRequest
+from gary.agents.service import FollowUpRequest, ManagerDelegateRequest, ReviewRequest
 from pydantic import Field
 
 from gary.models.common import EntityId, RequestModel, validate_request
@@ -66,7 +66,7 @@ async def team_list(args: dict, ctx: ToolContext) -> dict:
 
 
 async def delegate_to_agent(args: dict, ctx: ToolContext) -> dict:
-    request = validate_request(DelegateRequest, args)
+    request = validate_request(ManagerDelegateRequest, args)
     _use_budget(ctx, 1)
     try:
         assignment = await _service(ctx).delegate(request, MANAGER_ID)

@@ -27,10 +27,11 @@ MANAGER_ID = "gary"
 class AgentLimits:
     """Hard execution limits, configurable through the environment."""
 
-    # The ceiling on an agent's own max_iterations, not what each one gets:
-    # a definition asking for more is capped here, one asking for less keeps it.
-    max_iterations: int = 10
-    max_execution_seconds: int = 300
+    # Ceilings, not allowances. Each agent's own definition says what it
+    # wants; these are the most any of them may have, and lowering one in the
+    # environment clamps every agent at once.
+    max_iterations: int = 25
+    max_execution_seconds: int = 1800
     max_concurrent_runs: int = 2
     # Assignments Gary may create in one conversation or one management review.
     max_assignments_per_plan: int = 6
@@ -38,11 +39,16 @@ class AgentLimits:
     max_active_assignments: int = 6
     # Extra attempts when a specialist returns output that fails validation.
     output_retries: int = 1
+    # What an agent that asks for nothing in particular gets in one run, and
+    # the most one may ask for in its roster entry.
     max_tool_calls_per_run: int = 14
+    max_tool_calls_ceiling: int = 60
     max_web_searches_per_run: int = 4
+    max_web_searches_ceiling: int = 20
     # Perplexity questions in one assignment. Each reads several pages and
     # costs more than a web search, so it is capped separately and lower.
     max_deep_research_per_run: int = 3
+    max_deep_research_ceiling: int = 12
     max_notes_per_run: int = 3
     # Card purchase requests Catherine may make in one assignment. Each still
     # needs Alex's approval on the web page.
@@ -137,9 +143,18 @@ SUSAN = GaryCorpAgentDefinition(
     # She also runs GaryCorp's product searches, which return a ranked slate
     # of startup ideas instead of a prose report (services/product_search.py).
     also_reports=("product",),
-    # Research is the one job here that is mostly tool calls: checking earlier
-    # work, then searching, then corroborating. Two more turns than the rest.
-    max_iterations=10,
+    # Research is the one job here that is mostly tool calls: check earlier
+    # work, search, read, corroborate, then look for what would change the
+    # answer. The others advise on what they already know and are done in two
+    # minutes; a question worth researching is worth half an hour, so Susan is
+    # the one employee given the time and the budget to spend it. All three
+    # have to move together: 30 minutes with 14 tool calls would still stop
+    # after a few, which is what it did before.
+    max_execution_seconds=1800,
+    max_iterations=24,
+    max_tool_calls=45,
+    max_web_searches=12,
+    max_deep_research=8,
 )
 
 DAVE = GaryCorpAgentDefinition(
@@ -426,13 +441,35 @@ class AgentRegistry:
         return self._definitions
 
     def _apply_limits(self, definition: GaryCorpAgentDefinition) -> GaryCorpAgentDefinition:
+        """Resolve what this agent actually gets: what it asked for, or the
+        company default, whichever is smaller than the ceiling."""
         if not definition.is_employee:
             return definition
-        seconds = definition.max_execution_seconds or self.limits.max_execution_seconds
+        limits = self.limits
+        seconds = definition.max_execution_seconds or limits.max_execution_seconds
+
+        def budget(asked: int | None, default: int, ceiling: int) -> int:
+            return min(default if asked is None else asked, ceiling)
+
         return definition.model_copy(
             update={
-                "max_iterations": min(definition.max_iterations, self.limits.max_iterations),
-                "max_execution_seconds": min(seconds, self.limits.max_execution_seconds),
+                "max_iterations": min(definition.max_iterations, limits.max_iterations),
+                "max_execution_seconds": min(seconds, limits.max_execution_seconds),
+                "max_tool_calls": budget(
+                    definition.max_tool_calls,
+                    limits.max_tool_calls_per_run,
+                    limits.max_tool_calls_ceiling,
+                ),
+                "max_web_searches": budget(
+                    definition.max_web_searches,
+                    limits.max_web_searches_per_run,
+                    limits.max_web_searches_ceiling,
+                ),
+                "max_deep_research": budget(
+                    definition.max_deep_research,
+                    limits.max_deep_research_per_run,
+                    limits.max_deep_research_ceiling,
+                ),
             }
         )
 

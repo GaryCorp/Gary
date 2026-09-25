@@ -12,7 +12,7 @@ from app.config import (
     JOPLIN_NOTEBOOK,
     OPENAI_REALTIME_MODEL,
     PERPLEXITY_API_KEY,
-    PERPLEXITY_MODEL,
+    PERPLEXITY_PRESET,
     PLANNING_MODEL,
     PLANNING_SCHEDULE,
     SCOPES,
@@ -51,7 +51,8 @@ def system_configuration_summary(
             "web_search": AGENT_WEB_SEARCH_MODEL,
         },
         "perplexity_usage": (
-            f"Susan's perplexity_search tool, model {PERPLEXITY_MODEL}: one HTTPS request "
+            f"Susan's perplexity_search tool, Perplexity Agent API at the {PERPLEXITY_PRESET} "
+            "preset: one HTTPS request "
             "carrying only her research question; read-only, no company data, key in the "
             "environment only"
             if PERPLEXITY_API_KEY

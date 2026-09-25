@@ -124,9 +124,10 @@ class RunState:
     cancelled: bool = False
     tool_calls: int = 0
     calls_by_tool: dict[str, int] = field(default_factory=dict)
-    # Token usage of model calls made by tools, kept per usage source: web
-    # search and deep research run on different models and are priced apart.
-    tool_usage: dict[str, dict[str, int]] = field(default_factory=dict)
+    # What model calls made by tools consumed, kept per usage source: web
+    # search and deep research run at different providers and are priced
+    # apart. Tokens are integers; a provider-reported cost_usd is a float.
+    tool_usage: dict[str, dict[str, float]] = field(default_factory=dict)
     # Card purchase requests this run created (Catherine only).
     purchase_request_ids: list[str] = field(default_factory=list)
     # Completed EASE analyses in this run (Lauren only).
@@ -793,7 +794,8 @@ TOOL_CATALOG: dict[str, ToolSpec] = {
             DeepResearchArgs,
             perplexity_search,
             usage_source="perplexity_search",
-            timeout_seconds=180,
+            # Long enough for three attempts and the backoff between them.
+            timeout_seconds=360,
         ),
         ToolSpec("read_project", "Read one project and its tasks, with readiness.", ProjectArgs, _sync(_read_project)),
         ToolSpec("read_projects", "List active projects.", NoArgs, _sync(_read_projects)),
@@ -1023,13 +1025,20 @@ class ToolGateway:
             raise ToolDenied(f"{self.agent.name} is not permitted to use {tool_name}")
 
         spec = TOOL_CATALOG[tool_name]
-        if self.state.tool_calls >= self.limits.max_tool_calls_per_run:
-            raise ToolDenied(f"Tool call limit of {self.limits.max_tool_calls_per_run} reached for this assignment")
+        # Budgets are per agent, resolved against the company ceilings when
+        # the roster is loaded; an older definition falls back to the limits.
+        tool_calls = self.agent.max_tool_calls or self.limits.max_tool_calls_per_run
+        if self.state.tool_calls >= tool_calls:
+            raise ToolDenied(f"Tool call limit of {tool_calls} reached for this assignment")
         per_tool_limit = spec.max_calls_per_run
         if tool_name == "web_search":
-            per_tool_limit = self.limits.max_web_searches_per_run
+            per_tool_limit = self.agent.max_web_searches
+            if per_tool_limit is None:
+                per_tool_limit = self.limits.max_web_searches_per_run
         elif tool_name == "perplexity_search":
-            per_tool_limit = self.limits.max_deep_research_per_run
+            per_tool_limit = self.agent.max_deep_research
+            if per_tool_limit is None:
+                per_tool_limit = self.limits.max_deep_research_per_run
         elif tool_name == "write_note":
             per_tool_limit = self.limits.max_notes_per_run
         elif tool_name == "request_card_purchase":

@@ -41,7 +41,7 @@ from app.config import (
     OPENAI_REALTIME_MODEL,
     OPS_CHECK_INTERVAL_MINUTES,
     PERPLEXITY_API_KEY,
-    PERPLEXITY_MODEL,
+    PERPLEXITY_PRESET,
     PRODUCT_SEARCH_MAX_ROUNDS,
     PRODUCT_SEARCH_TICK_MINUTES,
     PLANNING_MAX_ACTIONS,
@@ -325,9 +325,11 @@ MODEL_ROLES = {
     "planning": PLANNING_MODEL,
     "specialists": GARY_EMPLOYEE_MODEL,
     "web search": AGENT_WEB_SEARCH_MODEL,
-    # Only when Perplexity is configured: an unused provider is not a model
-    # this deployment can be asked to price.
-    **({"deep research": PERPLEXITY_MODEL} if PERPLEXITY_API_KEY else {}),
+    # Susan's Perplexity search is deliberately absent: Perplexity picks the
+    # model and reports what each call cost, so its spend reaches the ledger
+    # as the provider's own figure and needs no price here. A model listed
+    # here without a price stops unattended work, which would be the wrong
+    # answer for a provider that prices itself.
 }
 # Asked before anything calls a model. See SpendGate: with an unpriced model
 # it reports that it cannot be enforced rather than implying safety.
@@ -469,7 +471,7 @@ agent_services = AgentServices(
     registry=agent_registry,
     web=OpenAIWebResearch(OPENAI_API_KEY, AGENT_WEB_SEARCH_MODEL),
     research=(
-        PerplexityResearch(PERPLEXITY_API_KEY, PERPLEXITY_MODEL) if PERPLEXITY_API_KEY else None
+        PerplexityResearch(PERPLEXITY_API_KEY, PERPLEXITY_PRESET) if PERPLEXITY_API_KEY else None
     ),
     notes=planning_notebook,
     calendar=planning_calendar,

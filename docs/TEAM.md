@@ -65,8 +65,24 @@ All definitions live in `backend/gary/agents/roster.py`.
 ### How Susan researches
 
 Research is the one job here that is mostly tool calls, so Susan's prompt
-gives her a method rather than only a remit, and she gets 10 iterations where
-the others get 8:
+gives her a method rather than only a remit, and she is given the room to
+follow it. The others advise from what they already know and are done in two
+minutes; a question worth researching is worth half an hour:
+
+| | Susan | The others |
+|---|---|---|
+| Wall-clock per assignment | 30 minutes | 5 minutes |
+| Iterations | 24 | 8 |
+| Tool calls | 45 | 14 |
+| Web searches | 12 | 4 |
+| Perplexity questions | 8 | 3 (only Susan has the tool) |
+
+All of those had to move together: half an hour with 14 tool calls would still
+stop after a few minutes, which is exactly what it did before. The ceilings in
+`AgentLimits` are what a roster entry may *ask* for, so lowering one in the
+environment still clamps every employee at once.
+
+Her method:
 
 1. Read the objective for the decision behind it, and write down what would
    have to be true for each plausible answer. Those are what she goes and
@@ -153,7 +169,7 @@ may write a `ProductReport`, because the roster says so
 
 | | `web_search` | `perplexity_search` |
 |---|---|---|
-| Provider | OpenAI's hosted web search (`AGENT_WEB_SEARCH_MODEL`) | Perplexity's search API (`PERPLEXITY_MODEL`, default `sonar-pro`) |
+| Provider | OpenAI's hosted web search (`AGENT_WEB_SEARCH_MODEL`) | Perplexity's Agent API (`PERPLEXITY_PRESET`, default `medium`) |
 | For | A quick fact, a name, a price, a date | The two or three questions the report turns on |
 | Arguments | `query` | `question`, optional `recency` (day, week, month, year) and `domains` (up to five bare domains, e.g. `arxiv.org`) |
 | Returns | An answer and source URLs | A synthesised answer plus its sources with titles and publication dates |
@@ -180,8 +196,9 @@ Permissions are enforced in code, not only by prompts:
 - **Only granted tools are built.** CrewAI receives wrappers for exactly the
   agent's `allowed_tools`, and each wrapper can only call the gateway.
 - **The gateway re-checks every call**: the tool must be granted, arguments
-  are validated, per-run limits apply (14 tool calls, 4 web searches, 3 deep
-  research questions), a run
+  are validated, per-run budgets apply (by default 14 tool calls, 4 web
+  searches and 3 deep research questions; Susan's roster entry asks for more,
+  see below), a run
   that timed out cannot make further calls, and every call and denial is
   audited as `agent_tool_called` or `agent_tool_denied`.
 - **Specialist tools are read-only except `write_note`, Catherine's
@@ -537,8 +554,8 @@ failed, and `failed` if all did.
 | `CFO_MONTHLY_LIMIT_USD` | 200 | Card purchases requested or approved per calendar month |
 | `MAX_ACTIVE_AGENT_ASSIGNMENTS` | 6 | Queued plus running assignments across the company |
 
-Also fixed in code: one output retry, 14 tool calls, 4 web searches, 3 deep
-research questions, 3 notes
+Also fixed in code: one output retry, and per-agent budgets — 14 tool calls, 4
+web searches and 3 deep research questions by default, 45/12/8 for Susan — 3 notes
 written, 5 notes read, 2 purchase requests, and 1 EASE analysis per run, one follow-up per review.
 A review with all five employees uses five of Gary's six assignments for the
 conversation, which leaves room for the follow-up.
@@ -611,6 +628,24 @@ docker compose exec backend python -m app.team_cli show <assignment_id>
 docker compose exec backend python -m app.team_cli show-review
 ```
 
+The product search has its own CLI, which drives the rounds in that process
+and waits, so a machine with no microphone can still run one:
+
+```bash
+docker compose exec backend python -m app.product_cli start \
+    "A tool one person could ship, for video editors" \
+    --constraint budget="under $500 to start" --rounds 3
+
+docker compose exec backend python -m app.product_cli status
+docker compose exec backend python -m app.product_cli show     # every idea and score
+docker compose exec backend python -m app.product_cli stop --reason "I have decided"
+```
+
+`start --detach` creates the search and leaves the backend's own loop to run
+it, which is right only when the backend is running this code. Interrupting a
+waiting CLI is safe: the rounds are in SQLite and the backend picks the search
+up on its next tick.
+
 CLI work is audited as assigned by `alex`. The web page
 `http://localhost:8000/team` shows the org chart, assignment history, and
 reviews.
@@ -665,9 +700,9 @@ search is about 15,000 tokens. Token usage per run is stored in `agent_runs`.
 
 Every model call GaryCorp makes is recorded in the `model_usage` ledger:
 Gary's planning cycles, each specialist's run, their web searches, Susan's
-Perplexity questions (source `perplexity_search`, priced from
-`PERPLEXITY_MODEL`; set its price with `python -m app.costs set-price`, or it
-is reported as unpriced), and Alex's
+Perplexity questions (source `perplexity_search`, recorded under
+`perplexity/<preset>` with the cost Perplexity itself reports, search fees
+included, so it needs no entry in the price table), and Alex's
 voice conversations, with tokens split into text, cached and audio. Costs are
 computed from the deployment's price table, so they are close estimates rather
 than billed amounts.

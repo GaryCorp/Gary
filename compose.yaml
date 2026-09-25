@@ -87,10 +87,13 @@ services:
       AGENT_WEB_SEARCH_MODEL: "${AGENT_WEB_SEARCH_MODEL:-gpt-6-luna}"
       # Susan's deeper search. No key = the tool reports itself unavailable.
       PERPLEXITY_API_KEY: "${PERPLEXITY_API_KEY:-}"
-      PERPLEXITY_MODEL: "${PERPLEXITY_MODEL:-sonar-pro}"
-      # The ceiling on a specialist's iterations: Susan asks for 10, the rest keep 8.
-      MAX_AGENT_ITERATIONS: "${MAX_AGENT_ITERATIONS:-10}"
-      MAX_AGENT_EXECUTION_SECONDS: "${MAX_AGENT_EXECUTION_SECONDS:-300}"
+      PERPLEXITY_PRESET: "${PERPLEXITY_PRESET:-medium}"
+      # Ceilings on what a roster entry may ask for, not what each agent gets:
+      # Susan asks for 24 iterations and half an hour, the rest for 8 and five
+      # minutes. Lowering either clamps every employee at once. These must
+      # match the defaults in app/config.py, or the value here silently wins.
+      MAX_AGENT_ITERATIONS: "${MAX_AGENT_ITERATIONS:-25}"
+      MAX_AGENT_EXECUTION_SECONDS: "${MAX_AGENT_EXECUTION_SECONDS:-1800}"
       MAX_CONCURRENT_AGENT_RUNS: "${MAX_CONCURRENT_AGENT_RUNS:-2}"
       MAX_ASSIGNMENTS_PER_GARY_PLAN: "${MAX_ASSIGNMENTS_PER_GARY_PLAN:-6}"
       MAX_ACTIVE_AGENT_ASSIGNMENTS: "${MAX_ACTIVE_AGENT_ASSIGNMENTS:-6}"

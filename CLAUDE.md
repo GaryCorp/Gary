@@ -42,6 +42,7 @@ Operator CLIs, all run inside the backend container:
 ```bash
 python -m app.ask [--show-tools] "..."                  # talk to Gary in text (company tools only)
 python -m app.team_cli team|assign|review|show          # run specialists by hand
+python -m app.product_cli start|status|show|stop        # the hunt for a product to build
 python -m app.hiring_cli list|show|dismiss              # hired employees; dismissal is Alex's alone
 python -m app.dry_run [--type management] [--act]       # a planning cycle, observe-only by default
 python -m app.costs report|models|billed|prices|set-price     # what the AI costs
@@ -238,7 +239,9 @@ log keyed by date, which is what keeps each to once a day.
 ### Cost accounting
 
 Every model call is recorded in `model_usage` (planning, specialist, web search,
-Susan's Perplexity search, voice) and priced from `data/model_prices.json`. **An unpriced model is reported
+Susan's Perplexity search, voice) and priced from `data/model_prices.json`,
+except Perplexity, which reports what each call cost and is recorded with the
+provider's own figure. **An unpriced model is reported
 as unpriced, never as free**; EASE runs in its own container and is reported as
 unmeasured. With `OPENAI_ADMIN_KEY` (scope `api.usage.read`) Gary also reads the
 provider's billed figure.

@@ -2,6 +2,7 @@
 
     docker compose exec backend python -m app.team_cli team
     docker compose exec backend python -m app.team_cli assign susan "Research three ideas for the next experiment"
+    docker compose exec -T backend python -m app.team_cli assign susan --file - < brief.md
     docker compose exec backend python -m app.team_cli review "Give GaryCorp browser automation" --agents susan,dave,linda,catherine,lauren
     docker compose exec backend python -m app.team_cli show <assignment_id>
     docker compose exec backend python -m app.team_cli show-review [review_id]
@@ -9,6 +10,14 @@
 assign and review wait for the reports and print them. Work is recorded as
 assigned by "alex" in the audit log, and uses the same roster, permissions,
 limits, and database as Gary.
+
+A brief written by hand is longer than anything Gary writes, so --file reads
+one from a file or from stdin, up to OPERATOR_OBJECTIVE_LIMIT characters. The
+tighter limit still applies to what Gary himself may delegate.
+
+--report asks for one of the other report shapes the agent's roster entry
+allows (Susan: product, the scored slate of startup ideas). Without it, each
+specialist writes their usual report.
 """
 
 import argparse
@@ -22,6 +31,20 @@ def print_json(value) -> None:
     print(json.dumps(value, indent=2, default=str))
 
 
+def read_objective(args) -> str:
+    """The brief: the argument, a file, or stdin with --file -."""
+    if args.file and args.objective:
+        raise SystemExit("give the brief as an argument or with --file, not both")
+    if args.file:
+        text = sys.stdin.read() if args.file == "-" else open(args.file, encoding="utf-8").read()
+    else:
+        text = args.objective or ""
+    text = text.strip()
+    if not text:
+        raise SystemExit("the brief is empty")
+    return text
+
+
 async def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="python -m app.team_cli")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -29,10 +52,14 @@ async def main(argv: list[str]) -> int:
 
     assign = commands.add_parser("assign", help="give one specialist an assignment and wait")
     assign.add_argument("agent", choices=["susan", "dave", "linda", "catherine", "lauren"])
-    assign.add_argument("objective")
+    assign.add_argument("objective", nargs="?", help="the brief, unless --file gives it")
+    assign.add_argument("--file", metavar="PATH",
+                        help="read the brief from a file, or from stdin with -")
     assign.add_argument("--project", help="project_id")
     assign.add_argument("--priority", type=int, default=5)
     assign.add_argument("--context", action="append", default=[], metavar="KEY=TEXT")
+    assign.add_argument("--report", metavar="KIND",
+                        help="a report shape the agent's roster entry allows (Susan: product)")
 
     review = commands.add_parser("review", help="run an independent management review and wait")
     review.add_argument("topic")
@@ -59,10 +86,11 @@ async def main(argv: list[str]) -> int:
     if args.command == "team":
         print_json(await asyncio.to_thread(service.team))
     elif args.command == "assign":
+        objective = read_objective(args)
         context = dict(item.split("=", 1) for item in args.context) or None
         assignment = await service.delegate(
-            DelegateRequest(agent_id=args.agent, objective=args.objective, project_id=args.project,
-                            priority=args.priority, context=context),
+            DelegateRequest(agent_id=args.agent, objective=objective, project_id=args.project,
+                            priority=args.priority, context=context, report_kind=args.report),
             assigned_by="alex",
         )
         print(f"Assignment {assignment['id']} queued for {args.agent}; waiting...", file=sys.stderr)

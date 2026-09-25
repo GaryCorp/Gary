@@ -85,7 +85,8 @@ Chief of Staff operations package:
   planning and scoring, actions, approvals, briefs (`briefing.py`), working
   time and free blocks (`calendar_blocks.py`), the planning cycle
   (`planning_cycle.py`), and the search for a product to build
-  (`product_search.py`: the rounds, the ranking and the stopping rule);
+  (`product_search.py`: the rounds, the ranking and the stopping rule; run by
+  hand with `app/product_cli.py`);
 - `tools/` has the function tools exposed to Gary.
 
 ### `backend/gary/agents/`

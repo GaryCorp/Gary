@@ -8,6 +8,7 @@ The executor runs in a worker thread with no database transaction open.
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 from typing import Awaitable, Callable
@@ -382,14 +383,19 @@ class GaryCorpAgentRunner:
         )
         for source, tokens in state.tool_usage.items():
             provider = TOOL_USAGE_PROVIDERS.get(source)
-            if provider is None or not tokens.get("total_tokens"):
+            if provider is None or not (tokens.get("total_tokens") or tokens.get("cost_usd")):
                 # A tool whose spending the ledger has no source for is not
                 # silently folded into another one.
                 continue
             self.usage.record(
                 source,
                 getattr(getattr(self.services, provider, None), "model", None) or "unknown",
-                usage_from_tokens(tokens.get("input_tokens", 0), tokens.get("output_tokens", 0)),
+                usage_from_tokens(
+                    int(tokens.get("input_tokens", 0)), int(tokens.get("output_tokens", 0))
+                ),
+                # A provider that says what it charged is believed over any
+                # price table: Perplexity's figure includes its search fees.
+                reported_cost_usd=tokens.get("cost_usd"),
                 entity_type="agent_assignment",
                 entity_id=state.assignment_id,
                 detail=f"{agent.agent_id} {source.replace('_', ' ')}",
@@ -410,6 +416,9 @@ class GaryCorpAgentRunner:
         assignment, agent, run = await asyncio.to_thread(self._start, assignment_id)
         kind = self._report_kind(agent, assignment)
         state = RunState(assignment_id, agent.agent_id)
+        # A run that times out has still paid for the searches it made, and an
+        # unrecorded spend is exactly what the ceiling cannot see.
+        recorded = False
         gateway = ToolGateway(self.services, agent, state, self.limits)
         loop = asyncio.get_running_loop()
         attempts = 0
@@ -449,10 +458,12 @@ class GaryCorpAgentRunner:
                         raise _InvalidOutput(feedback) from exc
 
             self._record_usage(agent, state, usage, result.model)
+            recorded = True
             for tokens in state.tool_usage.values():
-                usage["prompt_tokens"] = usage.get("prompt_tokens", 0) + tokens.get("input_tokens", 0)
-                usage["completion_tokens"] = usage.get("completion_tokens", 0) + tokens.get("output_tokens", 0)
-                usage["total_tokens"] = usage.get("total_tokens", 0) + tokens.get("total_tokens", 0)
+                for field, key in (("prompt_tokens", "input_tokens"),
+                                   ("completion_tokens", "output_tokens"),
+                                   ("total_tokens", "total_tokens")):
+                    usage[field] = usage.get(field, 0) + int(tokens.get(key, 0))
             finished = await asyncio.to_thread(
                 self._finish, assignment, agent, run, state, attempts, report, usage,
                 result.model, kind,
@@ -477,6 +488,10 @@ class GaryCorpAgentRunner:
                 self._fail, assignment, agent, run, state, attempts, "failed",
                 f"{type(exc).__name__}: {exc}", "agent_assignment_failed",
             )
+
+        if not recorded:
+            with contextlib.suppress(Exception):
+                self._record_usage(agent, state, {}, None)
 
         if self.on_finished is not None:
             try:

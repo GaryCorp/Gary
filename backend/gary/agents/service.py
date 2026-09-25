@@ -27,6 +27,14 @@ from gary.timeutil import format_utc, to_local, utc_now
 logger = logging.getLogger("gary.agents.service")
 
 CONTEXT_JSON_LIMIT = 6000
+# What Gary may write in one delegation. His objectives are a sentence or two,
+# and the cap is there so a model cannot spend a specialist's whole context on
+# instructions it wrote itself.
+MANAGER_OBJECTIVE_LIMIT = 2000
+# What Alex may hand a specialist from the operator CLI. A brief written by
+# hand is long, and it is his words rather than a model's, so the limit that
+# bounds Gary is the wrong one for it.
+OPERATOR_OBJECTIVE_LIMIT = 12_000
 STOPWORDS = frozenset(
     "the and for with about what did does find found from that this into your their have has "
     "was were are our gary susan dave linda catherine lauren report research review".split()
@@ -43,7 +51,7 @@ REVIEW_FRAMING = {
 
 class DelegateRequest(RequestModel):
     agent_id: str = Field(min_length=1, max_length=32)
-    objective: str = Field(min_length=10, max_length=2000)
+    objective: str = Field(min_length=10, max_length=OPERATOR_OBJECTIVE_LIMIT)
     project_id: EntityId | None = None
     task_id: EntityId | None = None
     context: dict[str, str] | None = None
@@ -59,6 +67,16 @@ class DelegateRequest(RequestModel):
         if value is not None and len(json.dumps(value)) > CONTEXT_JSON_LIMIT:
             raise ValueError(f"context cannot exceed {CONTEXT_JSON_LIMIT} characters")
         return value
+
+
+class ManagerDelegateRequest(DelegateRequest):
+    """What Gary may ask for: the same delegation, held to his own limit.
+
+    The tool layer validates this one, so raising what Alex can paste at the
+    command line does not raise what a model can write.
+    """
+
+    objective: str = Field(min_length=10, max_length=MANAGER_OBJECTIVE_LIMIT)
 
 
 class ReviewRequest(RequestModel):
